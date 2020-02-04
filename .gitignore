@@ -1,0 +1,8 @@
+# Rust artifacts
+/target/
+**/*.rs.bk
+
+# Python
+/.eggs/
+/dist/
+/*.egg-info/

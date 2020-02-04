@@ -1,0 +1,22 @@
+[package]
+name = "throttle"
+version = "0.1.0"
+authors = ["Markus Klein <markus.klein@blue-yonder.com>"]
+edition = "2018"
+license = "MIT"
+publish = false
+
+[dependencies]
+actix-web = "2.0.0"
+structopt = "0.3.7"
+structopt-derive = "0.4.0"
+prometheus = "0.7.0"
+lazy_static = "1.4.0"
+log = "0.4.8"
+gelf = "0.4.0"
+serde = "1.0.104"
+serde_json = "1.0.44"
+failure = "0.1.6"
+actix-rt = "1.0.0"
+toml = "0.5.5"
+rand = "0.7.3"
