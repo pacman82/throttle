@@ -53,10 +53,12 @@ impl Leases {
     pub fn add(
         &mut self,
         resource: &str,
-        amount: i64,
+        amount: u32,
         max: i64,
         valid_until: Instant,
     ) -> (bool, u64) {
+        let amount = amount as i64;
+
         // Generate random numbers until we get a new unique one.
         let lease_id = loop {
             let candidate = random();
@@ -112,18 +114,34 @@ impl Leases {
     }
 
     /// Remove every lease, which is not valid until now.
-    /// 
+    ///
     /// Under ordinary circumstances leases should be explicitly removed. Yet a client may die due
     /// to an error and never get a chance to free the lease. Therfore we free this litter on
     /// ocation.
-    /// 
+    ///
     /// # Return
-    /// 
+    ///
     /// The number of removed leases.
     pub fn remove_expired(&mut self, now: Instant) -> usize {
         let before = self.ledger.len();
-        self.ledger.retain(|_lease_id, lease| now < lease.valid_until);
+        self.ledger
+            .retain(|_lease_id, lease| now < lease.valid_until);
         let after = self.ledger.len();
         before - after
+    }
+
+    /// Updates the timestamp of an existing lease. Does not perform a consistency check with a
+    /// preexisting lease, but may insert a revenant (i.e. a previously forgotten lease) back into
+    /// bookeeping.
+    pub fn update(&mut self, lease_id: u64, semaphore: &str, amount: u32, valid_until: Instant) {
+        self.ledger
+            .entry(lease_id)
+            .and_modify(|lease| lease.valid_until = valid_until)
+            .or_insert(Lease {
+                active: true,
+                semaphore: semaphore.to_owned(),
+                amount: amount as i64,
+                valid_until,
+            });
     }
 }

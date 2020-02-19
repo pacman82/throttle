@@ -67,6 +67,7 @@ async fn main() -> io::Result<()> {
             .service(semaphore_service::release)
             .service(semaphore_service::is_pending)
             .service(semaphore_service::remove_expired)
+            .service(semaphore_service::put_lease)
             .default_service(
                 // 404 for GET requests
                 web::resource("").route(web::get().to(not_found::not_found)),

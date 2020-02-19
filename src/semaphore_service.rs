@@ -2,7 +2,7 @@ use crate::{application_cfg::ApplicationCfg, leases::Leases};
 use actix_web::{
     delete, get,
     http::StatusCode,
-    post,
+    post, put,
     web::{Data, Json, Path, Query},
     HttpResponse, ResponseError,
 };
@@ -31,7 +31,10 @@ impl fmt::Display for Error {
 
 impl ResponseError for Error {
     fn status_code(&self) -> StatusCode {
-        StatusCode::BAD_REQUEST
+        match self {
+            Error::UnknownLease => StatusCode::BAD_REQUEST,
+            Error::UnknownSemaphore => StatusCode::BAD_REQUEST,
+        }
     }
 }
 
@@ -55,38 +58,80 @@ impl State {
 
     /// Removes leases outdated due to timestamp. Wakes threads waiting for pending leases if any
     /// leases are removed.
-    pub fn remove_expired(&self) {
+    ///
+    /// Returns number of (now removed) expired leases
+    fn remove_expired(&self) -> usize {
         let mut leases = self.leases.lock().unwrap();
         let num_removed = leases.remove_expired(Instant::now());
         if num_removed != 0 {
             self.released.notify_all();
         }
+        num_removed
+    }
+
+    fn is_active(&self, lease_id: u64, timeout: Duration) -> Result<bool, Error> {
+        let mut leases = self.leases.lock().unwrap();
+        let start = Instant::now();
+        loop {
+            break match leases.is_active(lease_id) {
+                None => {
+                    warn!("Unknown lease accessed in is_pendig request.");
+                    Err(Error::UnknownLease)
+                }
+                Some(true) => Ok(false),
+                Some(false) => {
+                    let elapsed = start.elapsed(); // Uses a monotonic system clock
+                    if elapsed >= timeout {
+                        // Lease is pending, even after timeout is passed
+                        Ok(true)
+                    } else {
+                        // Lease is pending, but timeout hasn't passed yet. Let's wait for changes.
+                        let (mutex_guard, wait_time_result) = self
+                            .released
+                            .wait_timeout(leases, timeout - elapsed)
+                            .unwrap();
+                        if wait_time_result.timed_out() {
+                            Ok(true)
+                        } else {
+                            leases = mutex_guard;
+                            continue;
+                        }
+                    }
+                }
+            };
+        }
+    }
+
+    fn update(&self, lease_id: u64, semaphore: &str, amount: u32, valid_for: Duration) {
+        let mut leases = self.leases.lock().unwrap();
+        let valid_until = Instant::now() + valid_for;
+        leases.update(lease_id, semaphore, amount, valid_until);
     }
 }
 
 /// Query parameters for acquiring a lease to a semaphore
 #[derive(Deserialize)]
-struct Acquire {
+struct LeaseDescription {
     /// The name of the semaphore to be acquired
     semaphore: String,
     /// The amount by which to decrease the semaphore count if the lease is active.
     amount: u32,
     /// Duration in seconds. After the specified time has passed the lease may be freed by litter
     /// collection.
-    valid_for_sec: u64
+    valid_for_sec: u64,
 }
 
 /// Acquire a new lease to a Semaphore
 #[post("/acquire")]
 async fn acquire(
-    body: Json<Acquire>,
+    body: Json<LeaseDescription>,
     cfg: Data<ApplicationCfg>,
     state: Data<State>,
 ) -> HttpResponse {
     if let Some(&max) = cfg.semaphores.get(&body.semaphore) {
         let mut leases = state.leases.lock().unwrap();
         let valid_until = Instant::now() + Duration::from_secs(body.valid_for_sec);
-        let (active, lease_id) = leases.add(&body.semaphore, body.amount as i64, max, valid_until);
+        let (active, lease_id) = leases.add(&body.semaphore, body.amount, max, valid_until);
         if active {
             debug!("Lease {} to '{}' acquired.", lease_id, body.semaphore);
             HttpResponse::Created().json(lease_id)
@@ -112,37 +157,9 @@ async fn is_pending(
     query: Query<IsPending>,
     state: Data<State>,
 ) -> Result<Json<bool>, Error> {
-    let mut leases = state.leases.lock().unwrap();
-    let start = Instant::now();
+    let lease_id = *path;
     let timeout = Duration::from_millis(query.timeout_ms.unwrap_or(0));
-    loop {
-        break match leases.is_active(*path) {
-            None => {
-                warn!("Unknown lease accessed in is_pendig request.");
-                Err(Error::UnknownLease)
-            }
-            Some(true) => Ok(Json(false)),
-            Some(false) => {
-                let elapsed = start.elapsed(); // Uses a monotonic system clock
-                if elapsed >= timeout {
-                    // Lease is pending, even after timeout is passed
-                    Ok(Json(true))
-                } else {
-                    // Lease is pending, but timeout hasn't passed yet. Let's wait for changes.
-                    let (mutex_guard, wait_time_result) = state
-                        .released
-                        .wait_timeout(leases, timeout - elapsed)
-                        .unwrap();
-                    if wait_time_result.timed_out() {
-                        Ok(Json(true))
-                    } else {
-                        leases = mutex_guard;
-                        continue;
-                    }
-                }
-            }
-        };
-    }
+    state.is_active(lease_id, timeout).map(Json)
 }
 
 /// Query parameters for getting remaining semaphore count
@@ -188,9 +205,18 @@ async fn release(path: Path<u64>, cfg: Data<ApplicationCfg>, state: Data<State>)
 
 /// Manually remove all expired semapahores. Usefull for testing
 #[post("/remove_expired")]
-async fn remove_expired(
+async fn remove_expired(state: Data<State>) -> Json<usize> {
+    Json(state.remove_expired())
+}
+
+#[put("/leases/{id}")]
+async fn put_lease(
+    path: Path<u64>,
+    body: Json<LeaseDescription>,
     state: Data<State>,
-) -> &'static str {
-    state.remove_expired();
-    "Ok"
+) -> Result<&'static str, Error> {
+    let lease_id = *path;
+    let valid_for = Duration::from_secs(body.valid_for_sec);
+    state.update(lease_id, &body.semaphore, body.amount, valid_for);
+    Ok("Ok")
 }
