@@ -12,7 +12,7 @@ use actix_web::{
     HttpResponse, ResponseError,
 };
 use serde::Deserialize;
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 impl ResponseError for Error {
     fn status_code(&self) -> StatusCode {
@@ -23,13 +23,13 @@ impl ResponseError for Error {
     }
 }
 
+type Admissions = HashMap<String, u32>;
+
 /// Query parameters for acquiring a lease to a semaphore
 #[derive(Deserialize)]
 pub struct LeaseDescription {
-    /// The name of the semaphore to be acquired
-    semaphore: String,
-    /// The amount by which to decrease the semaphore count if the lease is active.
-    amount: u32,
+    active: Admissions,
+    pending: Admissions,
     /// Duration in seconds. After the specified time has passed the lease may be freed by litter
     /// collection.
     valid_for_sec: u64,
@@ -38,14 +38,15 @@ pub struct LeaseDescription {
 /// Acquire a new lease to a Semaphore
 #[post("/acquire")]
 async fn acquire(body: Json<LeaseDescription>, state: Data<State>) -> HttpResponse {
-    match state.acquire(
-        &body.semaphore,
-        body.amount,
-        Duration::from_secs(body.valid_for_sec),
-    ) {
-        Ok((lease_id, true)) => HttpResponse::Created().json(lease_id),
-        Ok((lease_id, false)) => HttpResponse::Accepted().json(lease_id),
-        Err(error) => HttpResponse::from_error(error.into()),
+    let mut it = body.pending.iter();
+    if let Some((semaphore, &amount)) = it.next() {
+        match state.acquire(semaphore, amount, Duration::from_secs(body.valid_for_sec)) {
+            Ok((lease_id, true)) => HttpResponse::Created().json(lease_id),
+            Ok((lease_id, false)) => HttpResponse::Accepted().json(lease_id),
+            Err(error) => HttpResponse::from_error(error.into()),
+        }
+    } else {
+        HttpResponse::BadRequest().json("Empty leases are not supported, yet.")
     }
 }
 
@@ -101,11 +102,18 @@ async fn put_lease(
     state: Data<State>,
 ) -> Result<&'static str, Error> {
     let lease_id = *path;
-    state.update(
-        lease_id,
-        &body.semaphore,
-        body.amount,
-        Duration::from_secs(body.valid_for_sec),
-    );
+    let mut it = body.active.iter();
+    if let Some((semaphore, &amount)) = it.next() {
+        state.update(
+            lease_id,
+            semaphore,
+            amount,
+            Duration::from_secs(body.valid_for_sec),
+        );
+    }
+    // else {
+    //     HttpResponse::BadRequest().json("Empty leases are not supported, yet.")
+    // }
+
     Ok("Ok")
 }

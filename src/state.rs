@@ -87,12 +87,12 @@ impl State {
                     warn!("Unknown lease accessed in is_pendig request.");
                     Err(Error::UnknownLease)
                 }
-                Some(true) => Ok(false),
+                Some(true) => Ok(true),
                 Some(false) => {
                     let elapsed = start.elapsed(); // Uses a monotonic system clock
                     if elapsed >= timeout {
                         // Lease is pending, even after timeout is passed
-                        Ok(true)
+                        Ok(false)
                     } else {
                         // Lease is pending, but timeout hasn't passed yet. Let's wait for changes.
                         let (mutex_guard, wait_time_result) = self
@@ -100,7 +100,7 @@ impl State {
                             .wait_timeout(leases, timeout - elapsed)
                             .unwrap();
                         if wait_time_result.timed_out() {
-                            Ok(true)
+                            Ok(false)
                         } else {
                             leases = mutex_guard;
                             continue;

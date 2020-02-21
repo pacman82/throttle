@@ -1,22 +1,30 @@
 import requests
 import backoff
 import json
+from typing import Dict
 from contextlib import contextmanager
 
 
-class UnknownLease(ValueError):
-    """Indicates that the throttle server does not recognize the lease id"""
-
-    def __init__(self):
-        super("Unknown lease")
-
-
 class Lease:
-    """A lease to a semaphore from a throttle service."""
+    """
+    A lease from a throttle service. Lists active and pending resources for one thread of execution.
+    """
 
-    def __init__(self, id: str, pending: bool):
+    def __init__(
+        self, id: str, active: Dict[str, int] = {}, pending: Dict[str, int] = {}
+    ):
         self.id = id
+        self.active = {}
         self.pending = pending
+
+    def has_pending(self) -> bool:
+        """Returns true if this lease has pending admissions."""
+        return len(self.pending) != 0
+
+    def _make_active(self):
+        """Call this to tell the lease that the pending admissions are now active"""
+        self.active.update(self.pending)
+        self.pending = {}
 
 
 def _raise_for_status(response: requests.Response):
@@ -25,13 +33,10 @@ def _raise_for_status(response: requests.Response):
     """
 
     if response.status_code == 400:
-        if response.text == "Unknown lease":
-            raise UnknownLease
-        else:
-            # Since this is the client code which made the erroneous request, it is supposedly
-            # caused by wrong arguments passed to this code by the application. Let's forward the
-            # error as an exception, so the App developor can act on it.
-            raise ValueError(response.text)
+        # Since this is the client code which made the erroneous request, it is supposedly
+        # caused by wrong arguments passed to this code by the application. Let's forward the
+        # error as an exception, so the App developor can act on it.
+        raise ValueError(response.text)
     else:
         response.raise_for_status()
 
@@ -45,14 +50,19 @@ class Client:
     # Don't back off on timeouts. We might drain the semaphores by accident.
     @backoff.on_exception(backoff.expo, requests.ConnectionError)
     def acquire(self, semaphore: str, valid_for_sec: int = 300) -> Lease:
-        body = {"semaphore": semaphore, "amount": 1, "valid_for_sec": valid_for_sec}
+        amount = 1
+        body = {
+            "pending": {semaphore: amount},
+            "active": {},
+            "valid_for_sec": valid_for_sec,
+        }
         response = requests.post(self.base_url + "/acquire", json=body, timeout=30)
         _raise_for_status(response)
         if response.status_code == 201:  # Created. We got a lease to the semaphore
-            return Lease(id=response.text, pending=False)
+            return Lease(id=response.text, active={semaphore: amount})
         elif response.status_code == 202:  # Accepted. Ticket pending.
             id = response.text  # Ticket Id. Wait until it is promoted to lease
-            return Lease(id=response.text, pending=True)
+            return Lease(id=response.text, pending={semaphore: amount})
 
     @backoff.on_exception(backoff.expo, (requests.ConnectionError, requests.Timeout))
     def is_pending(self, lease: Lease, timeout_ms: int = 0):
@@ -67,13 +77,20 @@ class Client:
 
         response = requests.post(
             f"{self.base_url}/leases/{lease.id}/wait_on_pending?timeout_ms={timeout_ms}",
+            json={
+                "valid_for_sec": 300,
+                "active": lease.active,
+                "pending": lease.pending,
+            },
             timeout=timeout_ms / 1000 + 2,
         )
 
         _raise_for_status(response)
 
-        lease.pending = json.loads(response.text)  # Returns boolean
-        return lease.pending
+        now_active = json.loads(response.text)
+        if now_active:
+            lease._make_active()
+        return lease.has_pending()
 
     def remainder(self, semaphore: str) -> int:
         """
@@ -107,13 +124,7 @@ class Client:
 @contextmanager
 def lease(client: Client, semaphore: str):
     lease = client.acquire(semaphore)
-    while lease.pending:
-        try:
-            result = client.is_pending(lease, timeout_ms=5000)
-        except UnknownLease:
-            # The lease is unknown to the server. The server seems to have lost its state (e.g. due
-            # to a reboot), since we created the lease with the last acquire. Let's handle this by
-            # reacquiring the semaphore lease. It had been pending anyway.
-            lease = client.acquire(semaphore)
+    while lease.has_pending():
+        result = client.is_pending(lease, timeout_ms=5000)
     yield lease
     client.release(lease)

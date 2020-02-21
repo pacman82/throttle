@@ -74,7 +74,7 @@ def test_pending_lease():
         first = client.acquire("A")
         second = client.acquire("A")
         # Second lease is pending, because we still hold first
-        assert second.pending
+        assert second.has_pending()
         # A request to the server is also telling us so
         assert client.is_pending(second)
         client.release(first)
@@ -98,7 +98,7 @@ def test_blocking_pending_lease():
         client.release(first)
         t.join()
         # Second lease is no longer pending, because we released first and t is finished
-        assert not second.pending
+        assert not second.has_pending()
 
 
 def test_server_looses_state_during_pending_lease():
