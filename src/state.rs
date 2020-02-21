@@ -78,16 +78,30 @@ impl State {
         num_removed
     }
 
-    pub fn is_active(&self, lease_id: u64, timeout: Duration) -> Result<bool, Error> {
+    pub fn wait_for_admission(
+        &self,
+        lease_id: u64,
+        valid_for: Duration,
+        semaphore: &str,
+        amount: u32,
+        timeout: Duration,
+    ) -> Result<bool, Error> {
         let mut leases = self.leases.lock().unwrap();
         let start = Instant::now();
+        let valid_until = start + valid_for;
+        leases.update(lease_id, semaphore, amount, false, valid_until);
         loop {
-            break match leases.is_active(lease_id) {
+            break match leases.has_pending(lease_id) {
                 None => {
-                    warn!("Unknown lease accessed in is_pendig request.");
+                    warn!(
+                        "Unknown lease accessed while waiting for admission request. Lease id: {}",
+                        lease_id
+                    );
                     Err(Error::UnknownLease)
                 }
-                Some(true) => Ok(true),
+                Some(true) => {
+                    Ok(true)
+                }
                 Some(false) => {
                     let elapsed = start.elapsed(); // Uses a monotonic system clock
                     if elapsed >= timeout {
@@ -114,7 +128,7 @@ impl State {
     pub fn update(&self, lease_id: u64, semaphore: &str, amount: u32, valid_for: Duration) {
         let mut leases = self.leases.lock().unwrap();
         let valid_until = Instant::now() + valid_for;
-        leases.update(lease_id, semaphore, amount, valid_until);
+        leases.update(lease_id, semaphore, amount, true, valid_until);
     }
 
     pub fn remainder(&self, semaphore: &str) -> Result<i64, Error> {

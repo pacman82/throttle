@@ -26,11 +26,10 @@ def cargo_main(cfg: str):
         while proc.poll() == None and no_connection:
             try:
                 response = requests.get(f"{BASE_URL}/health", timeout=0.2)
+                response.raise_for_status()
                 no_connection = False
             except (requests.ConnectionError):
                 sleep(0.1)  # Sleep a tenth of a second, don't busy waits
-
-        response.raise_for_status()
 
         yield proc
     finally:
@@ -146,3 +145,14 @@ def test_removal_of_expired_leases():
         sleep(2)
         client.remove_expired()
         assert client.remainder("A") == 1  # Semaphore should be free again
+
+def test_pending_leases_dont_expire():
+    """Test that leases do not expire, while they wait for pending admissions."""
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        # Acquire once, so subsequent leases are pending
+        _ = client.acquire("A")
+        # This lease should be pending
+        lease = client.acquire("A", valid_for_sec=1)
+        client.is_pending(lease, timeout_ms=1500)
+        # The initial timeout of one second should have been expired by now, yet nothing is removed
+        assert client.remove_expired() == 0

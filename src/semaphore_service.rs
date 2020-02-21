@@ -35,11 +35,20 @@ pub struct LeaseDescription {
     valid_for_sec: u64,
 }
 
+impl LeaseDescription {
+    fn pending(&self) -> Option<(&str, u32)> {
+        self.pending.iter().next().map(|(sem, &amount)| (sem.as_str(), amount))
+    }
+
+    fn active(&self) -> Option<(&str, u32)> {
+        self.active.iter().next().map(|(sem, &amount)| (sem.as_str(), amount))
+    }
+}
+
 /// Acquire a new lease to a Semaphore
 #[post("/acquire")]
 async fn acquire(body: Json<LeaseDescription>, state: Data<State>) -> HttpResponse {
-    let mut it = body.pending.iter();
-    if let Some((semaphore, &amount)) = it.next() {
+    if let Some((semaphore, amount)) = body.pending() {
         match state.acquire(semaphore, amount, Duration::from_secs(body.valid_for_sec)) {
             Ok((lease_id, true)) => HttpResponse::Created().json(lease_id),
             Ok((lease_id, false)) => HttpResponse::Accepted().json(lease_id),
@@ -51,20 +60,26 @@ async fn acquire(body: Json<LeaseDescription>, state: Data<State>) -> HttpRespon
 }
 
 #[derive(Deserialize)]
-struct IsPending {
+struct MaxTimeout {
     timeout_ms: Option<u64>,
 }
 
 /// Wait for a ticket to be promoted to a lease
-#[post("/leases/{id}/wait_on_pending")]
-async fn wait_on_pending(
+#[post("/leases/{id}/wait_on_admission")]
+async fn wait_for_admission(
     path: Path<u64>,
-    query: Query<IsPending>,
+    query: Query<MaxTimeout>,
+    body: Json<LeaseDescription>,
     state: Data<State>,
 ) -> Result<Json<bool>, Error> {
     let lease_id = *path;
     let timeout = Duration::from_millis(query.timeout_ms.unwrap_or(0));
-    state.is_active(lease_id, timeout).map(Json)
+    let valid_for = Duration::from_secs(body.valid_for_sec);
+    if let Some((semaphore, amount)) = body.pending(){
+        state.wait_for_admission(lease_id, valid_for, semaphore, amount, timeout).map(Json)
+    } else {
+        Ok(Json(true))
+    }
 }
 
 /// Query parameters for getting remaining semaphore count
@@ -102,8 +117,7 @@ async fn put_lease(
     state: Data<State>,
 ) -> Result<&'static str, Error> {
     let lease_id = *path;
-    let mut it = body.active.iter();
-    if let Some((semaphore, &amount)) = it.next() {
+    if let Some((semaphore, amount)) = body.active() {
         state.update(
             lease_id,
             semaphore,
@@ -111,9 +125,6 @@ async fn put_lease(
             Duration::from_secs(body.valid_for_sec),
         );
     }
-    // else {
-    //     HttpResponse::BadRequest().json("Empty leases are not supported, yet.")
-    // }
 
     Ok("Ok")
 }

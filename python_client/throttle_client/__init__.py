@@ -76,7 +76,7 @@ class Client:
         """
 
         response = requests.post(
-            f"{self.base_url}/leases/{lease.id}/wait_on_pending?timeout_ms={timeout_ms}",
+            f"{self.base_url}/leases/{lease.id}/wait_on_admission?timeout_ms={timeout_ms}",
             json={
                 "valid_for_sec": 300,
                 "active": lease.active,
@@ -115,10 +115,16 @@ class Client:
         response = requests.delete(self.base_url + f"/leases/{lease.id}")
         _raise_for_status(response)
 
-    def remove_expired(self):
-        """Request the throttle server to remove all expired leases."""
+    def remove_expired(self) -> int:
+        """
+        Request the throttle server to remove all expired leases.
+        
+        Returns number of expired leases.
+        """
         response = requests.post(self.base_url + "/remove_expired", timeout=30)
         _raise_for_status(response)
+        # Number of expired leases
+        return json.loads(response.text)
 
 
 @contextmanager
