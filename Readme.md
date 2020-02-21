@@ -2,6 +2,10 @@
 
 Semaphores for distributed systems.
 
+## Warning
+
+Work in progress *do not use yet*.
+
 ## Motivation
 
 Throttle provides semaphores as a service via an http interface. This supports usecases like preventing access to shared resources from to many workers at once. Using Throttle is almost always some kind of workaround. In the best case the ressources (e.g. a Database) behaves well under load and is able to refuse connections. If the rest of the system is well able to handle the backpressure there would most likely be no need for Throttle. Yet, should you find yourself in need of a semaphore service Throttle might be for you.
