@@ -17,6 +17,7 @@ mod logging;
 mod metrics;
 mod not_found;
 mod semaphore_service;
+mod state;
 
 #[get("/")]
 async fn index() -> &'static str {
@@ -47,7 +48,7 @@ async fn main() -> io::Result<()> {
 
     // We only want to use one Map of semaphores across for all worker threads. To do this we wrap
     // it in `Data` which uses an `Arc` to share it between threads.
-    let sem_map = Data::new(semaphore_service::State::new());
+    let sem_map = Data::new(state::State::new(application_cfg.clone()));
 
     // Without this line, the metric is only going to be initalized, after the first request to an
     // unknown resource. I.e. We would see nothing instead of `num_404 0` in the metrics route,
@@ -65,7 +66,7 @@ async fn main() -> io::Result<()> {
             .service(semaphore_service::acquire)
             .service(semaphore_service::remainder)
             .service(semaphore_service::release)
-            .service(semaphore_service::is_pending)
+            .service(semaphore_service::wait_on_pending)
             .service(semaphore_service::remove_expired)
             .service(semaphore_service::put_lease)
             .default_service(

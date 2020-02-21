@@ -11,6 +11,7 @@ import subprocess
 # Endpoint of throttle server started by cargo main
 BASE_URL = "http://localhost:8000"
 
+
 @contextmanager
 def cargo_main(cfg: str):
     """Use as a test fixture to ensure the throttle server is running with all the recent code

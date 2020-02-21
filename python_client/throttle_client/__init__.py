@@ -24,13 +24,16 @@ def _raise_for_status(response: requests.Response):
     Wrapper around Response.raise_for_status, translating 4xx to value errors
     """
 
-    if response.status_code / 100 == 4:  # Is 4xx status code (Client side error)
-        # Since this is the client code which made the erroneous request, it is supposedly
-        # caused by wrong arguments passed to this code by the application. Let's forward the
-        # error as an exception, so the App developor can act on it.
-        raise ValueError(response.text)
-
-    response.raise_for_status()
+    if response.status_code == 400:
+        if response.text == "Unknown lease":
+            raise UnknownLease
+        else:
+            # Since this is the client code which made the erroneous request, it is supposedly
+            # caused by wrong arguments passed to this code by the application. Let's forward the
+            # error as an exception, so the App developor can act on it.
+            raise ValueError(response.text)
+    else:
+        response.raise_for_status()
 
 
 class Client:
@@ -62,13 +65,10 @@ class Client:
         Server, or network timeouts of the heartbeats.)
         """
 
-        response = requests.get(
-            f"{self.base_url}/leases/{lease.id}/is_pending?timeout_ms={timeout_ms}",
+        response = requests.post(
+            f"{self.base_url}/leases/{lease.id}/wait_on_pending?timeout_ms={timeout_ms}",
             timeout=timeout_ms / 1000 + 2,
         )
-
-        if response.status_code == 400 and response.text == "Unknown lease":
-            raise UnknownLease
 
         _raise_for_status(response)
 
@@ -108,10 +108,10 @@ class Client:
 def lease(client: Client, semaphore: str):
     lease = client.acquire(semaphore)
     while lease.pending:
-        try: 
+        try:
             result = client.is_pending(lease, timeout_ms=5000)
         except UnknownLease:
-            # The lease is unknown to the server. The server seems to have lost its state (e.g. due 
+            # The lease is unknown to the server. The server seems to have lost its state (e.g. due
             # to a reboot), since we created the lease with the last acquire. Let's handle this by
             # reacquiring the semaphore lease. It had been pending anyway.
             lease = client.acquire(semaphore)
