@@ -5,9 +5,11 @@ from typing import Dict
 from contextlib import contextmanager
 from threading import Event, Thread
 
+
 class Lease:
     """
-    A lease from a throttle service. Lists active and pending resources for one thread of execution.
+    A lease from a throttle service. Lists active and pending resources for
+    one thread of execution.
     """
 
     def __init__(
@@ -29,7 +31,9 @@ class Lease:
         return len(self.active) != 0
 
     def _make_active(self):
-        """Call this to tell the lease that the pending admissions are now active"""
+        """
+        Call this to tell the lease that the pending admissions are now active
+        """
         self.active.update(self.pending)
         self.pending = {}
 
@@ -40,9 +44,10 @@ def _raise_for_status(response: requests.Response):
     """
 
     if response.status_code == 400:
-        # Since this is the client code which made the erroneous request, it is supposedly
-        # caused by wrong arguments passed to this code by the application. Let's forward the
-        # error as an exception, so the App developor can act on it.
+        # Since this is the client code which made the erroneous request, it is
+        # supposedly caused by wrong arguments passed to this code by the
+        # application. Let's forward the error as an exception, so the App
+        # developer can act on it.
         raise ValueError(response.text)
     else:
         response.raise_for_status()
@@ -67,27 +72,33 @@ class Client:
             "pending": {semaphore: amount},
             "valid_for_sec": valid_for_sec,
         }
-        response = requests.post(self.base_url + "/acquire", json=body, timeout=30)
+        response = requests.post(
+            self.base_url + "/acquire", json=body, timeout=30
+        )
         _raise_for_status(response)
-        if response.status_code == 201:  # Created. We got a lease to the semaphore
+        if (
+            response.status_code == 201
+        ):  # Created. We got a lease to the semaphore
             return Lease(id=response.text, active={semaphore: amount})
         elif response.status_code == 202:  # Accepted. Ticket pending.
-            id = response.text  # Ticket Id. Wait until it is promoted to lease
             return Lease(id=response.text, pending={semaphore: amount})
 
-    @backoff.on_exception(backoff.expo, (requests.ConnectionError, requests.Timeout))
+    @backoff.on_exception(
+        backoff.expo, (requests.ConnectionError, requests.Timeout)
+    )
     def wait_for_admission(self, lease: Lease, timeout_ms: int = 0):
         """
-        Check if the lease is still pending. An optional timeout allows to block on a pending lease
-        in order to wait for an active lease. Returns True if lease is still pending, False if the
-        lease should be active.
+        Check if the lease is still pending. An optional timeout allows to
+        block on a pending lease in order to wait for an active lease. Returns
+        True if lease is still pending, False if the lease should be active.
 
-        Raises UnknownLease in case the server doesn't know the lease (e.g. due to reboot of Throttle
-        Server, or network timeouts of the heartbeats.)
+        Raises UnknownLease in case the server doesn't know the lease (e.g. due
+        to reboot of Throttle Server, or network timeouts of the heartbeats.)
         """
 
         response = requests.post(
-            f"{self.base_url}/leases/{lease.id}/wait_on_admission?timeout_ms={timeout_ms}",
+            self.base_url
+            + f"/leases/{lease.id}/wait_on_admission?timeout_ms={timeout_ms}",
             json={
                 "valid_for_sec": 300,
                 "active": lease.active,
@@ -100,20 +111,22 @@ class Client:
 
         now_active = json.loads(response.text)
         if now_active:
-            # Server told us all admissions in the lease are active. Let's update our local
-            # bookeeping accordingly.
+            # Server told us all admissions in the lease are active. Let's
+            # update our local bookeeping accordingly.
             lease._make_active()
         return lease.has_pending()
 
     def remainder(self, semaphore: str) -> int:
         """
         The curent semaphore count. I.e. the number of available leases
-        
-        This is equal to the full semaphore count minus the current count. This number could become
-        negative, if the semaphores have been overcommitted (due to previously reoccuring leases 
-        previously considered dead).
+
+        This is equal to the full semaphore count minus the current count. This
+        number could become negative, if the semaphores have been overcommitted
+        (due to previously reoccuring leases previously considered dead).
         """
-        response = requests.get(self.base_url + f"/remainder?semaphore={semaphore}")
+        response = requests.get(
+            self.base_url + f"/remainder?semaphore={semaphore}"
+        )
         _raise_for_status(response)
 
         return int(response.text)
@@ -122,8 +135,8 @@ class Client:
         """
         Deletes the lease on the throttle server.
 
-        This is important to unblock other clients which may be waiting for the semaphore remainder
-        to increase.
+        This is important to unblock other clients which may be waiting for
+        the semaphore remainder to increase.
         """
         response = requests.delete(self.base_url + f"/leases/{lease.id}")
         _raise_for_status(response)
@@ -131,7 +144,7 @@ class Client:
     def remove_expired(self) -> int:
         """
         Request the throttle server to remove all expired leases.
-        
+
         Returns number of expired leases.
         """
         response = requests.post(self.base_url + "/remove_expired", timeout=30)
@@ -141,23 +154,26 @@ class Client:
 
     def heartbeat(self, lease: Lease):
         """
-        Sends a PUT request to the server, updating the expiration timestamp and repeating the
-        information in the lease.
+        Sends a PUT request to the server, updating the expiration timestamp
+        and repeating the information in the lease.
         """
         assert (
             not lease.has_pending()
         ), "Pending leases must not be kept alive via heartbeat."
         response = requests.put(
             f"{self.base_url}/leases/{lease.id}",
-            json={"valid_for_sec": self.expiration_time_sec, "active": lease.active},
+            json={
+                "valid_for_sec": self.expiration_time_sec,
+                "active": lease.active,
+            },
             timeout=30,
         )
         _raise_for_status(response)
 
 
-# Heartbeat is implemented via an event, rather than a thread with a sleep, so we can interupt and
-# it, then the Application code wants to release the semaphores without waiting for the current
-# interval to finish
+# Heartbeat is implemented via an event, rather than a thread with a sleep, so
+# we can interupt and it, then the Application code wants to release the
+# semaphores without waiting for the current interval to finish
 class Heartbeat:
     def __init__(self, client: Client, lease: Lease, interval_sec: float):
         self.client = client
@@ -181,10 +197,10 @@ class Heartbeat:
 
 
 @contextmanager
-def lease(client: Client, semaphore: str, heartbeat_interval_sec: float=300):
+def lease(client: Client, semaphore: str, heartbeat_interval_sec: float = 300):
     lease = client.acquire(semaphore)
     while lease.has_pending():
-        result = client.wait_for_admission(lease, timeout_ms=5000)
+        _ = client.wait_for_admission(lease, timeout_ms=5000)
     heartbeat = Heartbeat(client, lease, heartbeat_interval_sec)
     heartbeat.start()
     yield lease
