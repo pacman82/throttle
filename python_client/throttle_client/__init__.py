@@ -3,7 +3,7 @@ import backoff
 import json
 from typing import Dict
 from contextlib import contextmanager
-
+from threading import Event, Thread
 
 class Lease:
     """
@@ -11,15 +11,22 @@ class Lease:
     """
 
     def __init__(
-        self, id: str, active: Dict[str, int] = {}, pending: Dict[str, int] = {}
+        self,
+        id: str,
+        active: Dict[str, int] = {},
+        pending: Dict[str, int] = {},
     ):
         self.id = id
-        self.active = {}
+        self.active = active
         self.pending = pending
 
     def has_pending(self) -> bool:
         """Returns true if this lease has pending admissions."""
         return len(self.pending) != 0
+
+    def has_active(self) -> bool:
+        """Returns true if this lease has active admissions."""
+        return len(self.active) != 0
 
     def _make_active(self):
         """Call this to tell the lease that the pending admissions are now active"""
@@ -44,16 +51,20 @@ def _raise_for_status(response: requests.Response):
 class Client:
     """A Client to lease semaphores from as Throttle service."""
 
-    def __init__(self, base_url: str):
+    def __init__(
+        self, base_url: str, expiration_time_sec: int = 900,
+    ):
+        self.expiration_time_sec = expiration_time_sec
         self.base_url = base_url
 
     # Don't back off on timeouts. We might drain the semaphores by accident.
     @backoff.on_exception(backoff.expo, requests.ConnectionError)
-    def acquire(self, semaphore: str, valid_for_sec: int = 300) -> Lease:
+    def acquire(self, semaphore: str, valid_for_sec: int = None) -> Lease:
+        if not valid_for_sec:
+            valid_for_sec = self.expiration_time_sec
         amount = 1
         body = {
             "pending": {semaphore: amount},
-            "active": {},
             "valid_for_sec": valid_for_sec,
         }
         response = requests.post(self.base_url + "/acquire", json=body, timeout=30)
@@ -65,7 +76,7 @@ class Client:
             return Lease(id=response.text, pending={semaphore: amount})
 
     @backoff.on_exception(backoff.expo, (requests.ConnectionError, requests.Timeout))
-    def is_pending(self, lease: Lease, timeout_ms: int = 0):
+    def wait_for_admission(self, lease: Lease, timeout_ms: int = 0):
         """
         Check if the lease is still pending. An optional timeout allows to block on a pending lease
         in order to wait for an active lease. Returns True if lease is still pending, False if the
@@ -89,6 +100,8 @@ class Client:
 
         now_active = json.loads(response.text)
         if now_active:
+            # Server told us all admissions in the lease are active. Let's update our local
+            # bookeeping accordingly.
             lease._make_active()
         return lease.has_pending()
 
@@ -126,11 +139,54 @@ class Client:
         # Number of expired leases
         return json.loads(response.text)
 
+    def heartbeat(self, lease: Lease):
+        """
+        Sends a PUT request to the server, updating the expiration timestamp and repeating the
+        information in the lease.
+        """
+        assert (
+            not lease.has_pending()
+        ), "Pending leases must not be kept alive via heartbeat."
+        response = requests.put(
+            f"{self.base_url}/leases/{lease.id}",
+            json={"valid_for_sec": self.expiration_time_sec, "active": lease.active},
+            timeout=30,
+        )
+        _raise_for_status(response)
+
+
+# Heartbeat is implemented via an event, rather than a thread with a sleep, so we can interupt and
+# it, then the Application code wants to release the semaphores without waiting for the current
+# interval to finish
+class Heartbeat:
+    def __init__(self, client: Client, lease: Lease, interval_sec: float):
+        self.client = client
+        self.lease = lease
+        self.interval_sec = interval_sec
+        self.cancel = Event()
+        self.thread = Thread(target=self._run)
+
+    def start(self):
+        self.cancel.clear()
+        self.thread.start()
+
+    def stop(self):
+        self.cancel.set()
+        self.thread.join()
+
+    def _run(self):
+        while self.lease.has_active() and not self.cancel.is_set():
+            self.client.heartbeat(self.lease)
+            self.cancel.wait(self.interval_sec)
+
 
 @contextmanager
-def lease(client: Client, semaphore: str):
+def lease(client: Client, semaphore: str, heartbeat_interval_sec: float=300):
     lease = client.acquire(semaphore)
     while lease.has_pending():
-        result = client.is_pending(lease, timeout_ms=5000)
+        result = client.wait_for_admission(lease, timeout_ms=5000)
+    heartbeat = Heartbeat(client, lease, heartbeat_interval_sec)
+    heartbeat.start()
     yield lease
+    heartbeat.stop()
     client.release(lease)

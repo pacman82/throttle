@@ -66,7 +66,7 @@ def test_remainder():
 
 
 def test_pending_lease():
-    """Verify the results of a non-blocking request to is_pending
+    """Verify the results of a non-blocking request to wait_for_admission
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         # Acquire first lease
@@ -75,14 +75,14 @@ def test_pending_lease():
         # Second lease is pending, because we still hold first
         assert second.has_pending()
         # A request to the server is also telling us so
-        assert client.is_pending(second)
+        assert client.wait_for_admission(second)
         client.release(first)
         # After releasing the first lease the second lease should no longer be pending
-        assert not client.is_pending(second)
+        assert not client.wait_for_admission(second)
 
 
 def test_blocking_pending_lease():
-    """Verify that is_pending blocks until the lease is ready
+    """Verify that wait_for_admission blocks until the lease is ready
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         # Acquire first lease
@@ -90,7 +90,7 @@ def test_blocking_pending_lease():
         second = client.acquire("A")
 
         def wait_for_second_lease():
-            client.is_pending(second, timeout_ms=2000)
+            client.wait_for_admission(second, timeout_ms=2000)
 
         t = Thread(target=wait_for_second_lease)
         t.start()
@@ -146,6 +146,7 @@ def test_removal_of_expired_leases():
         client.remove_expired()
         assert client.remainder("A") == 1  # Semaphore should be free again
 
+
 def test_pending_leases_dont_expire():
     """Test that leases do not expire, while they wait for pending admissions."""
     with throttle_client(b"[semaphores]\nA=1") as client:
@@ -153,6 +154,25 @@ def test_pending_leases_dont_expire():
         _ = client.acquire("A")
         # This lease should be pending
         lease = client.acquire("A", valid_for_sec=1)
-        client.is_pending(lease, timeout_ms=1500)
+        client.wait_for_admission(lease, timeout_ms=1500)
         # The initial timeout of one second should have been expired by now, yet nothing is removed
         assert client.remove_expired() == 0
+
+
+def test_keep_lease_alive_beyond_expiration():
+    """
+    Validates that a heartbeat keeps the lease alive beyond the initial expiration time.
+    """
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        client.expiration_time_sec = 2
+        with lease(client, "A", heartbeat_interval_sec=1) as l:
+            sleep(3)
+            # Evens though enough time has passed, our lease should not be expired, thanks to the
+            # heartbeat.
+            assert client.remove_expired() == 0
+
+
+# def test_litter_collection():
+#     """Verify server releases leases if not kept alive by heartbeat"""
+#     with throttle_client(b"[semaphores]\nA=1\n") as client:
+#         _ = client.acquire("A", valid_for_sec=1)

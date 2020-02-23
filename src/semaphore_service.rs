@@ -12,6 +12,7 @@ use actix_web::{
     HttpResponse, ResponseError,
 };
 use serde::Deserialize;
+use log::{debug, warn};
 use std::{collections::HashMap, time::Duration};
 
 impl ResponseError for Error {
@@ -25,21 +26,31 @@ impl ResponseError for Error {
 
 type Admissions = HashMap<String, u32>;
 
-/// Query parameters for acquiring a lease to a semaphore
+/// Parameters for acquiring a lease
 #[derive(Deserialize)]
-pub struct LeaseDescription {
-    active: Admissions,
+pub struct PendingAdmissions {
     pending: Admissions,
     /// Duration in seconds. After the specified time has passed the lease may be freed by litter
     /// collection.
     valid_for_sec: u64,
 }
 
-impl LeaseDescription {
+impl PendingAdmissions {
     fn pending(&self) -> Option<(&str, u32)> {
         self.pending.iter().next().map(|(sem, &amount)| (sem.as_str(), amount))
     }
+}
 
+/// Parameters for heartbeat to a lease
+#[derive(Deserialize)]
+pub struct ActiveAdmissions {
+    active: Admissions,
+    /// Duration in seconds. After the specified time has passed the lease may be freed by litter
+    /// collection.
+    valid_for_sec: u64,
+}
+
+impl ActiveAdmissions {
     fn active(&self) -> Option<(&str, u32)> {
         self.active.iter().next().map(|(sem, &amount)| (sem.as_str(), amount))
     }
@@ -47,7 +58,7 @@ impl LeaseDescription {
 
 /// Acquire a new lease to a Semaphore
 #[post("/acquire")]
-async fn acquire(body: Json<LeaseDescription>, state: Data<State>) -> HttpResponse {
+async fn acquire(body: Json<PendingAdmissions>, state: Data<State>) -> HttpResponse {
     if let Some((semaphore, amount)) = body.pending() {
         match state.acquire(semaphore, amount, Duration::from_secs(body.valid_for_sec)) {
             Ok((lease_id, true)) => HttpResponse::Created().json(lease_id),
@@ -69,7 +80,7 @@ struct MaxTimeout {
 async fn wait_for_admission(
     path: Path<u64>,
     query: Query<MaxTimeout>,
-    body: Json<LeaseDescription>,
+    body: Json<PendingAdmissions>,
     state: Data<State>,
 ) -> Result<Json<bool>, Error> {
     let lease_id = *path;
@@ -107,23 +118,27 @@ async fn release(path: Path<u64>, state: Data<State>) -> HttpResponse {
 /// Manually remove all expired semapahores. Usefull for testing
 #[post("/remove_expired")]
 async fn remove_expired(state: Data<State>) -> Json<usize> {
+    debug!("Remove expired triggered");
     Json(state.remove_expired())
 }
 
 #[put("/leases/{id}")]
 async fn put_lease(
     path: Path<u64>,
-    body: Json<LeaseDescription>,
+    body: Json<ActiveAdmissions>,
     state: Data<State>,
 ) -> Result<&'static str, Error> {
     let lease_id = *path;
     if let Some((semaphore, amount)) = body.active() {
+        debug!("Received heartbeat for {}", lease_id);
         state.update(
             lease_id,
             semaphore,
             amount,
             Duration::from_secs(body.valid_for_sec),
         );
+    } else {
+        warn!("Empty heartbeat (no active leases) for {}", lease_id);
     }
 
     Ok("Ok")

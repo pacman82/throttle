@@ -70,10 +70,10 @@ impl State {
     ///
     /// Returns number of (now removed) expired leases
     pub fn remove_expired(&self) -> usize {
-        let mut leases = self.leases.lock().unwrap();
-        let num_removed = leases.remove_expired(Instant::now());
+        let num_removed = self.leases.lock().unwrap().remove_expired(Instant::now());
         if num_removed != 0 {
             self.released.notify_all();
+            warn!("Removed {} leases due to expiration.", num_removed);
         }
         num_removed
     }
@@ -99,9 +99,7 @@ impl State {
                     );
                     Err(Error::UnknownLease)
                 }
-                Some(true) => {
-                    Ok(true)
-                }
+                Some(true) => Ok(true),
                 Some(false) => {
                     let elapsed = start.elapsed(); // Uses a monotonic system clock
                     if elapsed >= timeout {

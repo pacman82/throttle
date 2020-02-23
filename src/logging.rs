@@ -1,6 +1,7 @@
 use failure::{Error, Fail, ResultExt};
 use gelf;
 use log;
+use env_logger;
 use serde::Deserialize;
 use serde_json;
 use std::{fs::File, io};
@@ -58,7 +59,8 @@ pub fn init() -> Result<(), Error> {
         Err(e) => {
             // Missing config file is fine and expected during local execution.
             if e.kind() == io::ErrorKind::NotFound {
-                eprintln!("logging_config.json not found => Not logging to GELF");
+                eprintln!("logging_config.json not found => Logging to stderr instead");
+                env_logger::init();
                 Ok(())
             } else {
                 Err(e.context("Unable to open logging_config.json.").into())
