@@ -138,8 +138,13 @@ class Client:
         This is important to unblock other clients which may be waiting for
         the semaphore remainder to increase.
         """
-        response = requests.delete(self.base_url + f"/leases/{lease.id}")
-        _raise_for_status(response)
+        try:
+            response = requests.delete(self.base_url + f"/leases/{lease.id}")
+            _raise_for_status(response)
+        except requests.ConnectionError:
+            # Let's not wait for the server. This lease is a case for the
+            # litter collection.
+            pass
 
     def remove_expired(self) -> int:
         """
@@ -192,7 +197,10 @@ class Heartbeat:
 
     def _run(self):
         while self.lease.has_active() and not self.cancel.is_set():
-            self.client.heartbeat(self.lease)
+            try:
+                self.client.heartbeat(self.lease)
+            except requests.ConnectionError:
+                pass
             self.cancel.wait(self.interval_sec)
 
 
