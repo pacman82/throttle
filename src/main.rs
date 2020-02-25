@@ -48,7 +48,7 @@ async fn main() -> io::Result<()> {
 
     // We only want to use one Map of semaphores across for all worker threads. To do this we wrap
     // it in `Data` which uses an `Arc` to share it between threads.
-    let sem_map = Data::new(state::State::new(application_cfg.clone()));
+    let sem_map = Data::new(state::State::new(application_cfg));
 
     // Without this line, the metric is only going to be initalized, after the first request to an
     // unknown resource. I.e. We would see nothing instead of `num_404 0` in the metrics route,
@@ -57,7 +57,6 @@ async fn main() -> io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .data(application_cfg.clone())
             .app_data(sem_map.clone())
             .service(index)
             .service(health::health)
