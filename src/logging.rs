@@ -1,7 +1,7 @@
+use env_logger;
 use failure::{Error, Fail, ResultExt};
 use gelf;
 use log;
-use env_logger;
 use serde::Deserialize;
 use serde_json;
 use std::{fs::File, io};
@@ -46,7 +46,7 @@ pub fn init() -> Result<(), Error> {
         Ok(file) => {
             let config = read_gelf_config(file).context("Error reading logging_config.json")?;
 
-            let backend = gelf::UdpBackend::new((config.host.as_str(), config.port))
+            let backend = gelf::UdpBackend::new(format!("{}:{}", config.host, config.port))
                 .context("Error creating GELF UDP logging backend")?;
             let mut logger =
                 gelf::Logger::new(Box::new(backend)).context("Error creating GELF logger.")?;
