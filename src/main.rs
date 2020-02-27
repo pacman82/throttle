@@ -13,6 +13,7 @@ mod cli;
 mod favicon;
 mod health;
 mod leases;
+mod litter_collection;
 mod logging;
 mod metrics;
 mod not_found;
@@ -48,16 +49,22 @@ async fn main() -> io::Result<()> {
 
     // We only want to use one Map of semaphores across for all worker threads. To do this we wrap
     // it in `Data` which uses an `Arc` to share it between threads.
-    let sem_map = Data::new(state::State::new(application_cfg));
+    let state = Data::new(state::State::new(application_cfg));
 
     // Without this line, the metric is only going to be initalized, after the first request to an
     // unknown resource. I.e. We would see nothing instead of `num_404 0` in the metrics route,
     // before the first request to an unknown resource.
     not_found::initialize_metrics();
 
-    HttpServer::new(move || {
+    // Remove expired leases asynchrounously
+    let lc = litter_collection::start(
+        state.clone().into_inner(),
+        std::time::Duration::from_secs(300),
+    );
+
+    let server_terminated = HttpServer::new(move || {
         App::new()
-            .app_data(sem_map.clone())
+            .app_data(state.clone())
             .service(index)
             .service(health::health)
             .service(metrics::metrics)
@@ -74,6 +81,12 @@ async fn main() -> io::Result<()> {
             )
     })
     .bind(&opt.endpoint())?
-    .run()
-    .await
+    .run();
+
+    server_terminated.await?;
+
+    // Stop litter collection.
+    lc.stop();
+
+    Ok(())
 }

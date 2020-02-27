@@ -6,9 +6,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Variadic state of the Semaphore service
+/// State of the Semaphore service, shared between threads
 pub struct State {
-    /// Bookeeping for leases, protected by mutex
+    /// Bookeeping for leases, protected by mutex.
     leases: Mutex<Leases>,
     /// Condition variable. Notify is called thenever a lease is released, so it's suitable for
     /// blocking on request to pending leases.

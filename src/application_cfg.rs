@@ -44,3 +44,19 @@ impl ApplicationCfg {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn parse_toml_file() {
+        let cfg = "[semaphores]\n\
+                   A=1\n\
+                   \n\
+                ";
+        let actual : ApplicationCfg = toml::from_str(cfg).unwrap();
+        assert_eq!(actual.semaphores.get("A").unwrap(), &1);
+    }
+}
