@@ -1,4 +1,4 @@
-use crate::{application_cfg::ApplicationCfg, leases::Leases};
+use crate::{application_cfg::Semaphores, leases::Leases};
 use log::{debug, warn};
 use std::{
     fmt,
@@ -14,7 +14,7 @@ pub struct State {
     /// blocking on request to pending leases.
     released: Condvar,
     /// All known semaphores and their full count
-    cfg: ApplicationCfg,
+    semaphores: Semaphores,
 }
 
 #[derive(Debug)]
@@ -34,11 +34,11 @@ impl fmt::Display for Error {
 
 impl State {
     /// Creates the state required for the semaphore service
-    pub fn new(cfg: ApplicationCfg) -> State {
+    pub fn new(semaphores: Semaphores) -> State {
         State {
             leases: Mutex::new(Leases::new()),
             released: Condvar::new(),
-            cfg,
+            semaphores,
         }
     }
 
@@ -48,7 +48,7 @@ impl State {
         amount: u32,
         valid_for: Duration,
     ) -> Result<(u64, bool), Error> {
-        if let Some(&max) = self.cfg.semaphores.get(semaphore) {
+        if let Some(&max) = self.semaphores.get(semaphore) {
             let mut leases = self.leases.lock().unwrap();
             let valid_until = Instant::now() + valid_for;
             let (active, lease_id) = leases.add(semaphore, amount, max, valid_until);
@@ -130,7 +130,7 @@ impl State {
     }
 
     pub fn remainder(&self, semaphore: &str) -> Result<i64, Error> {
-        if let Some(full_count) = self.cfg.semaphores.get(semaphore) {
+        if let Some(full_count) = self.semaphores.get(semaphore) {
             let leases = self.leases.lock().unwrap();
             let count = leases.count(&semaphore);
             Ok(full_count - count)
@@ -149,7 +149,6 @@ impl State {
         match leases.remove(lease_id) {
             Some(semaphore) => {
                 let full_count = self
-                    .cfg
                     .semaphores
                     .get(&semaphore)
                     .expect("An active semaphore must always be configured");

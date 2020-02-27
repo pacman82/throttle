@@ -9,13 +9,22 @@ use std::{
     path::Path,
 };
 
+pub type Semaphores = HashMap<String, i64>;
+
 /// Representation of the `application.cfg` file passed to the service from stratosphere
 #[derive(Deserialize, Debug, Default, Clone)]
 pub struct ApplicationCfg {
-    pub semaphores: HashMap<String, i64>,
+    #[serde(default = "ApplicationCfg::litter_collection_interval_sec_default")]
+    pub litter_collection_interval_sec: f32,
+    pub semaphores: Semaphores,
 }
 
 impl ApplicationCfg {
+    // Set default of litter collection interval to 5min
+    fn litter_collection_interval_sec_default() -> f32 {
+        300.0
+    }
+
     /// Checks for a file named `application.cfg` in the working directory. It is then used to
     /// create a new configuration. If the file can not be found a default configuration is created.
     pub fn init(path: &Path) -> Result<ApplicationCfg, io::Error> {
@@ -52,11 +61,14 @@ mod tests {
 
     #[test]
     fn parse_toml_file() {
-        let cfg = "[semaphores]\n\
+        let cfg = "litter_collection_interval_sec = 0.1\n\
+                   \n\
+                   [semaphores]\n\
                    A=1\n\
                    \n\
                 ";
-        let actual : ApplicationCfg = toml::from_str(cfg).unwrap();
+        let actual: ApplicationCfg = toml::from_str(cfg).unwrap();
+        assert_eq!(actual.litter_collection_interval_sec, 0.1);
         assert_eq!(actual.semaphores.get("A").unwrap(), &1);
     }
 }

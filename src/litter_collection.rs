@@ -10,6 +10,9 @@ use std::{
 /// DELETE requests. Yet, clients crash and requests may never make it. To not leak semaphores in
 /// such cases, the litter collection checks for expired leases in regular intervals and removes
 /// them.
+///
+/// It does not have a drop handler joining the spawned thread. So if stop is not called at the end
+/// of its lifetime the inner thread is deatched.
 pub struct LitterCollection {
     // We currently make no use of the asynchronous executer and spawn a native system thread. In
     // would be nicer to reuse the Execute we use to drive the server requests, but advanced
@@ -21,7 +24,6 @@ pub struct LitterCollection {
 }
 
 impl LitterCollection {
-
     pub fn stop(self) {
         // Tell litter collection thread to stop. This will cancel the wait between intervals.
         // Attention: Take care, to not hold the lock over join. This would cause a deadlock.
@@ -58,4 +60,14 @@ pub fn start(state: Arc<State>, interval: Duration) -> LitterCollection {
         }
     });
     LitterCollection { stopped, handle }
+}
+
+#[cfg(Debug)]
+impl Drop for LitterCollection {
+    fn drop(&mut self) {
+        assert!(
+            *self.stopped.0.lock().unwrap(),
+            "Litter Collection has not been stopped before the end of its lifetime."
+        )
+    }
 }

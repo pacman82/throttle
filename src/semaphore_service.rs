@@ -11,8 +11,8 @@ use actix_web::{
     web::{Data, Json, Path, Query},
     HttpResponse, ResponseError,
 };
-use serde::Deserialize;
 use log::{debug, warn};
+use serde::Deserialize;
 use std::{collections::HashMap, time::Duration};
 
 impl ResponseError for Error {
@@ -37,7 +37,10 @@ pub struct PendingAdmissions {
 
 impl PendingAdmissions {
     fn pending(&self) -> Option<(&str, u32)> {
-        self.pending.iter().next().map(|(sem, &amount)| (sem.as_str(), amount))
+        self.pending
+            .iter()
+            .next()
+            .map(|(sem, &amount)| (sem.as_str(), amount))
     }
 }
 
@@ -52,7 +55,10 @@ pub struct ActiveAdmissions {
 
 impl ActiveAdmissions {
     fn active(&self) -> Option<(&str, u32)> {
-        self.active.iter().next().map(|(sem, &amount)| (sem.as_str(), amount))
+        self.active
+            .iter()
+            .next()
+            .map(|(sem, &amount)| (sem.as_str(), amount))
     }
 }
 
@@ -86,8 +92,10 @@ async fn wait_for_admission(
     let lease_id = *path;
     let timeout = Duration::from_millis(query.timeout_ms.unwrap_or(0));
     let valid_for = Duration::from_secs(body.valid_for_sec);
-    if let Some((semaphore, amount)) = body.pending(){
-        state.wait_for_admission(lease_id, valid_for, semaphore, amount, timeout).map(Json)
+    if let Some((semaphore, amount)) = body.pending() {
+        state
+            .wait_for_admission(lease_id, valid_for, semaphore, amount, timeout)
+            .map(Json)
     } else {
         Ok(Json(true))
     }

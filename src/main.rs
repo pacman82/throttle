@@ -49,7 +49,7 @@ async fn main() -> io::Result<()> {
 
     // We only want to use one Map of semaphores across for all worker threads. To do this we wrap
     // it in `Data` which uses an `Arc` to share it between threads.
-    let state = Data::new(state::State::new(application_cfg));
+    let state = Data::new(state::State::new(application_cfg.semaphores));
 
     // Copy a reference to state, before moving it into the closure. We need it later to start the
     // litter collection.
@@ -86,7 +86,7 @@ async fn main() -> io::Result<()> {
     // we would've started the lc before initializing the server before.
     let lc = litter_collection::start(
         state_ref_lc.into_inner(),
-        std::time::Duration::from_secs(300),
+        std::time::Duration::from_secs_f32(application_cfg.litter_collection_interval_sec),
     );
 
     let result = server_terminated.await; // Don't use ? to early return before stopping the lc.

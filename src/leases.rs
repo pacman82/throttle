@@ -133,7 +133,14 @@ impl Leases {
     /// Updates the timestamp of an existing lease. Does not perform a consistency check with a
     /// preexisting lease, but may insert a revenant (i.e. a previously forgotten lease) back into
     /// bookeeping.
-    pub fn update(&mut self, lease_id: u64, semaphore: &str, amount: u32, active: bool, valid_until: Instant) {
+    pub fn update(
+        &mut self,
+        lease_id: u64,
+        semaphore: &str,
+        amount: u32,
+        active: bool,
+        valid_until: Instant,
+    ) {
         self.ledger
             .entry(lease_id)
             .and_modify(|lease| lease.valid_until = valid_until)

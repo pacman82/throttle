@@ -186,7 +186,7 @@ def test_keep_lease_alive_beyond_expiration():
 
 def test_lease_recovery_after_server_reboot():
     """
-    Verify that a newly bootet server, gives leases to heartbeats
+    Verify that a newly booted server, recovers leases based on heartbeats
     """
     with NamedTemporaryFile(delete=False) as cfg:
         cfg.write(b"[semaphores]\nA=1")
@@ -200,3 +200,19 @@ def test_lease_recovery_after_server_reboot():
                     # Wait a moment for the heartbeat to update server sate.
                     sleep(1.5)
                     assert client.remainder("A") == 0
+
+
+def test_litter_collection():
+    """
+    Verify that leases don't leak thanks to litter collection
+    """
+    with throttle_client(
+        (b"litter_collection_interval_sec=0.1\n" b"[semaphores]\n" b"A=1\n")
+    ) as client:
+        client.expiration_time_sec = 1
+        # Acquire lease, but since we don't use the context manager we never
+        # release it.
+        _ = client.acquire("A")
+        # No, worry time will take care of this.
+        sleep(1.5)
+        assert client.remainder("A") == 1
