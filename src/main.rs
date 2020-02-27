@@ -51,16 +51,14 @@ async fn main() -> io::Result<()> {
     // it in `Data` which uses an `Arc` to share it between threads.
     let state = Data::new(state::State::new(application_cfg));
 
+    // Copy a reference to state, before moving it into the closure. We need it later to start the
+    // litter collection.
+    let state_ref_lc = state.clone();
+
     // Without this line, the metric is only going to be initalized, after the first request to an
     // unknown resource. I.e. We would see nothing instead of `num_404 0` in the metrics route,
     // before the first request to an unknown resource.
     not_found::initialize_metrics();
-
-    // Remove expired leases asynchrounously
-    let lc = litter_collection::start(
-        state.clone().into_inner(),
-        std::time::Duration::from_secs(300),
-    );
 
     let server_terminated = HttpServer::new(move || {
         App::new()
@@ -83,10 +81,18 @@ async fn main() -> io::Result<()> {
     .bind(&opt.endpoint())?
     .run();
 
-    server_terminated.await?;
+    // Remove expired leases asynchrounously. Start litter collection after we run the server. As
+    // the ? after the  `.bind` call might early return and would leave us with a detached thread if
+    // we would've started the lc before initializing the server before.
+    let lc = litter_collection::start(
+        state_ref_lc.into_inner(),
+        std::time::Duration::from_secs(300),
+    );
+
+    let result = server_terminated.await; // Don't use ? to early return before stopping the lc.
 
     // Stop litter collection.
     lc.stop();
 
-    Ok(())
+    result
 }
