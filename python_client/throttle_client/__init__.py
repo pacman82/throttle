@@ -70,7 +70,7 @@ class Client:
         amount = 1
         body = {
             "pending": {semaphore: amount},
-            "valid_for_sec": valid_for_sec,
+            "valid_for": f"{valid_for_sec}s",
         }
         response = requests.post(
             self.base_url + "/acquire", json=body, timeout=30
@@ -100,7 +100,7 @@ class Client:
             self.base_url
             + f"/leases/{lease.id}/wait_on_admission?timeout_ms={timeout_ms}",
             json={
-                "valid_for_sec": 300,
+                "valid_for": "5min",
                 "active": lease.active,
                 "pending": lease.pending,
             },

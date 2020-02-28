@@ -32,7 +32,8 @@ pub struct PendingAdmissions {
     pending: Admissions,
     /// Duration in seconds. After the specified time has passed the lease may be freed by litter
     /// collection.
-    valid_for_sec: u64,
+    #[serde(with="humantime_serde")]
+    valid_for: Duration,
 }
 
 impl PendingAdmissions {
@@ -66,7 +67,7 @@ impl ActiveAdmissions {
 #[post("/acquire")]
 async fn acquire(body: Json<PendingAdmissions>, state: Data<State>) -> HttpResponse {
     if let Some((semaphore, amount)) = body.pending() {
-        match state.acquire(semaphore, amount, Duration::from_secs(body.valid_for_sec)) {
+        match state.acquire(semaphore, amount, body.valid_for) {
             Ok((lease_id, true)) => HttpResponse::Created().json(lease_id),
             Ok((lease_id, false)) => HttpResponse::Accepted().json(lease_id),
             Err(error) => HttpResponse::from_error(error.into()),
@@ -91,7 +92,7 @@ async fn wait_for_admission(
 ) -> Result<Json<bool>, Error> {
     let lease_id = *path;
     let timeout = Duration::from_millis(query.timeout_ms.unwrap_or(0));
-    let valid_for = Duration::from_secs(body.valid_for_sec);
+    let valid_for = body.valid_for;
     if let Some((semaphore, amount)) = body.pending() {
         state
             .wait_for_admission(lease_id, valid_for, semaphore, amount, timeout)
