@@ -86,7 +86,7 @@ async fn main() -> io::Result<()> {
     // we would've started the lc before initializing the server before.
     let lc = litter_collection::start(
         state_ref_lc.into_inner(),
-        std::time::Duration::from_secs_f32(application_cfg.litter_collection_interval_sec),
+        application_cfg.litter_collection_interval,
     );
 
     let result = server_terminated.await; // Don't use ? to early return before stopping the lc.

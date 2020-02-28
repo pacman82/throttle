@@ -1,5 +1,5 @@
 use crate::state::State;
-use log::{debug, warn};
+use log::{debug, info, warn};
 use std::{
     sync::{Arc, Condvar, Mutex},
     thread::{spawn, JoinHandle},
@@ -36,6 +36,7 @@ impl LitterCollection {
 /// Starts a new thread that removes expired leases.
 pub fn start(state: Arc<State>, interval: Duration) -> LitterCollection {
     let stopped = Arc::new((Mutex::new(false), Condvar::new()));
+    info!("Start litter collection with interval: {:?}", interval);
     // Copy of stopped for litter collecting thread
     let canceled = stopped.clone();
     let handle = spawn(move || {

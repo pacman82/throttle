@@ -207,7 +207,7 @@ def test_litter_collection():
     Verify that leases don't leak thanks to litter collection
     """
     with throttle_client(
-        (b"litter_collection_interval_sec=0.1\n" b"[semaphores]\n" b"A=1\n")
+        (b"litter_collection_interval=\"10ms\"\n" b"[semaphores]\n" b"A=1\n")
     ) as client:
         client.expiration_time_sec = 1
         # Acquire lease, but since we don't use the context manager we never
