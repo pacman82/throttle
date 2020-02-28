@@ -169,7 +169,7 @@ class Client:
         response = requests.put(
             f"{self.base_url}/leases/{lease.id}",
             json={
-                "valid_for_sec": self.expiration_time_sec,
+                "valid_for": f"{self.expiration_time_sec}s",
                 "active": lease.active,
             },
             timeout=30,

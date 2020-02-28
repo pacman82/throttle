@@ -51,7 +51,8 @@ pub struct ActiveAdmissions {
     active: Admissions,
     /// Duration in seconds. After the specified time has passed the lease may be freed by litter
     /// collection.
-    valid_for_sec: u64,
+    #[serde(with="humantime_serde")]
+    valid_for: Duration,
 }
 
 impl ActiveAdmissions {
@@ -144,7 +145,7 @@ async fn put_lease(
             lease_id,
             semaphore,
             amount,
-            Duration::from_secs(body.valid_for_sec),
+            body.valid_for,
         );
     } else {
         warn!("Empty heartbeat (no active leases) for {}", lease_id);
