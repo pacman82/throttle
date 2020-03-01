@@ -177,9 +177,9 @@ def test_keep_lease_alive_beyond_expiration():
     expiration time.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
-        client.expiration_time = timedelta(seconds=2)
-        with lease(client, "A", heartbeat_interval_sec=1) as _:
-            sleep(3)
+        client.expiration_time = timedelta(seconds=1)
+        with lease(client, "A", heartbeat_interval_sec=0) as _:
+            sleep(1.5)
             # Evens though enough time has passed, our lease should not be
             # expired, thanks to the heartbeat.
             assert client.remove_expired() == 0
@@ -194,12 +194,12 @@ def test_lease_recovery_after_server_reboot():
         cfg.close()
         client = Client(BASE_URL)
         with cargo_main(cfg.name) as proc:
-            with lease(client, "A", heartbeat_interval_sec=1) as _:
+            with lease(client, "A", heartbeat_interval_sec=0.1) as _:
                 proc.kill()  # Kill the server
                 # And start a new one, with the heartbeat still active
                 with cargo_main(cfg.name) as _:
                     # Wait a moment for the heartbeat to update server sate.
-                    sleep(1.5)
+                    sleep(0.3)
                     assert client.remainder("A") == 0
 
 
