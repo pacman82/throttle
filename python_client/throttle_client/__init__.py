@@ -59,8 +59,8 @@ def _format_timedelta(interval: timedelta) -> str:
     Convert a python timedelta object into a string representation suitable for
     the throttle server.
     """
-    total_microseconds = int(interval.total_seconds() * 1000)
-    return f"{total_microseconds}ms"
+    total_milliseconds = int(interval.total_seconds() * 1000)
+    return f"{total_milliseconds}ms"
 
 
 class Client:
@@ -197,6 +197,7 @@ class Heartbeat:
     def __init__(self, client: Client, lease: Lease, interval_sec: float):
         self.client = client
         self.lease = lease
+        # Interval in between heartbeats for an active lease
         self.interval_sec = interval_sec
         self.cancel = Event()
         self.thread = Thread(target=self._run)
