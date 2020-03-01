@@ -33,7 +33,7 @@ pub struct PendingAdmissions {
     /// Duration in seconds. After the specified time has passed the lease may be freed by litter
     /// collection.
     #[serde(with="humantime_serde")]
-    valid_for: Duration,
+    expires_in: Duration,
 }
 
 impl PendingAdmissions {
@@ -52,7 +52,7 @@ pub struct ActiveAdmissions {
     /// Duration in seconds. After the specified time has passed the lease may be freed by litter
     /// collection.
     #[serde(with="humantime_serde")]
-    valid_for: Duration,
+    expires_in: Duration,
 }
 
 impl ActiveAdmissions {
@@ -68,7 +68,7 @@ impl ActiveAdmissions {
 #[post("/acquire")]
 async fn acquire(body: Json<PendingAdmissions>, state: Data<State>) -> HttpResponse {
     if let Some((semaphore, amount)) = body.pending() {
-        match state.acquire(semaphore, amount, body.valid_for) {
+        match state.acquire(semaphore, amount, body.expires_in) {
             Ok((lease_id, true)) => HttpResponse::Created().json(lease_id),
             Ok((lease_id, false)) => HttpResponse::Accepted().json(lease_id),
             Err(error) => HttpResponse::from_error(error.into()),
@@ -93,10 +93,10 @@ async fn wait_for_admission(
 ) -> Result<Json<bool>, Error> {
     let lease_id = *path;
     let timeout = Duration::from_millis(query.timeout_ms.unwrap_or(0));
-    let valid_for = body.valid_for;
+    let expires_in = body.expires_in;
     if let Some((semaphore, amount)) = body.pending() {
         state
-            .wait_for_admission(lease_id, valid_for, semaphore, amount, timeout)
+            .wait_for_admission(lease_id, expires_in, semaphore, amount, timeout)
             .map(Json)
     } else {
         Ok(Json(true))
@@ -145,7 +145,7 @@ async fn put_lease(
             lease_id,
             semaphore,
             amount,
-            body.valid_for,
+            body.expires_in,
         );
     } else {
         warn!("Empty heartbeat (no active leases) for {}", lease_id);

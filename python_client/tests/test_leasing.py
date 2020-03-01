@@ -149,7 +149,7 @@ def test_server_looses_state_during_pending_lease():
 def test_removal_of_expired_leases():
     """Verify the removal of expired leases."""
     with throttle_client(b"[semaphores]\nA=1") as client:
-        client.acquire("A", valid_for_sec=1)
+        client.acquire("A", expires_in_sec=1)
         sleep(2)
         client.remove_expired()
         assert client.remainder("A") == 1  # Semaphore should be free again
@@ -163,7 +163,7 @@ def test_pending_leases_dont_expire():
         # Acquire once, so subsequent leases are pending
         _ = client.acquire("A")
         # This lease should be pending
-        lease = client.acquire("A", valid_for_sec=1)
+        lease = client.acquire("A", expires_in_sec=1)
         client.wait_for_admission(lease, timeout_ms=1500)
         # The initial timeout of one second should have been expired by now,
         # yet nothing is removed

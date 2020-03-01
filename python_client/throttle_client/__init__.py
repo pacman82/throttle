@@ -64,13 +64,13 @@ class Client:
 
     # Don't back off on timeouts. We might drain the semaphores by accident.
     @backoff.on_exception(backoff.expo, requests.ConnectionError)
-    def acquire(self, semaphore: str, valid_for_sec: int = None) -> Lease:
-        if not valid_for_sec:
-            valid_for_sec = self.expiration_time_sec
+    def acquire(self, semaphore: str, expires_in_sec: int = None) -> Lease:
+        if not expires_in_sec:
+            expires_in_sec = self.expiration_time_sec
         amount = 1
         body = {
             "pending": {semaphore: amount},
-            "valid_for": f"{valid_for_sec}s",
+            "expires_in": f"{expires_in_sec}s",
         }
         response = requests.post(
             self.base_url + "/acquire", json=body, timeout=30
@@ -100,7 +100,7 @@ class Client:
             self.base_url
             + f"/leases/{lease.id}/wait_on_admission?timeout_ms={timeout_ms}",
             json={
-                "valid_for": "5min",
+                "expires_in": "5min",
                 "active": lease.active,
                 "pending": lease.pending,
             },
@@ -169,7 +169,7 @@ class Client:
         response = requests.put(
             f"{self.base_url}/leases/{lease.id}",
             json={
-                "valid_for": f"{self.expiration_time_sec}s",
+                "expires_in": f"{self.expiration_time_sec}s",
                 "active": lease.active,
             },
             timeout=30,

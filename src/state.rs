@@ -46,11 +46,11 @@ impl State {
         &self,
         semaphore: &str,
         amount: u32,
-        valid_for: Duration,
+        expires_in: Duration,
     ) -> Result<(u64, bool), Error> {
         if let Some(&max) = self.semaphores.get(semaphore) {
             let mut leases = self.leases.lock().unwrap();
-            let valid_until = Instant::now() + valid_for;
+            let valid_until = Instant::now() + expires_in;
             let (active, lease_id) = leases.add(semaphore, amount, max, valid_until);
             if active {
                 debug!("Lease {} to '{}' acquired.", lease_id, semaphore);
@@ -81,14 +81,14 @@ impl State {
     pub fn wait_for_admission(
         &self,
         lease_id: u64,
-        valid_for: Duration,
+        expires_in: Duration,
         semaphore: &str,
         amount: u32,
         timeout: Duration,
     ) -> Result<bool, Error> {
         let mut leases = self.leases.lock().unwrap();
         let start = Instant::now();
-        let valid_until = start + valid_for;
+        let valid_until = start + expires_in;
         leases.update(lease_id, semaphore, amount, false, valid_until);
         loop {
             break match leases.has_pending(lease_id) {
@@ -123,9 +123,9 @@ impl State {
         }
     }
 
-    pub fn update(&self, lease_id: u64, semaphore: &str, amount: u32, valid_for: Duration) {
+    pub fn update(&self, lease_id: u64, semaphore: &str, amount: u32, expires_in: Duration) {
         let mut leases = self.leases.lock().unwrap();
-        let valid_until = Instant::now() + valid_for;
+        let valid_until = Instant::now() + expires_in;
         leases.update(lease_id, semaphore, amount, true, valid_until);
     }
 
