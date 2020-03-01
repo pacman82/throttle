@@ -8,9 +8,9 @@ publish = true
 
 [dependencies]
 actix-web = "2.0.0"
-structopt = "0.3.9"
-structopt-derive = "0.4.2"
-prometheus = "0.7.0"
+structopt = "0.3.11"
+structopt-derive = "0.4.4"
+prometheus = "0.8.0"
 lazy_static = "1.4.0"
 log = "0.4.8"
 gelf = "0.5.0"
