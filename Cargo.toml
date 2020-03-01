@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Markus Klein <markus.klein@blue-yonder.com>"]
 edition = "2018"
 license = "MIT"
-publish = false
+publish = true
 
 [dependencies]
 actix-web = "2.0.0"
