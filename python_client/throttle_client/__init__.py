@@ -4,6 +4,7 @@ import json
 from typing import Dict
 from contextlib import contextmanager
 from threading import Event, Thread
+from datetime import timedelta
 
 
 class Lease:
@@ -53,24 +54,36 @@ def _raise_for_status(response: requests.Response):
         response.raise_for_status()
 
 
+def _format_timedelta(interval: timedelta) -> str:
+    """
+    Convert a python timedelta object into a string representation suitable for
+    the throttle server.
+    """
+    total_microseconds = int(interval.total_seconds() * 1000)
+    return f"{total_microseconds}ms"
+
+
 class Client:
     """A Client to lease semaphores from as Throttle service."""
 
     def __init__(
-        self, base_url: str, expiration_time_sec: int = 900,
+        self, base_url: str, expiration_time: timedelta = None,
     ):
-        self.expiration_time_sec = expiration_time_sec
+        if expiration_time:
+            self.expiration_time = expiration_time
+        else:
+            self.expiration_time = timedelta(minutes=15)
         self.base_url = base_url
 
     # Don't back off on timeouts. We might drain the semaphores by accident.
     @backoff.on_exception(backoff.expo, requests.ConnectionError)
-    def acquire(self, semaphore: str, expires_in_sec: int = None) -> Lease:
-        if not expires_in_sec:
-            expires_in_sec = self.expiration_time_sec
+    def acquire(self, semaphore: str, expires_in: timedelta = None) -> Lease:
+        if not expires_in:
+            expires_in = self.expiration_time
         amount = 1
         body = {
             "pending": {semaphore: amount},
-            "expires_in": f"{expires_in_sec}s",
+            "expires_in": _format_timedelta(expires_in),
         }
         response = requests.post(
             self.base_url + "/acquire", json=body, timeout=30
@@ -169,7 +182,7 @@ class Client:
         response = requests.put(
             f"{self.base_url}/leases/{lease.id}",
             json={
-                "expires_in": f"{self.expiration_time_sec}s",
+                "expires_in": _format_timedelta(self.expiration_time),
                 "active": lease.active,
             },
             timeout=30,

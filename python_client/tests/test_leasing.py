@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from tempfile import NamedTemporaryFile
 from threading import Thread
 from time import sleep
+from datetime import timedelta
 
 import pytest
 import requests
@@ -149,7 +150,7 @@ def test_server_looses_state_during_pending_lease():
 def test_removal_of_expired_leases():
     """Verify the removal of expired leases."""
     with throttle_client(b"[semaphores]\nA=1") as client:
-        client.acquire("A", expires_in_sec=1)
+        client.acquire("A", expires_in=timedelta(seconds=1))
         sleep(2)
         client.remove_expired()
         assert client.remainder("A") == 1  # Semaphore should be free again
@@ -163,7 +164,7 @@ def test_pending_leases_dont_expire():
         # Acquire once, so subsequent leases are pending
         _ = client.acquire("A")
         # This lease should be pending
-        lease = client.acquire("A", expires_in_sec=1)
+        lease = client.acquire("A", expires_in=timedelta(seconds=1))
         client.wait_for_admission(lease, timeout_ms=1500)
         # The initial timeout of one second should have been expired by now,
         # yet nothing is removed
@@ -176,7 +177,7 @@ def test_keep_lease_alive_beyond_expiration():
     expiration time.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
-        client.expiration_time_sec = 2
+        client.expiration_time = timedelta(seconds=2)
         with lease(client, "A", heartbeat_interval_sec=1) as _:
             sleep(3)
             # Evens though enough time has passed, our lease should not be
@@ -209,7 +210,7 @@ def test_litter_collection():
     with throttle_client(
         (b"litter_collection_interval=\"10ms\"\n" b"[semaphores]\n" b"A=1\n")
     ) as client:
-        client.expiration_time_sec = 1
+        client.expiration_time = timedelta(seconds=1)
         # Acquire lease, but since we don't use the context manager we never
         # release it.
         _ = client.acquire("A")
