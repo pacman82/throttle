@@ -210,10 +210,10 @@ def test_litter_collection():
     with throttle_client(
         (b"litter_collection_interval=\"10ms\"\n" b"[semaphores]\n" b"A=1\n")
     ) as client:
-        client.expiration_time = timedelta(seconds=1)
+        client.expiration_time = timedelta(seconds=0.1)
         # Acquire lease, but since we don't use the context manager we never
         # release it.
         _ = client.acquire("A")
         # No, worry time will take care of this.
-        sleep(1.5)
+        sleep(0.2)
         assert client.remainder("A") == 1
