@@ -1,4 +1,4 @@
-use log::{error, info};
+use crate::logging::LoggingConfig;
 use serde::Deserialize;
 /// Stratosphere provides support for a configuartion file named `application.cfg`. This module sets
 /// parsing it into an `ApplicationCfg` instance.
@@ -19,13 +19,16 @@ pub struct ApplicationCfg {
     pub litter_collection_interval: Duration,
     #[serde(default = "HashMap::new")]
     pub semaphores: Semaphores,
+    #[serde(default = "LoggingConfig::default")]
+    pub logging: LoggingConfig
 }
 
 impl Default for ApplicationCfg {
     fn default() -> ApplicationCfg {
         ApplicationCfg {
             litter_collection_interval: Duration::from_secs(300), // 5min
-            semaphores: HashMap::new()
+            semaphores: HashMap::new(),
+            logging: LoggingConfig::default(),
         }
     }
 }
@@ -44,20 +47,19 @@ impl ApplicationCfg {
                 let mut buffer = String::new();
                 file.read_to_string(&mut buffer)?;
                 let cfg = toml::from_str(&buffer)?;
-                info!("Use configuration from {}", path.to_string_lossy());
                 Ok(cfg)
             }
             Err(e) => {
                 // Missing config file is fine and expected during local execution.
                 if e.kind() == io::ErrorKind::NotFound {
-                    info!(
+                    eprintln!(
                         "{} not found => Using empty default configuration.",
                         path.to_string_lossy()
                     );
                     Ok(ApplicationCfg::default())
                 } else {
                     let err = e;
-                    error!("{}", err);
+                    eprintln!("{}", err);
                     Err(err)
                 }
             }
@@ -90,5 +92,18 @@ mod tests {
         let empty : ApplicationCfg = toml::from_str("").unwrap();
         let default = ApplicationCfg::default();
         assert_eq!(empty, default);
+    }
+
+    /// Verify format of configuring gelf parser
+    #[test]
+    fn parse_gelf_logging_config(){
+        let cfg = "[logging.gelf]\n\
+                    name = \"MyThrottleServer.net\"\n\
+                    host = \"my_graylog_instance.cloud\"\n\
+                    port = 12201\n\
+                    level = \"DEBUG\"\n\
+                ";
+        let actual: ApplicationCfg = toml::from_str(cfg).unwrap();
+        assert!(actual.logging.gelf.is_some());
     }
 }

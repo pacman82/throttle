@@ -29,10 +29,6 @@ async fn index() -> &'static str {
 async fn main() -> io::Result<()> {
     let opt = Cli::from_args();
 
-    logging::init().unwrap_or_else(|e| {
-        eprintln!("Error during initialization of logging backend:\n{}", e);
-    });
-
     let application_cfg = match application_cfg::ApplicationCfg::init(&opt.configuration) {
         Ok(cfg) => cfg,
         Err(e) => {
@@ -44,6 +40,10 @@ async fn main() -> io::Result<()> {
             return Ok(());
         }
     };
+
+    logging::init(&application_cfg.logging).unwrap_or_else(|e| {
+        eprintln!("Error during initialization of logging backend:\n{}", e);
+    });
 
     info!("Hello From Throttle");
 
