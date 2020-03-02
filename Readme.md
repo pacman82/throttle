@@ -17,7 +17,7 @@ Throttle provides semaphores as a service via an http interface. This supports u
 * Checkout the sources with
 
   ```bash
-  ssh://git@code.blue-yonder.org:7999/labs/throttle.git
+  git clone https://github.com/pacman82/throttle.git
   ```
 
 * You can run the build and run unit tests by executing
