@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Markus Klein <markus-klein@live.de>"]
 edition = "2018"
 license = "MIT"
-publish = true
+publish = false
 
 # Link to github repository
 repository = "https://github.com/pacman82/throttle.git"
