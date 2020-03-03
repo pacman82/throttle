@@ -15,7 +15,7 @@ pub struct Cli {
     #[structopt(long = "port", default_value = "8000")]
     pub port: u16,
     /// Path to TOML configuration file
-    #[structopt(long = "configuration", short = "c", default_value = "throttle.cfg")]
+    #[structopt(long = "configuration", short = "c", default_value = "throttle.toml")]
     pub configuration: PathBuf,
 }
 

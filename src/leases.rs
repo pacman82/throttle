@@ -14,6 +14,15 @@ struct Lease {
     valid_until: Instant,
 }
 
+/// Accumulated counts for an indiviual Semaphore
+#[derive(Default)]
+pub struct Counts {
+    /// Accumulated count of active leases (aka. the count) of the semaphore.
+    pub active: i64,
+    /// Accumulated count of pending leases.
+    pub pending: i64,
+}
+
 impl Lease {
     fn count_active(&self, semaphore: &str) -> i64 {
         if self.active && self.semaphore == semaphore {
@@ -24,10 +33,22 @@ impl Lease {
     }
 
     /// Activates a pending lease if semaphore matches and remainder is positiv (>0)
-    fn activate_if_viable(&mut self, semaphore: &str, remainder: &mut i64) {
+    fn activate_viable(&mut self, semaphore: &str, remainder: &mut i64) {
         if !self.active && semaphore == self.semaphore && *remainder >= self.amount {
             self.active = true;
             *remainder -= self.amount;
+        }
+    }
+
+    /// Increments the suitable entries in `counts`.
+    fn update_counts(&self, counts: &mut HashMap<String, Counts>) {
+        let mut counts = counts
+            .get_mut(&self.semaphore)
+            .expect("All available Semaphores must be prefilled in counts.");
+        if self.active {
+            counts.active += self.amount;
+        } else {
+            counts.pending += self.amount;
         }
     }
 }
@@ -84,10 +105,10 @@ impl Leases {
     }
 
     /// Aggregated count of active leases for the semaphore
-    pub fn count(&self, resource: &str) -> i64 {
+    pub fn count(&self, semaphore: &str) -> i64 {
         self.ledger
             .values()
-            .map(|lease| lease.count_active(resource))
+            .map(|lease| lease.count_active(semaphore))
             .sum()
     }
 
@@ -105,7 +126,7 @@ impl Leases {
             if remainder <= 0 {
                 break;
             }
-            lease.activate_if_viable(semaphore, &mut remainder);
+            lease.activate_viable(semaphore, &mut remainder);
         }
     }
 
@@ -150,5 +171,13 @@ impl Leases {
                 amount: amount as i64,
                 valid_until,
             });
+    }
+
+    /// Fills counts with the current accumulated counts for each semaphore. One entry for each
+    /// semaphore must already be present in the hash map. Otherwise this method panics.
+    pub fn fill_counts(&self, counts: &mut HashMap<String, Counts>) {
+        for lease in self.ledger.values() {
+            lease.update_counts(counts);
+        }
     }
 }

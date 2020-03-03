@@ -6,7 +6,7 @@ lazy_static! {
     /// A prometheus metric counting the number of get requests to `/`. It is accessible to clients
     /// via the `metrics` route.
     static ref NUM_404_REQUESTS: IntCounter =
-        register_int_counter!("num_404", "Number of Get requests to unknown resource.")
+        register_int_counter!("throttle_num_404", "Number of Get requests to unknown resource.")
             .expect("Error registering num_404 prometheus metric");
 }
 

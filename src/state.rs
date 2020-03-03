@@ -1,6 +1,9 @@
-use crate::{application_cfg::Semaphores, leases::Leases};
+use crate::{application_cfg::Semaphores, leases::{Leases, Counts}};
+use prometheus::IntGaugeVec;
+use lazy_static::lazy_static;
 use log::{debug, warn};
 use std::{
+    collections::HashMap,
     fmt,
     sync::{Condvar, Mutex},
     time::{Duration, Instant},
@@ -163,4 +166,49 @@ impl State {
             }
         }
     }
+
+    /// Update the registered prometheus metrics with values reflecting the current state.State
+    /// 
+    /// This method updates the global default prometheus regestry.
+    pub fn update_metrics(&self) {
+        let mut counts = HashMap::new();
+        for (semaphore, &full_count) in &self.semaphores {
+            // Ok, currently we don't support changing the full_count at runtime, but let's keep it
+            // here for later use.
+            FULL_COUNT.with_label_values(&[semaphore]).set(full_count);
+            // Doing all these nasty allocations before acquiring the lock to leases
+            counts.insert(semaphore.clone(), Counts::default());
+        }
+        // Most of the work happens in here. Now counts contains the active and pending counts
+        self.leases.lock().unwrap().fill_counts(&mut counts);
+        for (semaphore, count) in counts {
+            COUNT.with_label_values(&[&semaphore]).set(count.active);
+            PENDING.with_label_values(&[&semaphore]).set(count.pending);
+        }
+    }
+}
+
+lazy_static! {
+    /// A prometheus metric counting the number of get requests to `/`. It is accessible to clients
+    /// via the `metrics` route.
+    static ref FULL_COUNT: IntGaugeVec =
+        register_int_gauge_vec!(
+            "throttle_full_count",
+            "New leases which would increase the count beyond this limit are pending.",
+            &["semaphore"]
+        ).expect("Error registering throttle_full_count metric");
+
+    static ref COUNT: IntGaugeVec =
+        register_int_gauge_vec!(
+            "throttle_count",
+            "Accumulated count of all active leases",
+            &["semaphore"]
+        ).expect("Error registering throttle_count metric");
+
+    static ref PENDING: IntGaugeVec =
+        register_int_gauge_vec!(
+            "throttle_pending",
+            "Accumulated count of all pending leases",
+            &["semaphore"]
+        ).expect("Error registering throttle_count metric");
 }
