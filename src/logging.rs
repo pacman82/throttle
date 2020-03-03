@@ -35,8 +35,10 @@ pub fn init(config: &LoggingConfig) -> Result<(), Error> {
             .install(config.level)
             .context("Failed to install logger")?;
     } else {
-        eprintln!("gelf logger config not found => Logging to stderr instead");
-        env_logger::init();
+        eprintln!(
+            "Gelf logger config not found => Using environment logger writing to stderr instead."
+        );
+        env_logger::from_env("THROTTLE_LOG").init();
     }
     Ok(())
 }

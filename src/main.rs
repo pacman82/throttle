@@ -2,7 +2,7 @@
 #[macro_use]
 extern crate prometheus;
 use actix_web::{get, web, web::Data, App, HttpServer};
-use log::info;
+use log::{info, warn};
 use std::io;
 use structopt::StructOpt;
 
@@ -46,6 +46,10 @@ async fn main() -> io::Result<()> {
     });
 
     info!("Hello From Throttle");
+
+    if application_cfg.semaphores.is_empty() {
+        warn!("No semaphores configured.")
+    }
 
     // We only want to use one Map of semaphores across for all worker threads. To do this we wrap
     // it in `Data` which uses an `Arc` to share it between threads.

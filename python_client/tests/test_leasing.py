@@ -1,4 +1,4 @@
-from throttle_client import Client, lease
+from throttle_client import Client, lock
 from contextlib import contextmanager
 from tempfile import NamedTemporaryFile
 from threading import Thread
@@ -54,21 +54,21 @@ def test_error_on_leasing_unknown_semaphore():
     """
     with throttle_client(b"[semaphores]") as client:
         with pytest.raises(Exception, match=r"Unknown semaphore"):
-            with lease(client, "Unknown"):
+            with lock(client, "Unknown"):
                 pass
 
 
 def test_remainder():
-    """Verify that we can lease a semaphore and return the lease to the server
+    """Verify that we can acquire a lock to semaphore and release it
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         assert 1 == client.remainder("A")
-        with lease(client, "A"):
+        with lock(client, "A"):
             assert 0 == client.remainder("A")
         assert 1 == client.remainder("A")
 
 
-def test_pending_lease():
+def test_pending_lock():
     """Verify the results of a non-blocking request to wait_for_admission
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
@@ -85,36 +85,38 @@ def test_pending_lease():
         assert not client.wait_for_admission(second)
 
 
-def test_blocking_pending_lease():
-    """Verify that wait_for_admission blocks until the lease is ready
+def test_lock_blocks():
+    """
+    Verify that wait_for_admission blocks until the semaphore count allows for
+    the lock to be acquired.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
-        # Acquire first lease
+        # Acquire first lock
         first = client.acquire("A")
         second = client.acquire("A")
 
-        def wait_for_second_lease():
+        def wait_for_second_lock():
             client.wait_for_admission(second, timeout_ms=2000)
 
-        t = Thread(target=wait_for_second_lease)
+        t = Thread(target=wait_for_second_lock)
         t.start()
         client.release(first)
         t.join()
-        # Second lease is no longer pending, because we released first and t
+        # Second lock is no longer pending, because we released first and t
         # is finished
         assert not second.has_pending()
 
 
-def test_server_looses_state_during_pending_lease():
+def test_server_recovers_pending_lock_after_state_loss():
     """
     Verify pending leases recover from server state loss and are acquired
-    after reboot
+    after reboot.
     """
 
     acquired_lease = False
 
     def acquire_lease_concurrent():
-        with lease(Client("http://localhost:8000"), "A") as _:
+        with lock(Client("http://localhost:8000"), "A") as _:
             nonlocal acquired_lease
             acquired_lease = True
 
@@ -178,7 +180,7 @@ def test_keep_lease_alive_beyond_expiration():
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         client.expiration_time = timedelta(seconds=1)
-        with lease(client, "A", heartbeat_interval_sec=0) as _:
+        with lock(client, "A", heartbeat_interval_sec=0) as _:
             sleep(1.5)
             # Evens though enough time has passed, our lease should not be
             # expired, thanks to the heartbeat.
@@ -194,7 +196,7 @@ def test_lease_recovery_after_server_reboot():
         cfg.close()
         client = Client(BASE_URL)
         with cargo_main(cfg.name) as proc:
-            with lease(client, "A", heartbeat_interval_sec=0.1) as _:
+            with lock(client, "A", heartbeat_interval_sec=0.1) as _:
                 proc.kill()  # Kill the server
                 # And start a new one, with the heartbeat still active
                 with cargo_main(cfg.name) as _:
@@ -208,7 +210,7 @@ def test_litter_collection():
     Verify that leases don't leak thanks to litter collection
     """
     with throttle_client(
-        (b"litter_collection_interval=\"10ms\"\n" b"[semaphores]\n" b"A=1\n")
+        (b'litter_collection_interval="10ms"\n' b"[semaphores]\n" b"A=1\n")
     ) as client:
         client.expiration_time = timedelta(seconds=0.1)
         # Acquire lease, but since we don't use the context manager we never

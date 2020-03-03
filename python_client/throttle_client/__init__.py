@@ -14,10 +14,7 @@ class Lease:
     """
 
     def __init__(
-        self,
-        id: str,
-        active: Dict[str, int] = {},
-        pending: Dict[str, int] = {},
+        self, id: str, active: Dict[str, int] = {}, pending: Dict[str, int] = {},
     ):
         self.id = id
         self.active = active
@@ -85,20 +82,14 @@ class Client:
             "pending": {semaphore: amount},
             "expires_in": _format_timedelta(expires_in),
         }
-        response = requests.post(
-            self.base_url + "/acquire", json=body, timeout=30
-        )
+        response = requests.post(self.base_url + "/acquire", json=body, timeout=30)
         _raise_for_status(response)
-        if (
-            response.status_code == 201
-        ):  # Created. We got a lease to the semaphore
+        if response.status_code == 201:  # Created. We got a lease to the semaphore
             return Lease(id=response.text, active={semaphore: amount})
         elif response.status_code == 202:  # Accepted. Ticket pending.
             return Lease(id=response.text, pending={semaphore: amount})
 
-    @backoff.on_exception(
-        backoff.expo, (requests.ConnectionError, requests.Timeout)
-    )
+    @backoff.on_exception(backoff.expo, (requests.ConnectionError, requests.Timeout))
     def wait_for_admission(self, lease: Lease, timeout_ms: int = 0):
         """
         Check if the lease is still pending. An optional timeout allows to
@@ -137,9 +128,7 @@ class Client:
         number could become negative, if the semaphores have been overcommitted
         (due to previously reoccuring leases previously considered dead).
         """
-        response = requests.get(
-            self.base_url + f"/remainder?semaphore={semaphore}"
-        )
+        response = requests.get(self.base_url + f"/remainder?semaphore={semaphore}")
         _raise_for_status(response)
 
         return int(response.text)
@@ -220,7 +209,7 @@ class Heartbeat:
 
 
 @contextmanager
-def lease(client: Client, semaphore: str, heartbeat_interval_sec: float = 300):
+def lock(client: Client, semaphore: str, heartbeat_interval_sec: float = 300):
     lease = client.acquire(semaphore)
     while lease.has_pending():
         _ = client.wait_for_admission(lease, timeout_ms=5000)

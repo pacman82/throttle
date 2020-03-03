@@ -4,13 +4,121 @@ Semaphores for distributed systems.
 
 ## Warning
 
-Work in progress *do not use yet*.
+Work in progress.
+
+* Minimal Feature set (what's there works though)
+* Not yet optimized
+* Unstable interfaces
+* Server builds and runs on Windows, Linux, and OS-X
+* Python Client available
 
 ## Motivation
 
-Throttle provides semaphores as a service via an http interface. This supports usecases like preventing access to shared resources from too many workers at once. Using Throttle is almost always some kind of workaround. In the best case the ressources (e.g. a Database) behaves well under load and is able to refuse connections. If the rest of the system is well able to handle the backpressure there would most likely be no need for Throttle. Yet, should you find yourself in need of a semaphore service Throttle might be for you.
+Throttle provides semaphores as a service via an http interface. As the name indicates the primary usecase in mind is to throttle a systems access to a resource, by having the elements of that system to ask for permission (i.e. acquiring a lease) first. If the system consists of several process running on different machines, or virtual machines in the same Network, throttle might fit the bill.
 
-## Local build
+Throttle aims to be easy to operate, wellbehaved in edege cases and works without a persistence backend.
+
+## Usage
+
+### Operating a Throttle server
+
+#### Starting and Shutdown
+
+Assuming the throttle executable to be in your path environment variable, you start a throttle sever by executing it. You can display the availible command line options using the `--help` flag. Starting it without any arguments is going to boot the server with default configuration.
+
+```bash
+throttle
+```
+
+This starts the server in the current process. Navigate with a browser to `localhost:8000` to see a welcoming message. You can shut Throttle down gracefully by pressing `Ctrl + C`.
+
+#### Default logging to stderr
+
+Set the `THROTTLE_LOG` environment variable to see more output on standard error. Valid values are `ERROR`, `WARN`, `INFO`, `DEBUG` and `TRACE`.
+
+In bash:
+
+```bash
+THROTTLE_LOG=WARN
+```
+
+or PowerShell:
+
+```shell
+$env:THROTLLE_LOG="WARN"
+```
+
+Starting the server now with an empty configuration yields a warning.
+
+```log
+[2020-03-03T19:02:42Z WARN  throttle] No semaphores configured.
+```
+
+*Hint:* Enabling Gelf logging currently disables logging to standard error.
+
+#### Toml configuration file
+
+To actually serve semaphores, we need to configure their names and full count. By default Throttle is looking for a configuration in the working directories `throttle.toml` file should it exist.
+
+```toml
+# Sample throttle.cfg Explaining the options
+
+# The time interval in which the litter collection backgroud thread checks for expired leases.
+# Default is set to 5 minutes.
+# litter_collection_interval = "5min"
+
+[semaphores]
+# Specify name and full count of semaphores. Uncomment the below line to create a semaphore named A
+# with a full count of 42. Setting the count to 1 will create a Mutex.
+# A = 42
+
+
+# Uncomment below lines and replaces values with your configuration to log into Graylog.
+# [logging.gelf]
+# name = "MyThrottleServer"
+# host = "my_graylog_instance.cloud"
+# port = 12201
+# level = "DEBUG"
+```
+
+#### Metrics
+
+Throttle supports Prometheus metrics, via the `/metrics` endpoint. Depending on your configuration and state they may e.g. look like this:
+
+```prometheus
+# HELP throttle_count Accumulated count of all active leases
+# TYPE throttle_count gauge
+throttle_count{semaphore="A"} 0
+# HELP throttle_full_count New leases which would increase the count beyond this limit are pending.
+# TYPE throttle_full_count gauge
+throttle_full_count{semaphore="A"} 42
+# HELP throttle_num_404 Number of Get requests to unknown resource.
+# TYPE throttle_num_404 counter
+throttle_num_404 0
+# HELP throttle_pending Accumulated count of all pending leases
+# TYPE throttle_pending gauge
+throttle_pending{semaphore="A"} 0
+```
+
+### Python client
+
+Throttle ships with a Python client. Here is how to use it in a nutshell.
+
+```python
+from throttle_client import Client, lock
+
+# Configure endpoint to throttle server
+c = Client("localhost:8000")
+
+# Use client configuraton to acquire a lock (amount 1) to semaphore A
+with lock("A"):
+    # Do stuff while holding lock to "A"
+    # ...
+
+# A is released at the end of with block
+```
+
+## Local build and test setup
 
 * Install Rust compiler and Cargo. Follow the instructions on
   [this site](https://www.rust-lang.org/en-US/install.html)
@@ -33,6 +141,7 @@ Throttle provides semaphores as a service via an http interface. This supports u
   cd python_client
   pip install -r requirements.txt
   pip install -r test-requirements.txt
+  pip install -e .
   pytest
   ```
   
