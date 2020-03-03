@@ -32,7 +32,7 @@ pub struct PendingAdmissions {
     pending: Admissions,
     /// Duration in seconds. After the specified time has passed the lease may be freed by litter
     /// collection.
-    #[serde(with="humantime_serde")]
+    #[serde(with = "humantime_serde")]
     expires_in: Duration,
 }
 
@@ -51,7 +51,7 @@ pub struct ActiveAdmissions {
     active: Admissions,
     /// Duration in seconds. After the specified time has passed the lease may be freed by litter
     /// collection.
-    #[serde(with="humantime_serde")]
+    #[serde(with = "humantime_serde")]
     expires_in: Duration,
 }
 
@@ -141,12 +141,7 @@ async fn put_lease(
     let lease_id = *path;
     if let Some((semaphore, amount)) = body.active() {
         debug!("Received heartbeat for {}", lease_id);
-        state.update(
-            lease_id,
-            semaphore,
-            amount,
-            body.expires_in,
-        );
+        state.update(lease_id, semaphore, amount, body.expires_in);
     } else {
         warn!("Empty heartbeat (no active leases) for {}", lease_id);
     }

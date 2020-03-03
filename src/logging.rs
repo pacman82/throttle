@@ -40,4 +40,3 @@ pub fn init(config: &LoggingConfig) -> Result<(), Error> {
     }
     Ok(())
 }
-

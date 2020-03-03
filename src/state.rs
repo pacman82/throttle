@@ -1,7 +1,10 @@
-use crate::{application_cfg::Semaphores, leases::{Leases, Counts}};
-use prometheus::IntGaugeVec;
+use crate::{
+    application_cfg::Semaphores,
+    leases::{Counts, Leases},
+};
 use lazy_static::lazy_static;
 use log::{debug, warn};
+use prometheus::IntGaugeVec;
 use std::{
     collections::HashMap,
     fmt,
@@ -168,7 +171,7 @@ impl State {
     }
 
     /// Update the registered prometheus metrics with values reflecting the current state.State
-    /// 
+    ///
     /// This method updates the global default prometheus regestry.
     pub fn update_metrics(&self) {
         let mut counts = HashMap::new();
