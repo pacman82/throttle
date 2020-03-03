@@ -74,20 +74,21 @@ class Client:
 
     # Don't back off on timeouts. We might drain the semaphores by accident.
     @backoff.on_exception(backoff.expo, requests.ConnectionError)
-    def acquire(self, semaphore: str, expires_in: timedelta = None) -> Lease:
+    def acquire(
+        self, semaphore: str, count: int = 1, expires_in: timedelta = None
+    ) -> Lease:
         if not expires_in:
             expires_in = self.expiration_time
-        amount = 1
         body = {
-            "pending": {semaphore: amount},
+            "pending": {semaphore: count},
             "expires_in": _format_timedelta(expires_in),
         }
         response = requests.post(self.base_url + "/acquire", json=body, timeout=30)
         _raise_for_status(response)
         if response.status_code == 201:  # Created. We got a lease to the semaphore
-            return Lease(id=response.text, active={semaphore: amount})
+            return Lease(id=response.text, active={semaphore: count})
         elif response.status_code == 202:  # Accepted. Ticket pending.
-            return Lease(id=response.text, pending={semaphore: amount})
+            return Lease(id=response.text, pending={semaphore: count})
 
     @backoff.on_exception(backoff.expo, (requests.ConnectionError, requests.Timeout))
     def wait_for_admission(self, lease: Lease, timeout_ms: int = 0):
@@ -209,8 +210,10 @@ class Heartbeat:
 
 
 @contextmanager
-def lock(client: Client, semaphore: str, heartbeat_interval_sec: float = 300):
-    lease = client.acquire(semaphore)
+def lock(
+    client: Client, semaphore: str, count: int = 1, heartbeat_interval_sec: float = 300
+):
+    lease = client.acquire(semaphore, count=count)
     while lease.has_pending():
         _ = client.wait_for_admission(lease, timeout_ms=5000)
     heartbeat = Heartbeat(client, lease, heartbeat_interval_sec)

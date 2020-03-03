@@ -219,3 +219,26 @@ def test_litter_collection():
         # No, worry time will take care of this.
         sleep(0.2)
         assert client.remainder("A") == 1
+
+
+def test_lock_count_larger_one():
+    """
+    Assert that locks with a count > 1, decrement the semaphore count accordingly
+    """
+
+    with throttle_client(b"[semaphores]\nA=5") as client:
+        with lock(client, "A", count=3):
+            assert client.remainder("A") == 2
+        assert client.remainder("A") == 5
+
+
+def test_lock_count_larger_pends_if_count_is_not_high_enough():
+    """
+    Assert that we do not overspend an semaphore using lock counts > 1. Even if the semaphore count
+    is > 0.
+    """
+
+    with throttle_client(b"[semaphores]\nA=5") as client:
+        l1 = client.acquire("A", count=3)
+        l2 = client.acquire("A", count=3)
+        assert l2.has_pending()
