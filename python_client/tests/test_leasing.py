@@ -59,7 +59,8 @@ def test_error_on_leasing_unknown_semaphore():
 
 
 def test_remainder():
-    """Verify that we can acquire a lock to semaphore and release it
+    """
+    Verify that we can acquire a lock to semaphore and release it
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         assert 1 == client.remainder("A")
@@ -69,7 +70,8 @@ def test_remainder():
 
 
 def test_pending_lock():
-    """Verify the results of a non-blocking request to wait_for_admission
+    """
+    Verify the results of a non-blocking request to wait_for_admission
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         # Acquire first lease
@@ -242,3 +244,16 @@ def test_lock_count_larger_pends_if_count_is_not_high_enough():
         l1 = client.acquire("A", count=3)
         l2 = client.acquire("A", count=3)
         assert l2.has_pending()
+
+
+def test_exception():
+    """
+    Assert that lock is freed in the presence of exceptions in the client code
+    """
+
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        try:
+            with lock("A"):
+                raise Exception()
+        except Exception:
+            assert client.remainder("A") == 1
