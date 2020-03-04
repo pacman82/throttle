@@ -111,7 +111,7 @@ from throttle_client import Client, lock
 c = Client("localhost:8000")
 
 # Use client configuraton to acquire a lock (amount 1) to semaphore A
-with lock("A"):
+with lock(c, "A"):
     # Do stuff while holding lock to "A"
     # ...
 
