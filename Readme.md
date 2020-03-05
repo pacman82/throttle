@@ -65,20 +65,21 @@ To actually serve semaphores, we need to configure their names and full count. B
 
 # The time interval in which the litter collection backgroud thread checks for expired leases.
 # Default is set to 5 minutes.
-# litter_collection_interval = "5min"
+litter_collection_interval = "5min"
 
 [semaphores]
-# Specify name and full count of semaphores. Uncomment the below line to create a semaphore named A
-# with a full count of 42. Setting the count to 1 will create a Mutex.
-# A = 42
+# Specify name and full count of semaphores. Below line creates a semaphore named A with a full
+# count of 42. Setting the count to 1 would create a Mutex.
+A = 42
 
 
-# Uncomment below lines and replaces values with your configuration to log into Graylog.
-# [logging.gelf]
-# name = "MyThrottleServer"
-# host = "my_graylog_instance.cloud"
-# port = 12201
-# level = "DEBUG"
+# Optional logging config, to log into graylog
+[logging.gelf]
+name = "MyThrottleServer"
+host = "my_graylog_instance.cloud"
+port = 12201
+## Set this to either ERROR, WARN, INFO, DEBUG or TRACE.
+level = "INFO"
 ```
 
 #### Metrics

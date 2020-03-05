@@ -6,7 +6,7 @@
 
 [semaphores]
 # Specify name and full count of semaphores. Uncomment the below line to create a semaphore named A
-# with a full count of 42. Setting the count to 1 will create a Mutex.
+# with a full count of 42. Setting the count to 1 would create a Mutex.
 # A = 42
 
 
@@ -15,4 +15,5 @@
 # name = "MyThrottleServer"
 # host = "my_graylog_instance.cloud"
 # port = 12201
-# level = "DEBUG"
+## Set this to either ERROR, WARN, INFO, DEBUG or TRACE.
+# level = "INFO"

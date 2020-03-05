@@ -51,8 +51,8 @@ async fn main() -> io::Result<()> {
         warn!("No semaphores configured.")
     }
 
-    // We only want to use one Map of semaphores across for all worker threads. To do this we wrap
-    // it in `Data` which uses an `Arc` to share it between threads.
+    // We only want to use one Map of semaphores across all worker threads. To do this we wrap it in
+    // `Data` which uses an `Arc` to share it between threads.
     let state = Data::new(state::State::new(application_cfg.semaphores));
 
     // Copy a reference to state, before moving it into the closure. We need it later to start the
@@ -85,9 +85,9 @@ async fn main() -> io::Result<()> {
     .bind(&opt.endpoint())?
     .run();
 
-    // Remove expired leases asynchrounously. Start litter collection after we run the server. As
-    // the ? after the  `.bind` call might early return and would leave us with a detached thread if
-    // we would've started the lc before initializing the server before.
+    // Removes expired leases asynchrounously. We start litter collection after the server. Would we
+    // start `lc` before the `.run` method, the ?-operator after `.bind` might early return and
+    // leave us with a detached thread.
     let lc = litter_collection::start(
         state_ref_lc.into_inner(),
         application_cfg.litter_collection_interval,
