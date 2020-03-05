@@ -38,7 +38,7 @@ class Lease:
 
 def _raise_for_status(response: requests.Response):
     """
-    Wrapper around Response.raise_for_status, translating 4xx to value errors
+    Wrapper around Response.raise_for_status, translating domain specific errors
     """
 
     if response.status_code == 400:
@@ -46,6 +46,9 @@ def _raise_for_status(response: requests.Response):
         # supposedly caused by wrong arguments passed to this code by the
         # application. Let's forward the error as an exception, so the App
         # developer can act on it.
+        raise ValueError(response.text)
+    # Conflict
+    elif response.status_code == 409:
         raise ValueError(response.text)
     else:
         response.raise_for_status()

@@ -27,6 +27,7 @@ pub struct State {
 pub enum Error {
     UnknownSemaphore,
     UnknownLease,
+    ForeverPending { asked: i64, max: i64 },
 }
 
 impl fmt::Display for Error {
@@ -34,6 +35,12 @@ impl fmt::Display for Error {
         match self {
             Error::UnknownSemaphore => write!(f, "Unknown semaphore"),
             Error::UnknownLease => write!(f, "Unknown lease"),
+            Error::ForeverPending { asked, max } => write!(
+                f,
+                "Acquiring lock would block forever. Lock askes for count {} yet full count is \
+                only {}.",
+                asked, max
+            ),
         }
     }
 }
@@ -57,6 +64,13 @@ impl State {
         if let Some(&max) = self.semaphores.get(semaphore) {
             let mut leases = self.leases.lock().unwrap();
             let valid_until = Instant::now() + expires_in;
+            // Return early if lease could never be active, no matter how long we wait
+            if max < amount as i64 {
+                return Err(Error::ForeverPending {
+                    asked: amount as i64,
+                    max,
+                });
+            }
             let (active, lease_id) = leases.add(semaphore, amount, max, valid_until);
             if active {
                 debug!("Lease {} to '{}' acquired.", lease_id, semaphore);

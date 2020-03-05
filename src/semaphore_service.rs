@@ -20,6 +20,7 @@ impl ResponseError for Error {
         match self {
             Error::UnknownLease => StatusCode::BAD_REQUEST,
             Error::UnknownSemaphore => StatusCode::BAD_REQUEST,
+            Error::ForeverPending { .. } => StatusCode::CONFLICT,
         }
     }
 }

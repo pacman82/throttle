@@ -257,3 +257,13 @@ def test_exception():
                 raise Exception()
         except Exception:
             assert client.remainder("A") == 1
+
+
+def test_lock_count_larger_than_full_count():
+    """
+    Assert that exception is raised, rather than accepting a lock which would pend forever.
+    """
+
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        with pytest.raises(ValueError, match="block forever"):
+            client.acquire("A", count=2)
