@@ -144,4 +144,3 @@ with lock(c, "A"):
   pip install -e .
   pytest
   ```
-  

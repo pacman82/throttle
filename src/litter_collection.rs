@@ -1,3 +1,8 @@
+// Not detecting wether a bool is used to wait before a critical section is a known weakness of this
+// See: https://rust-lang.github.io/rust-clippy/master/index.html#mutex_atomic
+// We run into this here, so let's silence this lint for this file.
+#![allow(clippy::mutex_atomic)]
+
 use crate::state::State;
 use log::{debug, info, warn};
 use std::{
