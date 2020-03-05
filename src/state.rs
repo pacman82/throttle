@@ -206,8 +206,6 @@ impl State {
 }
 
 lazy_static! {
-    /// A prometheus metric counting the number of get requests to `/`. It is accessible to clients
-    /// via the `metrics` route.
     static ref FULL_COUNT: IntGaugeVec =
         register_int_gauge_vec!(
             "throttle_full_count",
