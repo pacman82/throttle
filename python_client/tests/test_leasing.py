@@ -1,4 +1,4 @@
-from throttle_client import Client, lock
+from throttle_client import Client, lock, Timeout
 from contextlib import contextmanager
 from tempfile import NamedTemporaryFile
 from threading import Thread
@@ -104,8 +104,7 @@ def test_lock_blocks():
         t.start()
         client.release(first)
         t.join()
-        # Second lock is no longer pending, because we released first and t
-        # is finished
+        # Second lock is no longer pending, because we released first and t is finished
         assert not second.has_pending()
 
 
@@ -118,7 +117,7 @@ def test_server_recovers_pending_lock_after_state_loss():
     acquired_lease = False
 
     def acquire_lease_concurrent():
-        with lock(Client("http://localhost:8000"), "A") as _:
+        with lock(Client("http://localhost:8000"), "A", timeout=timedelta(seconds=5)):
             nonlocal acquired_lease
             acquired_lease = True
 
@@ -132,21 +131,19 @@ def test_server_recovers_pending_lock_after_state_loss():
             # Acquire second lease
             t = Thread(target=acquire_lease_concurrent)
             t.start()
-            # Give the acquire request some time to go through, so we hit the
-            # edge case of getting an 'Unknown lease' response from the server
+            # Give the acquire request some time to go through, so we hit the edge case
+            # of getting an 'Unknown lease' response from the server
             sleep(1)
             proc.kill()
 
-        # Invoking this context manager anew terminates and restarts the
-        # server. I.e. it's losing all its state. Note that we started the
-        # thread t within the old context and join the pending lease in the new
-        # one.
+        # Invoking this context manager anew terminates and restarts the server. I.e.
+        # it's losing all its state. Note that we started the thread t within the old
+        # context and join the pending lease in the new one.
         with cargo_main(cfg=cfg.name):
-            # Instead of releasing the first lease, we restarted the server.
-            # We don't have a heartbeat for the first lease, so semaphore
-            # should be taken by the lease acquired in thread t, if we are able
-            # to recover from server reboot during pending leases on the client
-            # side.
+            # Instead of releasing the first lease, we restarted the server. We don't
+            # have a heartbeat for the first lease, so semaphore should be taken by the
+            # lease acquired in thread t, if we are able to recover from server reboot
+            # during pending leases on the client side.
             t.join(10)
             assert acquired_lease
 
@@ -182,7 +179,7 @@ def test_keep_lease_alive_beyond_expiration():
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         client.expiration_time = timedelta(seconds=1)
-        with lock(client, "A", heartbeat_interval_sec=0) as _:
+        with lock(client, "A", heartbeat_interval=timedelta(seconds=0)) as _:
             sleep(1.5)
             # Evens though enough time has passed, our lease should not be
             # expired, thanks to the heartbeat.
@@ -198,8 +195,9 @@ def test_lease_recovery_after_server_reboot():
         cfg.close()
         client = Client(BASE_URL)
         with cargo_main(cfg.name) as proc:
-            with lock(client, "A", heartbeat_interval_sec=0.1) as _:
-                proc.kill()  # Kill the server
+            with lock(client, "A", heartbeat_interval=timedelta(milliseconds=100)):
+                # Kill the server, so it looses all it's in memory state
+                proc.kill()
                 # And start a new one, with the heartbeat still active
                 with cargo_main(cfg.name) as _:
                     # Wait a moment for the heartbeat to update server sate.
@@ -215,8 +213,8 @@ def test_litter_collection():
         (b'litter_collection_interval="10ms"\n' b"[semaphores]\n" b"A=1\n")
     ) as client:
         client.expiration_time = timedelta(seconds=0.1)
-        # Acquire lease, but since we don't use the context manager we never
-        # release it.
+        # Acquire lease, but since we don't use the context manager we never release
+        # it.
         _ = client.acquire("A")
         # No, worry time will take care of this.
         sleep(0.2)
@@ -236,8 +234,8 @@ def test_lock_count_larger_one():
 
 def test_lock_count_larger_pends_if_count_is_not_high_enough():
     """
-    Assert that we do not overspend an semaphore using lock counts > 1. Even if the semaphore count
-    is > 0.
+    Assert that we do not overspend an semaphore using lock counts > 1. Even if the
+    semaphore count is > 0.
     """
 
     with throttle_client(b"[semaphores]\nA=5") as client:
@@ -261,9 +259,21 @@ def test_exception():
 
 def test_lock_count_larger_than_full_count():
     """
-    Assert that exception is raised, rather than accepting a lock which would pend forever.
+    Assert that exception is raised, rather than accepting a lock which would pend
+    forever.
     """
-
     with throttle_client(b"[semaphores]\nA=1") as client:
         with pytest.raises(ValueError, match="block forever"):
             client.acquire("A", count=2)
+
+
+def test_try_lock():
+    """
+    Assert that a call to lock raises Exception returns None after a specified timeout
+    """
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        # We hold the lease, all following calls are going to block
+        _ = client.acquire("A")
+        with pytest.raises(Timeout):
+            with lock(client, "A", timeout=timedelta(seconds=1)):
+                pass

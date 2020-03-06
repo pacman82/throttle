@@ -1,10 +1,11 @@
 import requests
 import backoff
 import json
-from typing import Dict
+from typing import Dict, Optional
 from contextlib import contextmanager
 from threading import Event, Thread
 from datetime import timedelta
+from time import time
 
 
 class Lease:
@@ -183,15 +184,15 @@ class Client:
         _raise_for_status(response)
 
 
-# Heartbeat is implemented via an event, rather than a thread with a sleep, so
-# we can interupt and it, then the Application code wants to release the
-# semaphores without waiting for the current interval to finish
+# Heartbeat is implemented via an event, rather than a thread with a sleep, so we can
+# interupt and it, then the Application code wants to release the semaphores without
+# waiting for the current interval to finish
 class Heartbeat:
-    def __init__(self, client: Client, lease: Lease, interval_sec: float):
+    def __init__(self, client: Client, lease: Lease, interval: timedelta):
         self.client = client
         self.lease = lease
         # Interval in between heartbeats for an active lease
-        self.interval_sec = interval_sec
+        self.interval_sec = interval.total_seconds()
         self.cancel = Event()
         self.thread = Thread(target=self._run)
 
@@ -212,14 +213,46 @@ class Heartbeat:
             self.cancel.wait(self.interval_sec)
 
 
+class Timeout(Exception):
+    """
+    Thrown by lock in order to indicate that the specified amount time has passed and
+    the call has given up on acquiring the lock
+    """
+
+    pass
+
+
 @contextmanager
 def lock(
-    client: Client, semaphore: str, count: int = 1, heartbeat_interval_sec: float = 300
-):
+    client: Client,
+    semaphore: str,
+    count: int = 1,
+    heartbeat_interval: timedelta = timedelta(minutes=5),
+    timeout: Optional[timedelta] = None,
+) -> Lease:
+    """
+    Acquires a lock to a semaphore
+
+    Keyword arguments:
+    count -- Lock count. The lock counts of all leases combined may not exceed the
+             semaphore count.
+    timeout -- Leaving this at None, let's the lock block until the lock can be
+               acquired. Should a timeou be specified the call is going to raise a
+               Timeout exception should it exceed before the lock is acquired.
+    """
     lease = client.acquire(semaphore, count=count)
+    start = time()
     while lease.has_pending():
-        _ = client.wait_for_admission(lease, timeout_ms=5000)
-    heartbeat = Heartbeat(client, lease, heartbeat_interval_sec)
+        now = time()
+        passed = timedelta(seconds=now - start)
+        if timeout < passed:
+            raise Timeout
+        elif timeout - passed < timedelta(seconds=5):
+            timeout_ms = int((timeout - passed).total_seconds() * 1000)
+        else:
+            timeout_ms = int(5000)
+        _ = client.wait_for_admission(lease, timeout_ms)
+    heartbeat = Heartbeat(client, lease, heartbeat_interval)
     heartbeat.start()
     yield lease
     heartbeat.stop()
