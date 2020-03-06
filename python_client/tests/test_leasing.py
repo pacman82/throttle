@@ -133,7 +133,7 @@ def test_server_recovers_pending_lock_after_state_loss():
             t.start()
             # Give the acquire request some time to go through, so we hit the edge case
             # of getting an 'Unknown lease' response from the server
-            sleep(1)
+            sleep(2)
             proc.kill()
 
         # Invoking this context manager anew terminates and restarts the server. I.e.
@@ -144,7 +144,7 @@ def test_server_recovers_pending_lock_after_state_loss():
             # have a heartbeat for the first lease, so semaphore should be taken by the
             # lease acquired in thread t, if we are able to recover from server reboot
             # during pending leases on the client side.
-            t.join(10)
+            t.join()
             assert acquired_lease
 
 
