@@ -94,6 +94,10 @@ async fn wait_for_admission(
 ) -> Result<Json<bool>, Error> {
     let lease_id = *path;
     let timeout = Duration::from_millis(query.timeout_ms.unwrap_or(0));
+    debug!(
+        "Lease {} is waiting for admission with timeout {:?}",
+        lease_id, timeout
+    );
     let expires_in = body.expires_in;
     if let Some((semaphore, amount)) = body.pending() {
         state
