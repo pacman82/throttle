@@ -117,7 +117,7 @@ def test_server_recovers_pending_lock_after_state_loss():
     acquired_lease = False
 
     def acquire_lease_concurrent():
-        with lock(Client("http://localhost:8000"), "A", timeout=timedelta(seconds=5)):
+        with lock(Client("http://localhost:8000"), "A", timeout=timedelta(seconds=10)):
             nonlocal acquired_lease
             acquired_lease = True
 
