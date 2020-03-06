@@ -264,13 +264,9 @@ def lock(
         # Catch ConnectionError and Timeout, to be able to recover pending leases
         # in case of a server reboot.
         except requests.ConnectionError:
-            if block_for.total_seconds() <= 5:
-                raise
-            else:
-                sleep(block_for.total_seconds())
+            sleep(block_for.total_seconds())
         except requests.Timeout:
-            if block_for.total_seconds() <= 5:
-                raise
+            pass
 
     heartbeat = Heartbeat(client, lease, heartbeat_interval)
     heartbeat.start()
