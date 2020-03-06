@@ -95,25 +95,25 @@ class Client:
             return Lease(id=response.text, pending={semaphore: count})
 
     @backoff.on_exception(backoff.expo, (requests.ConnectionError, requests.Timeout))
-    def wait_for_admission(self, lease: Lease, timeout_ms: int = 0):
+    def wait_for_admission(self, lease: Lease, block_for: timedelta) -> bool:
         """
-        Check if the lease is still pending. An optional timeout allows to
-        block on a pending lease in order to wait for an active lease. Returns
-        True if lease is still pending, False if the lease should be active.
+        Check if the lease is still pending. Returns True if lease is still pending,
+        False if the lease should be active.
 
         Raises UnknownLease in case the server doesn't know the lease (e.g. due
         to reboot of Throttle Server, or network timeouts of the heartbeats.)
         """
+        block_for_ms = int(block_for.total_seconds() * 1000)
 
         response = requests.post(
             self.base_url
-            + f"/leases/{lease.id}/wait_on_admission?timeout_ms={timeout_ms}",
+            + f"/leases/{lease.id}/wait_on_admission?timeout_ms={block_for_ms}",
             json={
                 "expires_in": "5min",
                 "active": lease.active,
                 "pending": lease.pending,
             },
-            timeout=timeout_ms / 1000 + 2,
+            timeout=block_for_ms / 1000 + 2,
         )
 
         _raise_for_status(response)
@@ -248,10 +248,10 @@ def lock(
         if timeout < passed:
             raise Timeout
         elif timeout - passed < timedelta(seconds=5):
-            timeout_ms = int((timeout - passed).total_seconds() * 1000)
+            block_for = timeout - passed
         else:
-            timeout_ms = int(5000)
-        _ = client.wait_for_admission(lease, timeout_ms)
+            block_for = timedelta(seconds=5)
+        _ = client.wait_for_admission(lease, block_for)
     heartbeat = Heartbeat(client, lease, heartbeat_interval)
     heartbeat.start()
     yield lease

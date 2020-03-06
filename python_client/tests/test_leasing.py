@@ -80,11 +80,11 @@ def test_pending_lock():
         # Second lease is pending, because we still hold first
         assert second.has_pending()
         # A request to the server is also telling us so
-        assert client.wait_for_admission(second)
+        assert client.wait_for_admission(second, block_for=timedelta(seconds=0))
         client.release(first)
         # After releasing the first lease the second lease should no longer be
         # pending
-        assert not client.wait_for_admission(second)
+        assert not client.wait_for_admission(second, block_for=timedelta(seconds=0))
 
 
 def test_lock_blocks():
@@ -98,7 +98,7 @@ def test_lock_blocks():
         second = client.acquire("A")
 
         def wait_for_second_lock():
-            client.wait_for_admission(second, timeout_ms=2000)
+            client.wait_for_admission(second, block_for=timedelta(seconds=2))
 
         t = Thread(target=wait_for_second_lock)
         t.start()
@@ -166,7 +166,7 @@ def test_pending_leases_dont_expire():
         _ = client.acquire("A")
         # This lease should be pending
         lease = client.acquire("A", expires_in=timedelta(seconds=1))
-        client.wait_for_admission(lease, timeout_ms=1500)
+        client.wait_for_admission(lease, block_for=timedelta(seconds=1.5))
         # The initial timeout of one second should have been expired by now,
         # yet nothing is removed
         assert client.remove_expired() == 0
