@@ -5,7 +5,7 @@ from typing import Dict, Optional
 from contextlib import contextmanager
 from threading import Event, Thread
 from datetime import timedelta
-from time import time
+from time import time, sleep
 
 
 class Lease:
@@ -94,7 +94,6 @@ class Client:
         elif response.status_code == 202:  # Accepted. Ticket pending.
             return Lease(id=response.text, pending={semaphore: count})
 
-    @backoff.on_exception(backoff.expo, (requests.ConnectionError, requests.Timeout))
     def wait_for_admission(self, lease: Lease, block_for: timedelta) -> bool:
         """
         Check if the lease is still pending. Returns True if lease is still pending,
@@ -241,17 +240,38 @@ def lock(
                Timeout exception should it exceed before the lock is acquired.
     """
     lease = client.acquire(semaphore, count=count)
+    # Remember this moment in order to figure out later how much time has passed since
+    # we started to acquire the lock
     start = time()
     while lease.has_pending():
+        # The time between now and start is the amount of time we are waiting for the
+        # lock.
         now = time()
         passed = timedelta(seconds=now - start)
+        # Figure out if the lock timed out
         if timeout < passed:
             raise Timeout
+        # If we time out in a timespan < 5 seconds, we want to block only for the time
+        # until the timeout.
         elif timeout - passed < timedelta(seconds=5):
             block_for = timeout - passed
         else:
+        # Even if the timeout is langer than 5 seconds, block only for that long, since
+        # we do not want to keep the http request open for to long.
             block_for = timedelta(seconds=5)
-        _ = client.wait_for_admission(lease, block_for)
+        try:
+            _ = client.wait_for_admission(lease, block_for)
+        # Catch ConnectionError and Timeout, to be able to recover pending leases
+        # in case of a server reboot.
+        except requests.ConnectionError:
+            if block_for.total_seconds() <= 5:
+                raise
+            else:
+                sleep(block_for.total_seconds())
+        except requests.Timeout:
+            if block_for.total_seconds() <= 5:
+                raise
+
     heartbeat = Heartbeat(client, lease, heartbeat_interval)
     heartbeat.start()
     yield lease
