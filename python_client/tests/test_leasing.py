@@ -71,7 +71,7 @@ def test_remainder():
 
 def test_pending_lock():
     """
-    Verify the results of a non-blocking request to wait_for_admission
+    Verify the results of a non-blocking request to block_until_acquired
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         # Acquire first lease
@@ -80,16 +80,16 @@ def test_pending_lock():
         # Second lease is pending, because we still hold first
         assert second.has_pending()
         # A request to the server is also telling us so
-        assert client.wait_for_admission(second, block_for=timedelta(seconds=0))
+        assert client.block_until_acquired(second, block_for=timedelta(seconds=0))
         client.release(first)
         # After releasing the first lease the second lease should no longer be
         # pending
-        assert not client.wait_for_admission(second, block_for=timedelta(seconds=0))
+        assert not client.block_until_acquired(second, block_for=timedelta(seconds=0))
 
 
 def test_lock_blocks():
     """
-    Verify that wait_for_admission blocks until the semaphore count allows for
+    Verify that block_until_acquired blocks until the semaphore count allows for
     the lock to be acquired.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
@@ -98,7 +98,7 @@ def test_lock_blocks():
         second = client.acquire("A")
 
         def wait_for_second_lock():
-            client.wait_for_admission(second, block_for=timedelta(seconds=2))
+            client.block_until_acquired(second, block_for=timedelta(seconds=2))
 
         t = Thread(target=wait_for_second_lock)
         t.start()
@@ -165,8 +165,8 @@ def test_pending_leases_dont_expire():
         # Acquire once, so subsequent leases are pending
         _ = client.acquire("A")
         # This lease should be pending
-        lease = client.acquire("A", expires_in=timedelta(seconds=1))
-        client.wait_for_admission(lease, block_for=timedelta(seconds=1.5))
+        peer = client.acquire("A", expires_in=timedelta(seconds=1))
+        client.block_until_acquired(peer, block_for=timedelta(seconds=1.5))
         # The initial timeout of one second should have been expired by now,
         # yet nothing is removed
         assert client.remove_expired() == 0
@@ -269,7 +269,7 @@ def test_lock_count_larger_than_full_count():
 
 def test_try_lock():
     """
-    Assert that a call to lock raises Exception returns None after a specified timeout
+    Assert that a call to lock raises Timout Exception if pending to long
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         # We hold the lease, all following calls are going to block
@@ -302,4 +302,4 @@ def test_block_on_unknown_semaphore():
     # Restart Server without "A"
     with throttle_client(b"[semaphores]") as client:
         with pytest.raises(Exception, match="Unknown semaphore"):
-            client.wait_for_admission(l, block_for=timedelta(seconds=1))
+            client.block_until_acquired(l, block_for=timedelta(seconds=1))

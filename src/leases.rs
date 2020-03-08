@@ -1,8 +1,9 @@
 use rand::random;
 use std::{collections::HashMap, time::Instant};
 
-/// Describes a single client lease to a semaphore
-struct Lease {
+/// A peer holds leases to semaphores, which may either be active or pending and share a common
+/// timeout.
+struct Peer {
     /// Name of the resource the semaphore protects
     semaphore: String,
     /// `true` if the lease is active (i.e. decrementing the semaphore count), or `false` if the
@@ -23,7 +24,7 @@ pub struct Counts {
     pub pending: i64,
 }
 
-impl Lease {
+impl Peer {
     fn count_active(&self, semaphore: &str) -> i64 {
         if self.active && self.semaphore == semaphore {
             self.amount
@@ -55,7 +56,7 @@ impl Lease {
 
 pub struct Leases {
     // Active leases decreasing the semaphore count
-    ledger: HashMap<u64, Lease>,
+    ledger: HashMap<u64, Peer>,
 }
 
 impl Leases {
@@ -65,13 +66,13 @@ impl Leases {
         }
     }
 
-    /// Creates a new unique lease id and adds it to the ledger. If the count of the semaphore is
+    /// Creates a new unique peer id and adds it to the ledger. If the count of the semaphore is
     /// high enough, the lease is going to be active, otherwise it is pending.
     ///
     /// # Return
     ///
     /// First element indicates wether lease is active, or not.
-    /// Second element is the lease id.
+    /// Second element is the peer id.
     pub fn add(
         &mut self,
         semaphore: &str,
@@ -82,18 +83,13 @@ impl Leases {
         let amount = amount as i64;
 
         // Generate random numbers until we get a new unique one.
-        let lease_id = loop {
-            let candidate = random();
-            if self.ledger.get(&candidate).is_none() {
-                break candidate;
-            }
-        };
+        let peer_id = self.new_unique_peer_id();
 
         let active = self.count(semaphore) + amount <= max;
 
         let old = self.ledger.insert(
-            lease_id,
-            Lease {
+            peer_id,
+            Peer {
                 semaphore: semaphore.to_owned(),
                 active,
                 amount,
@@ -102,7 +98,7 @@ impl Leases {
         );
         // There should not be any preexisting entry with this id
         debug_assert!(old.is_none());
-        (active, lease_id)
+        (active, peer_id)
     }
 
     /// Aggregated count of active leases for the semaphore
@@ -115,8 +111,8 @@ impl Leases {
 
     /// Should a lease with that semaphore be found, it is removed and the name of the semaphore it
     /// holds is returned.
-    pub fn remove(&mut self, lease_id: u64) -> Option<String> {
-        self.ledger.remove(&lease_id).map(|l| l.semaphore)
+    pub fn remove(&mut self, peer_id: u64) -> Option<String> {
+        self.ledger.remove(&peer_id).map(|l| l.semaphore)
     }
 
     /// Activates pending leases for the semaphore until its count is >= max
@@ -131,8 +127,8 @@ impl Leases {
         }
     }
 
-    pub fn has_pending(&self, lease_id: u64) -> Option<bool> {
-        self.ledger.get(&lease_id).map(|lease| lease.active)
+    pub fn has_pending(&self, peer_id: u64) -> Option<bool> {
+        self.ledger.get(&peer_id).map(|lease| lease.active)
     }
 
     /// Remove every lease, which is not valid until now.
@@ -147,7 +143,7 @@ impl Leases {
     pub fn remove_expired(&mut self, now: Instant) -> usize {
         let before = self.ledger.len();
         self.ledger
-            .retain(|_lease_id, lease| now < lease.valid_until);
+            .retain(|_peer_id, lease| now < lease.valid_until);
         let after = self.ledger.len();
         before - after
     }
@@ -156,9 +152,9 @@ impl Leases {
     ///
     /// # Return
     ///
-    /// Should the `lease_id` been found `true` returned. `false` otherwise.
-    pub fn update_valid_until(&mut self, lease_id: u64, valid_until: Instant) -> bool {
-        if let Some(lease) = self.ledger.get_mut(&lease_id) {
+    /// Should the `peer_id` been found `true` returned. `false` otherwise.
+    pub fn update_valid_until(&mut self, peer_id: u64, valid_until: Instant) -> bool {
+        if let Some(lease) = self.ledger.get_mut(&peer_id) {
             lease.valid_until = valid_until;
             true
         } else {
@@ -171,7 +167,7 @@ impl Leases {
     /// if the count allows it.
     pub fn revenant(
         &mut self,
-        lease_id: u64,
+        peer_id: u64,
         semaphore: &str,
         amount: u32,
         active: bool,
@@ -180,8 +176,8 @@ impl Leases {
     ) {
         let amount = amount as i64;
         let prev = self.ledger.insert(
-            lease_id,
-            Lease {
+            peer_id,
+            Peer {
                 // A previously active revenant is going to be inserted as active, even if it means
                 // overbooking the semaphore.
                 active: active || self.count(semaphore) + amount <= max,
@@ -198,6 +194,16 @@ impl Leases {
     pub fn fill_counts(&self, counts: &mut HashMap<String, Counts>) {
         for lease in self.ledger.values() {
             lease.update_counts(counts);
+        }
+    }
+
+    /// Generates a random new peer id which does not collide with any preexisting
+    fn new_unique_peer_id(&self) -> u64 {
+        loop {
+            let candidate = random();
+            if self.ledger.get(&candidate).is_none() {
+                return candidate;
+            }
         }
     }
 }

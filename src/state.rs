@@ -15,7 +15,7 @@ use std::{
 /// State of the Semaphore service, shared between threads
 pub struct State {
     /// Bookeeping for leases, protected by mutex so multiple threads (i.e. requests) can manipulate
-    /// it. May not contain any leases not configured in semaphores.
+    /// it. Must not contain any leases not configured in semaphores.
     leases: Mutex<Leases>,
     /// Condition variable. Notify is called thenever a lease is released, so it's suitable for
     /// blocking on request to pending leases.
@@ -27,7 +27,7 @@ pub struct State {
 #[derive(Debug)]
 pub enum Error {
     UnknownSemaphore,
-    UnknownLease,
+    UnknownPeer,
     ForeverPending { asked: i64, max: i64 },
 }
 
@@ -35,7 +35,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::UnknownSemaphore => write!(f, "Unknown semaphore"),
-            Error::UnknownLease => write!(f, "Unknown lease"),
+            Error::UnknownPeer => write!(f, "Unknown peer"),
             Error::ForeverPending { asked, max } => write!(
                 f,
                 "Acquiring lock would block forever. Lock askes for count {} yet full count is \
@@ -72,13 +72,13 @@ impl State {
                     max,
                 });
             }
-            let (active, lease_id) = leases.add(semaphore, amount, max, valid_until);
+            let (active, peer_id) = leases.add(semaphore, amount, max, valid_until);
             if active {
-                debug!("Lease {} to '{}' acquired.", lease_id, semaphore);
-                Ok((lease_id, true))
+                debug!("Peer {} acquired lease to '{}'.", peer_id, semaphore);
+                Ok((peer_id, true))
             } else {
-                debug!("Ticket {} for '{}' created.", lease_id, semaphore);
-                Ok((lease_id, false))
+                debug!("Peer {} waiting for lease to '{}'.", peer_id, semaphore);
+                Ok((peer_id, false))
             }
         } else {
             warn!("Unknown semaphore '{}' requested", semaphore);
@@ -101,7 +101,7 @@ impl State {
 
     pub fn block_until_acquired(
         &self,
-        lease_id: u64,
+        peer_id: u64,
         expires_in: Duration,
         semaphore: &str,
         amount: u32,
@@ -110,23 +110,24 @@ impl State {
         let mut leases = self.leases.lock().unwrap();
         let start = Instant::now();
         let valid_until = start + expires_in;
-        if !leases.update_valid_until(lease_id, valid_until) {
-            warn!("Revenant of pending lease. => Reacquire");
+        if !leases.update_valid_until(peer_id, valid_until) {
+            warn!("Revenant of peer with pending lease. => Reacquire");
             let max = *self
                 .semaphores
                 .get(semaphore)
                 .ok_or(Error::UnknownSemaphore)?;
             let active = false;
-            leases.revenant(lease_id, semaphore, amount, active, max, valid_until)
+            leases.revenant(peer_id, semaphore, amount, active, max, valid_until)
         }
         loop {
-            break match leases.has_pending(lease_id) {
+            break match leases.has_pending(peer_id) {
                 None => {
+                    // TODO: currently not reachable due to insertion of revenants
                     warn!(
-                        "Unknown lease accessed while waiting for admission request. Lease id: {}",
-                        lease_id
+                        "Unknown peer blocking to acquire lease. Peer id: {}",
+                        peer_id
                     );
-                    Err(Error::UnknownLease)
+                    Err(Error::UnknownPeer)
                 }
                 Some(true) => Ok(true),
                 Some(false) => {
@@ -152,9 +153,9 @@ impl State {
         }
     }
 
-    pub fn heartbeat_to_active_lease(
+    pub fn heartbeat_for_active_peer(
         &self,
-        lease_id: u64,
+        peer_id: u64,
         semaphore: &str,
         amount: u32,
         expires_in: Duration,
@@ -162,15 +163,15 @@ impl State {
         let mut leases = self.leases.lock().unwrap();
         // Determine valid_until after acquiring lock, in case we block for a long time.
         let valid_until = Instant::now() + expires_in;
-        if !leases.update_valid_until(lease_id, valid_until) {
+        if !leases.update_valid_until(peer_id, valid_until) {
             // Assert semaphore exists. We want to give the client an error and also do not want to
-            // allow any Unknown Semaphore into leases configuration.
+            // allow any Unknown Semaphore into `leases`.
             let max = *self
                 .semaphores
                 .get(semaphore)
                 .ok_or(Error::UnknownSemaphore)?;
             let active = false;
-            leases.revenant(lease_id, semaphore, amount, active, max, valid_until)
+            leases.revenant(peer_id, semaphore, amount, active, max, valid_until)
         }
         Ok(())
     }
@@ -186,13 +187,13 @@ impl State {
         }
     }
 
-    /// Releases a previously acquired lease.
+    /// Removes a peer from bookeeping and releases all acquired leases.
     ///
-    /// Returns `false` should the lease not be found and `true` otherwise. `false` could occur due
-    /// to e.g. the `lease` already being removed by litter collection.
-    pub fn release(&self, lease_id: u64) -> bool {
+    /// Returns `false` should the peer not be found and `true` otherwise. `false` could occur due
+    /// to e.g. the peer already being removed by litter collection.
+    pub fn release(&self, peer_id: u64) -> bool {
         let mut leases = self.leases.lock().unwrap();
-        match leases.remove(lease_id) {
+        match leases.remove(peer_id) {
             Some(semaphore) => {
                 let full_count = self
                     .semaphores
@@ -204,7 +205,7 @@ impl State {
                 true
             }
             None => {
-                warn!("Deletion of unknown lease.");
+                warn!("Deletion of unknown peer.");
                 false
             }
         }

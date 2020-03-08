@@ -76,7 +76,7 @@ async fn main() -> io::Result<()> {
             .service(semaphore_service::release)
             .service(semaphore_service::block_until_acquired)
             .service(semaphore_service::remove_expired)
-            .service(semaphore_service::put_lease)
+            .service(semaphore_service::put_peer)
             .default_service(
                 // 404 for GET requests
                 web::resource("").route(web::get().to(not_found::not_found)),
@@ -85,7 +85,7 @@ async fn main() -> io::Result<()> {
     .bind(&opt.endpoint())?
     .run();
 
-    // Removes expired leases asynchrounously. We start litter collection after the server. Would we
+    // Removes expired peers asynchrounously. We start litter collection after the server. Would we
     // start `lc` before the `.run` method, the ?-operator after `.bind` might early return and
     // leave us with a detached thread.
     let lc = litter_collection::start(

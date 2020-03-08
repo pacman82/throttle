@@ -8,10 +8,10 @@ from datetime import timedelta
 from time import time, sleep
 
 
-class Lease:
+class Peer:
     """
-    A lease from a throttle service. Lists active and pending resources for
-    one thread of execution.
+    A peer of a throttle service. Lists active and pending leases for one thread of
+    execution.
     """
 
     def __init__(
@@ -22,11 +22,11 @@ class Lease:
         self.pending = pending
 
     def has_pending(self) -> bool:
-        """Returns true if this lease has pending admissions."""
+        """Returns true if this peer has pending leases."""
         return len(self.pending) != 0
 
     def has_active(self) -> bool:
-        """Returns true if this lease has active admissions."""
+        """Returns true if this peer has active leases."""
         return len(self.active) != 0
 
     def _make_active(self):
@@ -65,7 +65,7 @@ def _format_timedelta(interval: timedelta) -> str:
 
 
 class Client:
-    """A Client to lease semaphores from as Throttle service."""
+    """A Client to lease semaphores from a Throttle service."""
 
     def __init__(
         self, base_url: str, expiration_time: timedelta = None,
@@ -80,7 +80,7 @@ class Client:
     @backoff.on_exception(backoff.expo, requests.ConnectionError)
     def acquire(
         self, semaphore: str, count: int = 1, expires_in: timedelta = None
-    ) -> Lease:
+    ) -> Peer:
         if not expires_in:
             expires_in = self.expiration_time
         body = {
@@ -90,27 +90,25 @@ class Client:
         response = requests.post(self.base_url + "/acquire", json=body, timeout=30)
         _raise_for_status(response)
         if response.status_code == 201:  # Created. We got a lease to the semaphore
-            return Lease(id=response.text, active={semaphore: count})
+            return Peer(id=response.text, active={semaphore: count})
         elif response.status_code == 202:  # Accepted. Ticket pending.
-            return Lease(id=response.text, pending={semaphore: count})
+            return Peer(id=response.text, pending={semaphore: count})
 
-    def wait_for_admission(self, lease: Lease, block_for: timedelta) -> bool:
+    def block_until_acquired(self, peer: Peer, block_for: timedelta) -> bool:
         """
-        Check if the lease is still pending. Returns True if lease is still pending,
-        False if the lease should be active.
-
-        Raises UnknownLease in case the server doesn't know the lease (e.g. due
-        to reboot of Throttle Server, or network timeouts of the heartbeats.)
+        Block until all the leases of the peer are acquired, or the timespan specified
+        in block_for has passed. Returns True if and only if the peer has leases which
+        are still pending.
         """
         block_for_ms = int(block_for.total_seconds() * 1000)
 
         response = requests.post(
             self.base_url
-            + f"/leases/{lease.id}/block_until_acquired?timeout_ms={block_for_ms}",
+            + f"/peers/{peer.id}/block_until_acquired?timeout_ms={block_for_ms}",
             json={
                 "expires_in": "5min",
-                "active": lease.active,
-                "pending": lease.pending,
+                "active": peer.active,
+                "pending": peer.pending,
             },
             timeout=block_for_ms / 1000 + 2,
         )
@@ -119,33 +117,33 @@ class Client:
 
         now_active = json.loads(response.text)
         if now_active:
-            # Server told us all admissions in the lease are active. Let's
-            # update our local bookeeping accordingly.
-            lease._make_active()
-        return lease.has_pending()
+            # Server told us all leases of this peer are active. Let's upate our local
+            # bookeeping accordingly.
+            peer._make_active()
+        return peer.has_pending()
 
     def remainder(self, semaphore: str) -> int:
         """
         The curent semaphore count. I.e. the number of available leases
 
-        This is equal to the full semaphore count minus the current count. This
-        number could become negative, if the semaphores have been overcommitted
-        (due to previously reoccuring leases previously considered dead).
+        This is equal to the full semaphore count minus the current count. This number
+        could become negative, if the semaphores have been overcommitted (due to
+        previously reoccuring leases previously considered dead).
         """
         response = requests.get(self.base_url + f"/remainder?semaphore={semaphore}")
         _raise_for_status(response)
 
         return int(response.text)
 
-    def release(self, lease: Lease):
+    def release(self, peer: Peer):
         """
-        Deletes the lease on the throttle server.
+        Deletes the peer on the throttle server.
 
-        This is important to unblock other clients which may be waiting for
-        the semaphore remainder to increase.
+        This is important to unblock other clients which may be waiting for the
+        semaphore remainder to increase.
         """
         try:
-            response = requests.delete(self.base_url + f"/leases/{lease.id}")
+            response = requests.delete(self.base_url + f"/peers/{peer.id}")
             _raise_for_status(response)
         except requests.ConnectionError:
             # Let's not wait for the server. This lease is a case for the
@@ -154,29 +152,29 @@ class Client:
 
     def remove_expired(self) -> int:
         """
-        Request the throttle server to remove all expired leases.
+        Request the throttle server to remove all expired peers.
 
-        Returns number of expired leases.
+        Returns number of expired peers.
         """
         response = requests.post(self.base_url + "/remove_expired", timeout=30)
         _raise_for_status(response)
-        # Number of expired leases
+        # Number of expired peers
         return json.loads(response.text)
 
-    def heartbeat(self, lease: Lease):
+    def heartbeat(self, peer: Peer):
         """
-        Sends a PUT request to the server, updating the expiration timestamp
-        and repeating the information in the lease.
+        Sends a PUT request to the server, updating the expiration timestamp and
+        repeating the information of the peer.
         """
 
         assert (
-            not lease.has_pending()
-        ), "Pending leases must not be kept alive via heartbeat."
+            not peer.has_pending()
+        ), "Peers with pending leases must not be kept alive via heartbeat."
         response = requests.put(
-            f"{self.base_url}/leases/{lease.id}",
+            f"{self.base_url}/peers/{peer.id}",
             json={
                 "expires_in": _format_timedelta(self.expiration_time),
-                "active": lease.active,
+                "active": peer.active,
             },
             timeout=30,
         )
@@ -187,9 +185,9 @@ class Client:
 # interupt and it, then the Application code wants to release the semaphores without
 # waiting for the current interval to finish
 class Heartbeat:
-    def __init__(self, client: Client, lease: Lease, interval: timedelta):
+    def __init__(self, client: Client, peer: Peer, interval: timedelta):
         self.client = client
-        self.lease = lease
+        self.lease = peer
         # Interval in between heartbeats for an active lease
         self.interval_sec = interval.total_seconds()
         self.cancel = Event()
@@ -228,22 +226,21 @@ def lock(
     count: int = 1,
     heartbeat_interval: timedelta = timedelta(minutes=5),
     timeout: Optional[timedelta] = None,
-) -> Lease:
+) -> Peer:
     """
     Acquires a lock to a semaphore
 
     Keyword arguments:
-    count -- Lock count. The lock counts of all leases combined may not exceed the
-             semaphore count.
+    count -- Lock count. May not exceed the full count of the semaphore
     timeout -- Leaving this at None, let's the lock block until the lock can be
                acquired. Should a timeou be specified the call is going to raise a
                Timeout exception should it exceed before the lock is acquired.
     """
-    lease = client.acquire(semaphore, count=count)
+    peer = client.acquire(semaphore, count=count)
     # Remember this moment in order to figure out later how much time has passed since
     # we started to acquire the lock
     start = time()
-    while lease.has_pending():
+    while peer.has_pending():
         # The time between now and start is the amount of time we are waiting for the
         # lock.
         now = time()
@@ -260,7 +257,7 @@ def lock(
         # we do not want to keep the http request open for to long.
             block_for = timedelta(seconds=5)
         try:
-            _ = client.wait_for_admission(lease, block_for)
+            _ = client.block_until_acquired(peer, block_for)
         # Catch ConnectionError and Timeout, to be able to recover pending leases
         # in case of a server reboot.
         except requests.ConnectionError:
@@ -268,8 +265,8 @@ def lock(
         except requests.Timeout:
             pass
 
-    heartbeat = Heartbeat(client, lease, heartbeat_interval)
+    heartbeat = Heartbeat(client, peer, heartbeat_interval)
     heartbeat.start()
-    yield lease
+    yield peer
     heartbeat.stop()
-    client.release(lease)
+    client.release(peer)

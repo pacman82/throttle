@@ -18,26 +18,26 @@ use std::{collections::HashMap, time::Duration};
 impl ResponseError for Error {
     fn status_code(&self) -> StatusCode {
         match self {
-            Error::UnknownLease => StatusCode::BAD_REQUEST,
+            Error::UnknownPeer => StatusCode::BAD_REQUEST,
             Error::UnknownSemaphore => StatusCode::BAD_REQUEST,
             Error::ForeverPending { .. } => StatusCode::CONFLICT,
         }
     }
 }
 
-type Admissions = HashMap<String, u32>;
+type Leases = HashMap<String, u32>;
 
 /// Parameters for acquiring a lease
 #[derive(Deserialize)]
-pub struct PendingAdmissions {
-    pending: Admissions,
+pub struct PendingLeases {
+    pending: Leases,
     /// Duration in seconds. After the specified time has passed the lease may be freed by litter
     /// collection.
     #[serde(with = "humantime_serde")]
     expires_in: Duration,
 }
 
-impl PendingAdmissions {
+impl PendingLeases {
     fn pending(&self) -> Option<(&str, u32)> {
         self.pending
             .iter()
@@ -48,15 +48,15 @@ impl PendingAdmissions {
 
 /// Parameters for heartbeat to a lease
 #[derive(Deserialize)]
-pub struct ActiveAdmissions {
-    active: Admissions,
+pub struct ActiveLeases {
+    active: Leases,
     /// Duration in seconds. After the specified time has passed the lease may be freed by litter
     /// collection.
     #[serde(with = "humantime_serde")]
     expires_in: Duration,
 }
 
-impl ActiveAdmissions {
+impl ActiveLeases {
     fn active(&self) -> Option<(&str, u32)> {
         self.active
             .iter()
@@ -67,7 +67,7 @@ impl ActiveAdmissions {
 
 /// Acquire a new lease to a Semaphore
 #[post("/acquire")]
-async fn acquire(body: Json<PendingAdmissions>, state: Data<State>) -> HttpResponse {
+async fn acquire(body: Json<PendingLeases>, state: Data<State>) -> HttpResponse {
     if let Some((semaphore, amount)) = body.pending() {
         match state.acquire(semaphore, amount, body.expires_in) {
             Ok((lease_id, true)) => HttpResponse::Created().json(lease_id),
@@ -85,11 +85,11 @@ struct MaxTimeout {
 }
 
 /// Wait for a ticket to be promoted to a lease
-#[post("/leases/{id}/block_until_acquired")]
+#[post("/peers/{id}/block_until_acquired")]
 async fn block_until_acquired(
     path: Path<u64>,
     query: Query<MaxTimeout>,
-    body: Json<PendingAdmissions>,
+    body: Json<PendingLeases>,
     state: Data<State>,
 ) -> Result<Json<bool>, Error> {
     let lease_id = *path;
@@ -120,13 +120,13 @@ async fn remainder(query: Query<Remainder>, state: Data<State>) -> Result<Json<i
     state.remainder(&query.semaphore).map(Json)
 }
 
-#[delete("/leases/{id}")]
+#[delete("/peers/{id}")]
 async fn release(path: Path<u64>, state: Data<State>) -> HttpResponse {
     if state.release(*path) {
-        HttpResponse::Ok().json("Lease released")
+        HttpResponse::Ok().json("Peer released")
     } else {
         // Post condition of lease not being there is satisfied, let's make this request 200 still.
-        HttpResponse::Ok().json("Lease not found")
+        HttpResponse::Ok().json("Peer not found")
     }
 }
 
@@ -137,16 +137,16 @@ async fn remove_expired(state: Data<State>) -> Json<usize> {
     Json(state.remove_expired())
 }
 
-#[put("/leases/{id}")]
-async fn put_lease(
+#[put("/peers/{id}")]
+async fn put_peer(
     path: Path<u64>,
-    body: Json<ActiveAdmissions>,
+    body: Json<ActiveLeases>,
     state: Data<State>,
 ) -> Result<&'static str, Error> {
     let lease_id = *path;
     if let Some((semaphore, amount)) = body.active() {
         debug!("Received heartbeat for {}", lease_id);
-        state.heartbeat_to_active_lease(lease_id, semaphore, amount, body.expires_in)?;
+        state.heartbeat_for_active_peer(lease_id, semaphore, amount, body.expires_in)?;
     } else {
         warn!("Empty heartbeat (no active leases) for {}", lease_id);
     }
