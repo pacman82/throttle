@@ -253,8 +253,8 @@ def lock(
         elif timeout - passed < timedelta(seconds=5):
             block_for = timeout - passed
         else:
-        # Even if the timeout is langer than 5 seconds, block only for that long, since
-        # we do not want to keep the http request open for to long.
+            # Even if the timeout is langer than 5 seconds, block only for that long,
+            # since we do not want to keep the http request open for to long.
             block_for = timedelta(seconds=5)
         try:
             _ = client.block_until_acquired(peer, block_for)

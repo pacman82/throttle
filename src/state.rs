@@ -118,7 +118,10 @@ impl State {
                 .get(semaphore)
                 .ok_or(Error::UnknownSemaphore)?;
             let active = leases.add(peer_id, semaphore, amount, Some(max), valid_until);
-            warn!("Revenant Peer {} with pending leases. Active: {}", peer_id, active);
+            warn!(
+                "Revenant Peer {} with pending leases. Active: {}",
+                peer_id, active
+            );
         }
         loop {
             break match leases.has_pending(peer_id) {
@@ -172,7 +175,7 @@ impl State {
                 .get(semaphore)
                 .ok_or(Error::UnknownSemaphore)?;
             // By passing None as max rather than the value obtained above, we opt out checking the
-            // semaphore full count and allow exceeding it. 
+            // semaphore full count and allow exceeding it.
             let max = None;
             leases.add(peer_id, semaphore, amount, max, valid_until);
             warn!("Revenat peer {} with active leases returned.", peer_id);
