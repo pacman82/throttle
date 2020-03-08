@@ -72,7 +72,9 @@ impl State {
                     max,
                 });
             }
-            let (active, peer_id) = leases.add(semaphore, amount, max, valid_until);
+            // This is a new peer. Let's make a new `peer_id` to remember it by.
+            let peer_id = leases.new_unique_peer_id();
+            let active = leases.add(peer_id, semaphore, amount, Some(max), valid_until);
             if active {
                 debug!("Peer {} acquired lease to '{}'.", peer_id, semaphore);
                 Ok((peer_id, true))
@@ -111,13 +113,12 @@ impl State {
         let start = Instant::now();
         let valid_until = start + expires_in;
         if !leases.update_valid_until(peer_id, valid_until) {
-            warn!("Revenant of peer with pending lease. => Reacquire");
             let max = *self
                 .semaphores
                 .get(semaphore)
                 .ok_or(Error::UnknownSemaphore)?;
-            let active = false;
-            leases.revenant(peer_id, semaphore, amount, active, max, valid_until)
+            let active = leases.add(peer_id, semaphore, amount, Some(max), valid_until);
+            warn!("Revenant Peer {} with pending leases. Active: {}", peer_id, active);
         }
         loop {
             break match leases.has_pending(peer_id) {
@@ -166,12 +167,15 @@ impl State {
         if !leases.update_valid_until(peer_id, valid_until) {
             // Assert semaphore exists. We want to give the client an error and also do not want to
             // allow any Unknown Semaphore into `leases`.
-            let max = *self
+            let _max = *self
                 .semaphores
                 .get(semaphore)
                 .ok_or(Error::UnknownSemaphore)?;
-            let active = false;
-            leases.revenant(peer_id, semaphore, amount, active, max, valid_until)
+            // By passing None as max rather than the value obtained above, we opt out checking the
+            // semaphore full count and allow exceeding it. 
+            let max = None;
+            leases.add(peer_id, semaphore, amount, max, valid_until);
+            warn!("Revenat peer {} with active leases returned.", peer_id);
         }
         Ok(())
     }

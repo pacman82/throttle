@@ -69,23 +69,31 @@ impl Leases {
     /// Creates a new unique peer id and adds it to the ledger. If the count of the semaphore is
     /// high enough, the lease is going to be active, otherwise it is pending.
     ///
+    /// # Parameters
+    ///
+    /// * `peer_id`: Should this be None, a new peer_id is going to be generated,
+    ///              otherwise the provided one is used.
+    /// * `max`: If set to `None` the new leasel are always going to be active. This is
+    ///          useful to handle revenat peers with active leaves. If a value is set a
+    ///          check is performed and the lease are only going to be active, if it
+    ///          would not exceed the full counts of the involved semaphores.
+    ///
     /// # Return
     ///
-    /// First element indicates wether lease is active, or not.
-    /// Second element is the peer id.
+    /// Returns `true` if, and only if all leases of the peer are active.
     pub fn add(
         &mut self,
+        peer_id: u64,
         semaphore: &str,
         amount: u32,
-        max: i64,
+        max: Option<i64>,
         valid_until: Instant,
-    ) -> (bool, u64) {
+    ) -> bool {
         let amount = amount as i64;
 
-        // Generate random numbers until we get a new unique one.
-        let peer_id = self.new_unique_peer_id();
-
-        let active = self.count(semaphore) + amount <= max;
+        let active = max
+            .map(|max| self.count(semaphore) + amount <= max)
+            .unwrap_or(true);
 
         let old = self.ledger.insert(
             peer_id,
@@ -98,7 +106,7 @@ impl Leases {
         );
         // There should not be any preexisting entry with this id
         debug_assert!(old.is_none());
-        (active, peer_id)
+        active
     }
 
     /// Aggregated count of active leases for the semaphore
@@ -162,33 +170,6 @@ impl Leases {
         }
     }
 
-    /// Inserts a revenant with a predefined lease, back into bookeeping. All the attributes are
-    /// going to be passed on, to the new instance, execpt `active` may turn from `false` to true,
-    /// if the count allows it.
-    pub fn revenant(
-        &mut self,
-        peer_id: u64,
-        semaphore: &str,
-        amount: u32,
-        active: bool,
-        max: i64,
-        valid_until: Instant,
-    ) {
-        let amount = amount as i64;
-        let prev = self.ledger.insert(
-            peer_id,
-            Peer {
-                // A previously active revenant is going to be inserted as active, even if it means
-                // overbooking the semaphore.
-                active: active || self.count(semaphore) + amount <= max,
-                semaphore: semaphore.to_owned(),
-                amount,
-                valid_until,
-            },
-        );
-        debug_assert!(prev.is_none())
-    }
-
     /// Fills counts with the current accumulated counts for each semaphore. One entry for each
     /// semaphore must already be present in the hash map. Otherwise this method panics.
     pub fn fill_counts(&self, counts: &mut HashMap<String, Counts>) {
@@ -198,7 +179,7 @@ impl Leases {
     }
 
     /// Generates a random new peer id which does not collide with any preexisting
-    fn new_unique_peer_id(&self) -> u64 {
+    pub fn new_unique_peer_id(&self) -> u64 {
         loop {
             let candidate = random();
             if self.ledger.get(&candidate).is_none() {
