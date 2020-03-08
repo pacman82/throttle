@@ -98,7 +98,7 @@ impl State {
         num_removed
     }
 
-    pub fn wait_for_admission(
+    pub fn block_until_acquired(
         &self,
         lease_id: u64,
         expires_in: Duration,
@@ -106,10 +106,15 @@ impl State {
         amount: u32,
         timeout: Duration,
     ) -> Result<bool, Error> {
+        let max = *self
+            .semaphores
+            .get(semaphore)
+            .ok_or(Error::UnknownSemaphore)?;
         let mut leases = self.leases.lock().unwrap();
         let start = Instant::now();
         let valid_until = start + expires_in;
         leases.update(lease_id, semaphore, amount, false, valid_until);
+        leases.resolve_pending(semaphore, max);
         loop {
             break match leases.has_pending(lease_id) {
                 None => {

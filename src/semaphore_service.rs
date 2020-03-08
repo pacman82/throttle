@@ -101,7 +101,7 @@ async fn wait_for_admission(
     let expires_in = body.expires_in;
     if let Some((semaphore, amount)) = body.pending() {
         state
-            .wait_for_admission(lease_id, expires_in, semaphore, amount, timeout)
+            .block_until_acquired(lease_id, expires_in, semaphore, amount, timeout)
             .map(Json)
     } else {
         Ok(Json(true))
