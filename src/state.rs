@@ -148,10 +148,23 @@ impl State {
         }
     }
 
-    pub fn update(&self, lease_id: u64, semaphore: &str, amount: u32, expires_in: Duration) {
+    pub fn update(
+        &self,
+        lease_id: u64,
+        semaphore: &str,
+        amount: u32,
+        expires_in: Duration,
+    ) -> Result<(), Error> {
+        // Assert semaphore exists. We want to give the client an error and also do not want to
+        // allow any Unknown Semaphore into leases configuration.
+        let _max = self
+            .semaphores
+            .get(semaphore)
+            .ok_or(Error::UnknownSemaphore)?;
         let mut leases = self.leases.lock().unwrap();
         let valid_until = Instant::now() + expires_in;
         leases.update(lease_id, semaphore, amount, true, valid_until);
+        Ok(())
     }
 
     pub fn remainder(&self, semaphore: &str) -> Result<i64, Error> {

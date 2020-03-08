@@ -277,3 +277,29 @@ def test_try_lock():
         with pytest.raises(Timeout):
             with lock(client, "A", timeout=timedelta(seconds=1)):
                 pass
+
+
+def test_put_unknown_semaphore():
+    """
+    An active revenant of an unknown semaphore should throw an exception.
+    """
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        l = client.acquire("A")
+    # Restart Server without "A"
+    with throttle_client(b"[semaphores]") as client:
+        with pytest.raises(Exception, match="Unknown semaphore"):
+            client.heartbeat(l)
+
+
+def test_block_on_unknown_semaphore():
+    """
+    A pending revenant of an unknown semaphore should throw an exception.
+    """
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        # Only take first, so second one blocks
+        _ = client.acquire("A")
+        l = client.acquire("A")
+    # Restart Server without "A"
+    with throttle_client(b"[semaphores]") as client:
+        with pytest.raises(Exception, match="Unknown semaphore"):
+            client.wait_for_admission(l, block_for=timedelta(seconds=1))

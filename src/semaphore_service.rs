@@ -86,7 +86,7 @@ struct MaxTimeout {
 
 /// Wait for a ticket to be promoted to a lease
 #[post("/leases/{id}/wait_on_admission")]
-async fn wait_for_admission(
+async fn block_until_acquired(
     path: Path<u64>,
     query: Query<MaxTimeout>,
     body: Json<PendingAdmissions>,
@@ -146,7 +146,7 @@ async fn put_lease(
     let lease_id = *path;
     if let Some((semaphore, amount)) = body.active() {
         debug!("Received heartbeat for {}", lease_id);
-        state.update(lease_id, semaphore, amount, body.expires_in);
+        state.update(lease_id, semaphore, amount, body.expires_in)?;
     } else {
         warn!("Empty heartbeat (no active leases) for {}", lease_id);
     }
