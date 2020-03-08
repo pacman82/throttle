@@ -66,14 +66,15 @@ impl Leases {
     }
 
     /// Creates a new unique lease id and adds it to the ledger. If the count of the semaphore is
-    /// high enough, the lease is going to be active, otherwise it is pending.Leases
+    /// high enough, the lease is going to be active, otherwise it is pending.
     ///
     /// # Return
+    ///
     /// First element indicates wether lease is active, or not.
     /// Second element is the lease id.
     pub fn add(
         &mut self,
-        resource: &str,
+        semaphore: &str,
         amount: u32,
         max: i64,
         valid_until: Instant,
@@ -88,12 +89,12 @@ impl Leases {
             }
         };
 
-        let active = self.count(resource) + amount <= max;
+        let active = self.count(semaphore) + amount <= max;
 
         let old = self.ledger.insert(
             lease_id,
             Lease {
-                semaphore: resource.to_owned(),
+                semaphore: semaphore.to_owned(),
                 active,
                 amount,
                 valid_until,
@@ -151,26 +152,45 @@ impl Leases {
         before - after
     }
 
-    /// Updates the timestamp of an existing lease. Does not perform a consistency check with a
-    /// preexisting lease, but may insert a revenant (i.e. a previously forgotten lease) back into
-    /// bookeeping.
-    pub fn update(
+    /// Called to increase the timestamp of a lease to prevent it from expiring.
+    ///
+    /// # Return
+    ///
+    /// Should the `lease_id` been found `true` returned. `false` otherwise.
+    pub fn update_valid_until(&mut self, lease_id: u64, valid_until: Instant) -> bool {
+        if let Some(lease) = self.ledger.get_mut(&lease_id) {
+            lease.valid_until = valid_until;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Inserts a revenant with a predefined lease, back into bookeeping. All the attributes are
+    /// going to be passed on, to the new instance, execpt `active` may turn from `false` to true,
+    /// if the count allows it.
+    pub fn revenant(
         &mut self,
         lease_id: u64,
         semaphore: &str,
         amount: u32,
         active: bool,
+        max: i64,
         valid_until: Instant,
     ) {
-        self.ledger
-            .entry(lease_id)
-            .and_modify(|lease| lease.valid_until = valid_until)
-            .or_insert(Lease {
-                active,
+        let amount = amount as i64;
+        let prev = self.ledger.insert(
+            lease_id,
+            Lease {
+                // A previously active revenant is going to be inserted as active, even if it means
+                // overbooking the semaphore.
+                active: active || self.count(semaphore) + amount <= max,
                 semaphore: semaphore.to_owned(),
-                amount: amount as i64,
+                amount,
                 valid_until,
-            });
+            },
+        );
+        debug_assert!(prev.is_none())
     }
 
     /// Fills counts with the current accumulated counts for each semaphore. One entry for each

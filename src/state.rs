@@ -14,7 +14,8 @@ use std::{
 
 /// State of the Semaphore service, shared between threads
 pub struct State {
-    /// Bookeeping for leases, protected by mutex.
+    /// Bookeeping for leases, protected by mutex so multiple threads (i.e. requests) can manipulate
+    /// it. May not contain any leases not configured in semaphores.
     leases: Mutex<Leases>,
     /// Condition variable. Notify is called thenever a lease is released, so it's suitable for
     /// blocking on request to pending leases.
@@ -106,15 +107,18 @@ impl State {
         amount: u32,
         timeout: Duration,
     ) -> Result<bool, Error> {
-        let max = *self
-            .semaphores
-            .get(semaphore)
-            .ok_or(Error::UnknownSemaphore)?;
         let mut leases = self.leases.lock().unwrap();
         let start = Instant::now();
         let valid_until = start + expires_in;
-        leases.update(lease_id, semaphore, amount, false, valid_until);
-        leases.resolve_pending(semaphore, max);
+        if !leases.update_valid_until(lease_id, valid_until) {
+            warn!("Revenant of pending lease. => Reacquire");
+            let max = *self
+                .semaphores
+                .get(semaphore)
+                .ok_or(Error::UnknownSemaphore)?;
+            let active = false;
+            leases.revenant(lease_id, semaphore, amount, active, max, valid_until)
+        }
         loop {
             break match leases.has_pending(lease_id) {
                 None => {
@@ -148,22 +152,26 @@ impl State {
         }
     }
 
-    pub fn update(
+    pub fn heartbeat_to_active_lease(
         &self,
         lease_id: u64,
         semaphore: &str,
         amount: u32,
         expires_in: Duration,
     ) -> Result<(), Error> {
-        // Assert semaphore exists. We want to give the client an error and also do not want to
-        // allow any Unknown Semaphore into leases configuration.
-        let _max = self
-            .semaphores
-            .get(semaphore)
-            .ok_or(Error::UnknownSemaphore)?;
         let mut leases = self.leases.lock().unwrap();
+        // Determine valid_until after acquiring lock, in case we block for a long time.
         let valid_until = Instant::now() + expires_in;
-        leases.update(lease_id, semaphore, amount, true, valid_until);
+        if !leases.update_valid_until(lease_id, valid_until) {
+            // Assert semaphore exists. We want to give the client an error and also do not want to
+            // allow any Unknown Semaphore into leases configuration.
+            let max = *self
+                .semaphores
+                .get(semaphore)
+                .ok_or(Error::UnknownSemaphore)?;
+            let active = false;
+            leases.revenant(lease_id, semaphore, amount, active, max, valid_until)
+        }
         Ok(())
     }
 

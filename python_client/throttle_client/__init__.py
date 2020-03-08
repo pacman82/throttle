@@ -106,7 +106,7 @@ class Client:
 
         response = requests.post(
             self.base_url
-            + f"/leases/{lease.id}/wait_on_admission?timeout_ms={block_for_ms}",
+            + f"/leases/{lease.id}/block_until_acquired?timeout_ms={block_for_ms}",
             json={
                 "expires_in": "5min",
                 "active": lease.active,
