@@ -9,14 +9,21 @@ Work in progress.
 * Minimal Feature set (what's there works though)
 * Not yet optimized
 * Unstable interfaces
-* Server builds and runs on Windows, Linux, and OS-X
-* Python Client available
 
 ## Motivation
 
 Throttle provides semaphores as a service via an http interface. As the name indicates the primary usecase in mind is to throttle a systems access to a resource, by having the elements of that system to ask for permission (i.e. acquiring a lease) first. If the system consists of several process running on different machines, or virtual machines in the same Network, throttle might fit the bill.
 
 Throttle aims to be easy to operate, wellbehaved in edege cases and works without a persistence backend.
+
+## Features
+
+* Server builds and runs on Windows, Linux, and OS-X
+* Python Client available
+* Locks expire to prevent leaking semaphore count due to Network errors or client crashes
+* Locks can be kept indefinetly by sending heartbeats of the server.
+* No persistence backend required
+  * Server recovers state from heartbeats in case of reboot
 
 ## Usage
 
