@@ -76,8 +76,8 @@ class Client:
             self.expiration_time = timedelta(minutes=15)
         self.base_url = base_url
 
-    # Don't back off on timeouts. We might drain the semaphores by accident.
-    @backoff.on_exception(backoff.expo, requests.ConnectionError)
+    # # Don't back off on timeouts. We might drain the semaphores by accident.
+    # @backoff.on_exception(backoff.expo, requests.ConnectionError)
     def acquire(
         self, semaphore: str, count: int = 1, expires_in: timedelta = None
     ) -> Peer:
