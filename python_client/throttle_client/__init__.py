@@ -1,5 +1,4 @@
 import requests
-import backoff
 import json
 from typing import Dict, Optional
 from contextlib import contextmanager
