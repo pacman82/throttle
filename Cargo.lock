@@ -1393,7 +1393,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "throttle"
+name = "throttle-server"
 version = "0.1.0"
 dependencies = [
  "actix-rt 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",

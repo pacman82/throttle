@@ -1,10 +1,9 @@
 [package]
-name = "throttle"
+name = "throttle-server"
 version = "0.1.0"
-authors = ["Markus Klein <markus-klein@live.de>"]
+authors = ["Markus Klein"]
 edition = "2018"
 license = "MIT"
-publish = false
 
 # Link to github repository
 repository = "https://github.com/pacman82/throttle.git"
@@ -16,7 +15,7 @@ description = "Provide semaphores for distributed systems via an http interface"
 # This is a list of up to five keywords that describe this crate. Keywords
 # are searchable on crates.io, and you may choose any words that would
 # help someone find this crate.
-keywords = ["semaphore", "http", "service"]
+keywords = ["semaphore", "http"]
 
 # This is a list of up to five categories where this crate would fit.
 # Categories are a fixed list available at crates.io/category_slugs, and
@@ -27,6 +26,17 @@ categories = ["concurrency"]
 # The contents of this file are stored and indexed in the registry.
 # crates.io will render this file and place the result on the crate's page.
 readme = "README.md"
+
+# A crate can have more than one binary, hence the `[[]]` double brackets to
+# indicate a toml array.
+[[bin]]
+# Name binary throttle. Crate name should have been `throttle`, alas it had
+# already been taken.
+name = "throttle"
+
+# Since there might be more than one binary, we need to specify which one we
+# are referencing
+path = "src/main.rs"
 
 [dependencies]
 actix-web = "2.0.0"
@@ -47,3 +57,9 @@ humantime-serde = "1.0.0"
 [dependencies.log]
 version = "0.4.8"
 features = ["serde"]
+
+[profile.release]
+# Panics should only be caused by logic errors and are considered bugs
+panic = 'abort'
+# Link time Optimization
+lto = true
