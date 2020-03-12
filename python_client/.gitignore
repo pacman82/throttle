@@ -1,3 +1,5 @@
-throttle_client.egg-info
+/throttle_client.egg-info/
+/build/
+/dist/
 **/.pytest_cache
 **/__pycache__/
