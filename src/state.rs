@@ -63,8 +63,6 @@ impl State {
         expires_in: Duration,
     ) -> Result<(u64, bool), Error> {
         if let Some(&max) = self.semaphores.get(semaphore) {
-            let mut leases = self.leases.lock().unwrap();
-            let valid_until = Instant::now() + expires_in;
             // Return early if lease could never be active, no matter how long we wait
             if max < amount as i64 {
                 return Err(Error::ForeverPending {
@@ -72,6 +70,8 @@ impl State {
                     max,
                 });
             }
+            let mut leases = self.leases.lock().unwrap();
+            let valid_until = Instant::now() + expires_in;
             // This is a new peer. Let's make a new `peer_id` to remember it by.
             let peer_id = leases.new_unique_peer_id();
             let active = leases.add(peer_id, semaphore, amount, Some(max), valid_until);
