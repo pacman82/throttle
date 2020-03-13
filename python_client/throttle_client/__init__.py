@@ -1,6 +1,6 @@
 import requests
 import json
-from typing import Dict, Optional
+from typing import Dict, Optional, Iterator
 from contextlib import contextmanager
 from threading import Event, Thread
 from datetime import timedelta
@@ -67,16 +67,11 @@ class Client:
     """A Client to lease semaphores from a Throttle service."""
 
     def __init__(
-        self, base_url: str, expiration_time: timedelta = None,
+        self, base_url: str, expiration_time: timedelta = timedelta(minutes=15),
     ):
-        if expiration_time:
-            self.expiration_time = expiration_time
-        else:
-            self.expiration_time = timedelta(minutes=15)
+        self.expiration_time = expiration_time
         self.base_url = base_url
 
-    # # Don't back off on timeouts. We might drain the semaphores by accident.
-    # @backoff.on_exception(backoff.expo, requests.ConnectionError)
     def acquire(
         self, semaphore: str, count: int = 1, expires_in: timedelta = None
     ) -> Peer:
@@ -92,6 +87,9 @@ class Client:
             return Peer(id=response.text, active={semaphore: count})
         elif response.status_code == 202:  # Accepted. Ticket pending.
             return Peer(id=response.text, pending={semaphore: count})
+        else:
+            # This should never be reached
+            raise RuntimeError("Unexpected response from Server")
 
     def block_until_acquired(self, peer: Peer, block_for: timedelta) -> bool:
         """
@@ -225,7 +223,7 @@ def lock(
     count: int = 1,
     heartbeat_interval: timedelta = timedelta(minutes=5),
     timeout: Optional[timedelta] = None,
-) -> Peer:
+) -> Iterator[Peer]:
     """
     Acquires a lock to a semaphore
 
@@ -240,20 +238,23 @@ def lock(
     # we started to acquire the lock
     start = time()
     while peer.has_pending():
-        # The time between now and start is the amount of time we are waiting for the
-        # lock.
-        now = time()
-        passed = timedelta(seconds=now - start)
-        # Figure out if the lock timed out
-        if timeout < passed:
-            raise Timeout
-        # If we time out in a timespan < 5 seconds, we want to block only for the time
-        # until the timeout.
-        elif timeout - passed < timedelta(seconds=5):
-            block_for = timeout - passed
+        if timeout:
+            # The time between now and start is the amount of time we are waiting for the
+            # lock.
+            now = time()
+            passed = timedelta(seconds=now - start)
+            # Figure out if the lock timed out
+            if timeout < passed:
+                raise Timeout
+            # If we time out in a timespan < 5 seconds, we want to block only for the time
+            # until the timeout.
+            elif timeout - passed < timedelta(seconds=5):
+                block_for = timeout - passed
+            else:
+                # Even if the timeout is langer than 5 seconds, block only for that long,
+                # since we do not want to keep the http request open for to long.
+                block_for = timedelta(seconds=5)
         else:
-            # Even if the timeout is langer than 5 seconds, block only for that long,
-            # since we do not want to keep the http request open for to long.
             block_for = timedelta(seconds=5)
         try:
             _ = client.block_until_acquired(peer, block_for)
