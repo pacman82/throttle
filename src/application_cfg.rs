@@ -1,7 +1,5 @@
 use crate::logging::LoggingConfig;
 use serde::Deserialize;
-/// Stratosphere provides support for a configuartion file named `application.cfg`. This module sets
-/// parsing it into an `ApplicationCfg` instance.
 use std::{
     collections::HashMap,
     fs::File,
@@ -12,7 +10,8 @@ use std::{
 
 pub type Semaphores = HashMap<String, i64>;
 
-/// Representation of the `application.cfg` file passed to the service from stratosphere
+/// Representation of the configuration file (usually `throttle.toml`) passed to ther server at
+/// startup.
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ApplicationCfg {
     #[serde(

@@ -2,6 +2,12 @@
 
 Semaphores for distributed systems.
 
+## Motivation
+
+Throttle provides semaphores as a service via an http interface. As the name indicates the primary usecase in mind is to throttle a systems access to a resource, by having the elements of that system to ask for permission (i.e. acquiring a lease) first. If the system consists of several process running on different machines, or virtual machines in the same Network, throttle might fit the bill.
+
+Throttle aims to be easy to operate, wellbehaved in edege cases and works without a persistence backend.
+
 ## Warning
 
 Work in progress.
@@ -9,12 +15,6 @@ Work in progress.
 * Minimal Feature set (what's there works though)
 * Not yet optimized
 * Unstable interfaces
-
-## Motivation
-
-Throttle provides semaphores as a service via an http interface. As the name indicates the primary usecase in mind is to throttle a systems access to a resource, by having the elements of that system to ask for permission (i.e. acquiring a lease) first. If the system consists of several process running on different machines, or virtual machines in the same Network, throttle might fit the bill.
-
-Throttle aims to be easy to operate, wellbehaved in edege cases and works without a persistence backend.
 
 ## Features
 
@@ -124,6 +124,24 @@ with lock(c, "A"):
     # ...
 
 # A is released at the end of with block
+```
+
+## Installation
+
+### Server
+
+The server binary is published to [crates.io](https://crates.io) and thus installable via cargo.
+
+```bash
+cargo install throttle-server
+```
+
+### Python Client
+
+Python client is publish to [PyPi](https://pypi.org) and can be installed using pip.
+
+```bash
+pip install throttle-client
 ```
 
 ## Local build and test setup

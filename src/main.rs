@@ -1,4 +1,13 @@
-//! A template for webservices written with Actix intended to be executed within stratosphere.
+//! # Provide semaphores for distributed systems via an http interface.
+//! 
+//! ## Endpoints
+//! 
+//! * `/`: Prints a plain text greeting message, so users now what kind of server is running.
+//! * `/health`: Always returns 200 ok
+//! * `/metrics`: Endpoint for prometheus metrics
+//! * `/favicon`: Returns throttle Icon
+//! 
+//! Http interface for acquiring and releasing semaphores is not stable yet.
 #[macro_use]
 extern crate prometheus;
 use actix_web::{get, web, web::Data, App, HttpServer};
