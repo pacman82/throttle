@@ -1,6 +1,6 @@
 [package]
 name = "throttle-server"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Markus Klein"]
 edition = "2018"
 license = "MIT"
@@ -47,7 +47,7 @@ lazy_static = "1.4.0"
 gelf = "0.5.0"
 serde = "1.0.104"
 serde_json = "1.0.48"
-failure = "0.1.6"
+failure = "0.1.7"
 actix-rt = "1.0.0"
 toml = "0.5.6"
 rand = "0.7.3"
