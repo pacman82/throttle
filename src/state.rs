@@ -126,7 +126,7 @@ impl State {
         loop {
             break match leases.has_pending(peer_id) {
                 None => {
-                    // TODO: currently not reachable due to insertion of revenants
+                    // This code path can be reached if a peer expires while waiting for a lease.
                     warn!(
                         "Unknown peer blocking to acquire lease. Peer id: {}",
                         peer_id
