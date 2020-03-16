@@ -10,3 +10,8 @@ Initial Release
 -----
 
 Fixes a type error in the python client occuring then checking the timeout for a pending lock if the timeout is set to `None`.
+
+0.1.2
+-----
+
+Fix: pip installing python client now also installs `requests` dependencies, which has been missing from `install_requires`.
