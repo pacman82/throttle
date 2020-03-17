@@ -165,7 +165,6 @@ pip install throttle-client
 
   ```bash
   cd python_client
-  pip install -r requirements.txt
   pip install -r test-requirements.txt
   pip install -e .
   pytest
