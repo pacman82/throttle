@@ -41,6 +41,7 @@ def _raise_for_status(response: requests.Response):
     Wrapper around Response.raise_for_status, translating domain specific errors
     """
 
+    # Bad Request
     if response.status_code == 400:
         # Since this is the client code which made the erroneous request, it is
         # supposedly caused by wrong arguments passed to this code by the
@@ -48,6 +49,8 @@ def _raise_for_status(response: requests.Response):
         # developer can act on it.
         raise ValueError(response.text)
     # Conflict
+    #
+    # This is returned by the server e.g. if requesting a lock with a count higher than max.
     elif response.status_code == 409:
         raise ValueError(response.text)
     else:
@@ -139,13 +142,8 @@ class Client:
         This is important to unblock other clients which may be waiting for the
         semaphore remainder to increase.
         """
-        try:
-            response = requests.delete(self.base_url + f"/peers/{peer.id}")
-            _raise_for_status(response)
-        except requests.ConnectionError:
-            # Let's not wait for the server. This lease is a case for the
-            # litter collection.
-            pass
+        response = requests.delete(self.base_url + f"/peers/{peer.id}")
+        _raise_for_status(response)
 
     def remove_expired(self) -> int:
         """
@@ -265,8 +263,15 @@ def lock(
         except requests.Timeout:
             pass
 
+    # Yield and have the heartbeat in an extra thread, during it being active.
     heartbeat = Heartbeat(client, peer, heartbeat_interval)
     heartbeat.start()
     yield peer
     heartbeat.stop()
-    client.release(peer)
+
+    try:
+        client.release(peer)
+    except requests.ConnectionError:
+        # Let's not wait for the server. This lease is a case for the
+        # litter collection.
+        pass
