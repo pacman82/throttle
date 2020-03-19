@@ -15,3 +15,8 @@ Fixes a type error in the python client occuring then checking the timeout for a
 -----
 
 Fix: pip installing python client now also installs `requests` dependencies, which has been missing from `install_requires`.
+
+0.1.3 (upcoming)
+-----------------
+
+* Python Client: `lock` will no longer throw in case of a timeout during the release of the semaphore.

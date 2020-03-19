@@ -193,15 +193,24 @@ def test_put_unknown_semaphore():
             client.heartbeat(l)
 
 
-def test_block_on_unknown_semaphore():
-    """
-    A pending revenant of an unknown semaphore should throw an exception.
-    """
-    with throttle_client(b"[semaphores]\nA=1") as client:
-        # Only take first, so second one blocks
-        _ = client.acquire("A")
-        l = client.acquire("A")
-    # Restart Server without "A"
-    with throttle_client(b"[semaphores]") as client:
-        with pytest.raises(Exception, match="Unknown semaphore"):
-            client.block_until_acquired(l, block_for=timedelta(seconds=1))
+# Sadly it seems requests doesn't care much for my delete timeout in the release of the lock
+
+# def test_timeout_during_release():
+#     """
+#     Test ensuring http timeouts during a delete operation are ignored.
+#     """
+
+#     # There is room for improvement here. We could fire the request asynchronously and not care
+#     # for the response
+#     def freeze_server():
+#         client.freeze(timedelta(seconds=10))
+
+#     with throttle_client(b"[semaphores]\nA=1") as client:
+#         with lock(client, "A", heartbeat_interval=None):
+#             t = Thread(target=freeze_server)
+#             t.start()
+#             # Give freeze request time to pass through
+#             sleep(1.0)
+#         # If we get to this point without throwing the test is considered successful
+#         t.join()
+#         assert True

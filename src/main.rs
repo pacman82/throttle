@@ -86,6 +86,7 @@ async fn main() -> io::Result<()> {
             .service(semaphore_service::block_until_acquired)
             .service(semaphore_service::remove_expired)
             .service(semaphore_service::put_peer)
+            .service(semaphore_service::freeze)
             .default_service(
                 // 404 for GET requests
                 web::resource("").route(web::get().to(not_found::not_found)),
