@@ -1,10 +1,13 @@
 import requests
 import json
+
 from typing import Dict, Optional, Iterator
 from contextlib import contextmanager
 from threading import Event, Thread
 from datetime import timedelta
 from time import time, sleep
+
+from .status_code import is_recoverable as _is_recoverable
 
 
 class Peer:
@@ -72,6 +75,11 @@ class Client:
     def __init__(
         self, base_url: str, expiration_time: timedelta = timedelta(minutes=15),
     ):
+        """
+        * `base_url`: Url to the throttle server. E.g. https://my_throttle_instance:8000
+        * `expiration_time`: If the heartbeat does not keep the leases of this peer alive they are
+        going to be released anyway, after this timeout.
+        """
         self.expiration_time = expiration_time
         self.base_url = base_url
 
@@ -135,6 +143,18 @@ class Client:
 
         return int(response.text)
 
+    def freeze(self, time: timedelta):
+        """
+        Freezes the server state for specified amount of time.
+
+        Yes, it propably is a bad idea to call this in production code. Yet it is useful for
+        testing.
+        """
+        response = requests.post(
+            self.base_url + f"/freeze?for={_format_timedelta(time)}"
+        )
+        _raise_for_status(response)
+
     def release(self, peer: Peer):
         """
         Deletes the peer on the throttle server.
@@ -197,6 +217,7 @@ class Heartbeat:
         self.thread.join()
 
     def _run(self):
+        # TODO: self.cancel.wait(self.interval_sec)
         while self.lease.has_active() and not self.cancel.is_set():
             try:
                 self.client.heartbeat(self.lease)
@@ -219,17 +240,20 @@ def lock(
     client: Client,
     semaphore: str,
     count: int = 1,
-    heartbeat_interval: timedelta = timedelta(minutes=5),
+    heartbeat_interval: Optional[timedelta] = timedelta(minutes=5),
     timeout: Optional[timedelta] = None,
 ) -> Iterator[Peer]:
     """
     Acquires a lock to a semaphore
 
-    Keyword arguments:
-    count -- Lock count. May not exceed the full count of the semaphore
-    timeout -- Leaving this at None, let's the lock block until the lock can be
-               acquired. Should a timeou be specified the call is going to raise a
-               Timeout exception should it exceed before the lock is acquired.
+    ## Keyword arguments:
+
+    * `count`:  Lock count. May not exceed the full count of the semaphore
+    * `timeout`: Leaving this at None, let's the lock block until the lock can be acquired. Should a
+    timeout be specified the call is going to raise a `Timeout` exception should it exceed before
+    the lock is acquired.
+    * `heartbeat_interval`: Default interval for reneval of peer. Setting it to `None` will
+    deactivate the heartbeat.
     """
     peer = client.acquire(semaphore, count=count)
     # Remember this moment in order to figure out later how much time has passed since
@@ -264,13 +288,27 @@ def lock(
             pass
 
     # Yield and have the heartbeat in an extra thread, during it being active.
-    heartbeat = Heartbeat(client, peer, heartbeat_interval)
-    heartbeat.start()
+    if heartbeat_interval is not None:
+        heartbeat = Heartbeat(client, peer, heartbeat_interval)
+        heartbeat.start()
     yield peer
-    heartbeat.stop()
+    if heartbeat_interval is not None:
+        heartbeat.stop()
 
     try:
         client.release(peer)
+    except requests.HTTPError as e:
+        if _is_recoverable(e.response.status_code):
+            # Let's just ignore this error. The litter collection is going to take care of it.
+            #
+            # If this behaviour should ever be found insufficient, at least 409 timeout should not
+            # be repeated. Likely the request will go through, yet the timeout is due to the locking
+            # of internal server state, and more requests are only going to add to the problem.
+            pass
+        else:
+            # Ok, this seems to be a logic error not caused by temporary issues, maybe the user
+            # should know about this
+            raise e
     except requests.ConnectionError:
         # Let's not wait for the server. This lease is a case for the
         # litter collection.

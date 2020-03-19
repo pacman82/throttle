@@ -7,6 +7,8 @@ from datetime import timedelta
 from threading import Thread
 from time import sleep
 
+import pytest
+
 from . import throttle_client
 
 
@@ -35,6 +37,7 @@ def test_removal_of_expired_leases():
         sleep(2)
         client.remove_expired()
         assert client.remainder("A") == 1  # Semaphore should be free again
+
 
 def test_lock_blocks():
     """
@@ -70,3 +73,17 @@ def test_pending_leases_dont_expire():
         # The initial timeout of one second should have been expired by now,
         # yet nothing is removed
         assert client.remove_expired() == 0
+
+
+def test_block_on_unknown_semaphore():
+    """
+    A pending revenant of an unknown semaphore should throw an exception.
+    """
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        # Only take first, so second one blocks
+        _ = client.acquire("A")
+        l = client.acquire("A")
+    # Restart Server without "A"
+    with throttle_client(b"[semaphores]") as client:
+        with pytest.raises(Exception, match="Unknown semaphore"):
+            client.block_until_acquired(l, block_for=timedelta(seconds=1))

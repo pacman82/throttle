@@ -237,6 +237,16 @@ impl State {
             PENDING.with_label_values(&[&semaphore]).set(count.pending);
         }
     }
+
+    /// Lock internal mutex for specified amount of time, and thus preventing any changes. No use in
+    /// production, but useful during testing to emulate scenarios there the server is stressed and
+    /// to provoke timeouts.
+    pub fn freeze(&self, time: Duration) {
+        let _lock = self.leases.lock();
+        warn!("Frozen for {} seconds", time.as_secs_f64());
+        std::thread::sleep(time);
+        warn!("Unfrozen");
+    }
 }
 
 lazy_static! {
