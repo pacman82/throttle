@@ -3,36 +3,20 @@ def is_recoverable(status_code: int) -> bool:
     True if the passed status_code hints at a recoverable server error. I.e. The same request might
     be successful at a later point in time.
     """
-    if status_code < 400:
-        # Not an error. Let's classify it as recoverable using our definition provided above.
-        return True
-    elif status_code >= 400 and status_code <= 407:
-        return False
-    elif status_code == 408:
-        # Request Timeout
-        return True
-    elif status_code >= 409 and status_code <= 431:
-        return False
-    elif status_code == 444:
-        # Connection Closed Without Response
-        return True
-    elif status_code == 451:
-        # Unavailable For Legal Reasons
-        return False
-    elif status_code == 499:
-        # Client Closed Request
-        return True
-    elif status_code == 500:
-        # Internal Server Error
-        return True
-    elif status_code >= 501 and status_code <= 502:
-        return False
-    elif status_code >= 503 and status_code <= 504:
-        return True
-    elif status_code >= 505 and status_code <= 511:
-        return False
-    elif status_code == 599:
-        # Network Connection timeout
-        return True
-    else:
-        raise ValueError(f"Invalid http status code {status_code}")
+    if status_code % 100 == 4:
+        #Request Timeout, Connection Closed Without Response, Client Closed Request
+        if status_code in [408, 444, 499]:
+            return True
+        else:
+            # If the error is on client side we shouldn't just repeat it, for the most part.
+            return False
+    elif status_code % 100 == 5:
+        # Not implemented, HTTP Version not supported, Variant also negoiates, Insufficient Storage,
+        # Loop Detected, Not Extended, Network Authentication Required
+        if status_code in [501, 505, 506, 507, 508, 510,511]:
+            return False
+        else:
+            # In general server errors may be fixed later
+            return True
+    raise ValueError(f"Invalid http status code {status_code}")
+
