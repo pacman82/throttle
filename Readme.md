@@ -6,7 +6,7 @@ Semaphores for distributed systems.
 
 Throttle provides semaphores as a service via an http interface. As the name indicates the primary usecase in mind is to throttle a systems access to a resource, by having the elements of that system to ask for permission (i.e. acquiring a lease) first. If the system consists of several process running on different machines, or virtual machines in the same Network, throttle might fit the bill.
 
-Throttle aims to be easy to operate, wellbehaved in edege cases and works without a persistence backend.
+Throttle aims to be easy to operate, well-behaved in edge cases and works without a persistence backend.
 
 ## Warning
 
