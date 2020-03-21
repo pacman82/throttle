@@ -53,6 +53,7 @@ toml = "0.5.6"
 rand = "0.7.3"
 env_logger = "0.7.1"
 humantime-serde = "1.0.0"
+thiserror = "1.0.12"
 
 [dependencies.log]
 version = "0.4.8"
