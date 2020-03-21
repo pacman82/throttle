@@ -1,13 +1,13 @@
 use crate::{
     application_cfg::Semaphores,
     leases::{Counts, Leases},
+    error::ThrottleError,
 };
 use lazy_static::lazy_static;
 use log::{debug, warn};
 use prometheus::IntGaugeVec;
 use std::{
     collections::HashMap,
-    fmt,
     sync::{Condvar, Mutex},
     time::{Duration, Instant},
 };
@@ -22,28 +22,6 @@ pub struct State {
     released: Condvar,
     /// All known semaphores and their full count
     semaphores: Semaphores,
-}
-
-#[derive(Debug)]
-pub enum Error {
-    UnknownSemaphore,
-    UnknownPeer,
-    ForeverPending { asked: i64, max: i64 },
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::UnknownSemaphore => write!(f, "Unknown semaphore"),
-            Error::UnknownPeer => write!(f, "Unknown peer"),
-            Error::ForeverPending { asked, max } => write!(
-                f,
-                "Acquiring lock would block forever. Lock askes for count {} yet full count is \
-                only {}.",
-                asked, max
-            ),
-        }
-    }
 }
 
 impl State {
@@ -61,11 +39,11 @@ impl State {
         semaphore: &str,
         amount: u32,
         expires_in: Duration,
-    ) -> Result<(u64, bool), Error> {
+    ) -> Result<(u64, bool), ThrottleError> {
         if let Some(&max) = self.semaphores.get(semaphore) {
             // Return early if lease could never be active, no matter how long we wait
             if max < amount as i64 {
-                return Err(Error::ForeverPending {
+                return Err(ThrottleError::ForeverPending {
                     asked: amount as i64,
                     max,
                 });
@@ -84,7 +62,7 @@ impl State {
             }
         } else {
             warn!("Unknown semaphore '{}' requested", semaphore);
-            Err(Error::UnknownSemaphore)
+            Err(ThrottleError::UnknownSemaphore)
         }
     }
 
@@ -108,7 +86,7 @@ impl State {
         semaphore: &str,
         amount: u32,
         timeout: Duration,
-    ) -> Result<bool, Error> {
+    ) -> Result<bool, ThrottleError> {
         let mut leases = self.leases.lock().unwrap();
         let start = Instant::now();
         let valid_until = start + expires_in;
@@ -116,7 +94,7 @@ impl State {
             let max = *self
                 .semaphores
                 .get(semaphore)
-                .ok_or(Error::UnknownSemaphore)?;
+                .ok_or(ThrottleError::UnknownSemaphore)?;
             let active = leases.add(peer_id, semaphore, amount, Some(max), valid_until);
             warn!(
                 "Revenant Peer {} with pending leases. Active: {}",
@@ -131,7 +109,7 @@ impl State {
                         "Unknown peer blocking to acquire lease. Peer id: {}",
                         peer_id
                     );
-                    Err(Error::UnknownPeer)
+                    Err(ThrottleError::UnknownPeer)
                 }
                 Some(true) => Ok(true),
                 Some(false) => {
@@ -163,7 +141,7 @@ impl State {
         semaphore: &str,
         amount: u32,
         expires_in: Duration,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ThrottleError> {
         let mut leases = self.leases.lock().unwrap();
         // Determine valid_until after acquiring lock, in case we block for a long time.
         let valid_until = Instant::now() + expires_in;
@@ -173,7 +151,7 @@ impl State {
             let _max = *self
                 .semaphores
                 .get(semaphore)
-                .ok_or(Error::UnknownSemaphore)?;
+                .ok_or(ThrottleError::UnknownSemaphore)?;
             // By passing None as max rather than the value obtained above, we opt out checking the
             // semaphore full count and allow exceeding it.
             let max = None;
@@ -183,14 +161,14 @@ impl State {
         Ok(())
     }
 
-    pub fn remainder(&self, semaphore: &str) -> Result<i64, Error> {
+    pub fn remainder(&self, semaphore: &str) -> Result<i64, ThrottleError> {
         if let Some(full_count) = self.semaphores.get(semaphore) {
             let leases = self.leases.lock().unwrap();
             let count = leases.count(&semaphore);
             Ok(full_count - count)
         } else {
             warn!("Unknown semaphore requested");
-            Err(Error::UnknownSemaphore)
+            Err(ThrottleError::UnknownSemaphore)
         }
     }
 

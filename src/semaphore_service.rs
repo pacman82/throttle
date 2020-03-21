@@ -3,7 +3,7 @@
 //! deserialize paramaters and serialize respones, or deciding on which HTTP methods to map the
 //! functions.
 
-use crate::state::{Error, State};
+use crate::{error::ThrottleError, state::State};
 use actix_web::{
     delete, get,
     http::StatusCode,
@@ -15,12 +15,12 @@ use log::{debug, warn};
 use serde::Deserialize;
 use std::{collections::HashMap, time::Duration};
 
-impl ResponseError for Error {
+impl ResponseError for ThrottleError {
     fn status_code(&self) -> StatusCode {
         match self {
-            Error::UnknownPeer => StatusCode::BAD_REQUEST,
-            Error::UnknownSemaphore => StatusCode::BAD_REQUEST,
-            Error::ForeverPending { .. } => StatusCode::CONFLICT,
+            ThrottleError::UnknownPeer => StatusCode::BAD_REQUEST,
+            ThrottleError::UnknownSemaphore => StatusCode::BAD_REQUEST,
+            ThrottleError::ForeverPending { .. } => StatusCode::CONFLICT,
         }
     }
 }
@@ -91,7 +91,7 @@ async fn block_until_acquired(
     query: Query<MaxTimeout>,
     body: Json<PendingLeases>,
     state: Data<State>,
-) -> Result<Json<bool>, Error> {
+) -> Result<Json<bool>, ThrottleError> {
     let lease_id = *path;
     let timeout = Duration::from_millis(query.timeout_ms.unwrap_or(0));
     debug!(
@@ -116,7 +116,7 @@ struct Remainder {
 
 /// Get the remainder of a semaphore
 #[get("/remainder")]
-async fn remainder(query: Query<Remainder>, state: Data<State>) -> Result<Json<i64>, Error> {
+async fn remainder(query: Query<Remainder>, state: Data<State>) -> Result<Json<i64>, ThrottleError> {
     state.remainder(&query.semaphore).map(Json)
 }
 
@@ -142,7 +142,7 @@ async fn put_peer(
     path: Path<u64>,
     body: Json<ActiveLeases>,
     state: Data<State>,
-) -> Result<&'static str, Error> {
+) -> Result<&'static str, ThrottleError> {
     let lease_id = *path;
     if let Some((semaphore, amount)) = body.active() {
         debug!("Received heartbeat for {}", lease_id);

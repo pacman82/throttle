@@ -28,6 +28,7 @@ mod metrics;
 mod not_found;
 mod semaphore_service;
 mod state;
+mod error;
 
 #[get("/")]
 async fn index() -> &'static str {
