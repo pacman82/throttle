@@ -18,5 +18,6 @@ def is_recoverable(status_code: int) -> bool:
         else:
             # In general server errors may be fixed later
             return True
-    raise ValueError(f"Invalid http status code {status_code}")
+    else:
+        raise ValueError(f"Not an Http status code indicating an error: {status_code}")
 
