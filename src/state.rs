@@ -1,7 +1,7 @@
 use crate::{
     application_cfg::Semaphores,
-    leases::{Counts, Leases},
     error::ThrottleError,
+    leases::{Counts, Leases},
 };
 use lazy_static::lazy_static;
 use log::{debug, warn};

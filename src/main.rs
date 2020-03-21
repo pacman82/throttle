@@ -1,12 +1,12 @@
 //! # Provide semaphores for distributed systems via an http interface.
-//! 
+//!
 //! ## Endpoints
-//! 
+//!
 //! * `/`: Prints a plain text greeting message, so users now what kind of server is running.
 //! * `/health`: Always returns 200 ok
 //! * `/metrics`: Endpoint for prometheus metrics
 //! * `/favicon`: Returns throttle Icon
-//! 
+//!
 //! Http interface for acquiring and releasing semaphores is not stable yet.
 #[macro_use]
 extern crate prometheus;
@@ -19,6 +19,7 @@ use crate::cli::Cli;
 
 mod application_cfg;
 mod cli;
+mod error;
 mod favicon;
 mod health;
 mod leases;
@@ -28,7 +29,6 @@ mod metrics;
 mod not_found;
 mod semaphore_service;
 mod state;
-mod error;
 
 #[get("/")]
 async fn index() -> &'static str {

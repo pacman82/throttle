@@ -7,7 +7,9 @@ pub enum ThrottleError {
     UnknownSemaphore,
     #[error("Unknown peer")]
     UnknownPeer,
-    #[error("Acquiring lock would block forever. Lock asks for count {asked:?} yet full count is \
-            only {max:?}.")]
+    #[error(
+        "Acquiring lock would block forever. Lock asks for count {asked:?} yet full count is only \
+        {max:?}."
+    )]
     ForeverPending { asked: i64, max: i64 },
 }

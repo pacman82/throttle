@@ -116,7 +116,10 @@ struct Remainder {
 
 /// Get the remainder of a semaphore
 #[get("/remainder")]
-async fn remainder(query: Query<Remainder>, state: Data<State>) -> Result<Json<i64>, ThrottleError> {
+async fn remainder(
+    query: Query<Remainder>,
+    state: Data<State>,
+) -> Result<Json<i64>, ThrottleError> {
     state.remainder(&query.semaphore).map(Json)
 }
 
@@ -156,9 +159,9 @@ async fn put_peer(
 
 /// Query parameters for freeze
 #[derive(Deserialize)]
-struct FreezeQuery{
+struct FreezeQuery {
     #[serde(with = "humantime_serde", rename = "for")]
-    time: Duration
+    time: Duration,
 }
 
 #[post("/freeze")]
