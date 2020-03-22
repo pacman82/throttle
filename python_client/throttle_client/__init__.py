@@ -7,7 +7,7 @@ from typing import Dict, Iterator, Optional
 
 import requests
 
-from tenacity import Retrying, wait_exponential, stop_after_attempt
+from tenacity import Retrying, wait_exponential, stop_after_attempt  # type: ignore
 
 from .status_code import is_recoverable_error as _is_recoverable_error
 
@@ -103,7 +103,9 @@ class Client:
         }
         for attempt in self.retrying:
             with attempt:
-                response = requests.post(self.base_url + "/acquire", json=body, timeout=30)
+                response = requests.post(
+                    self.base_url + "/acquire", json=body, timeout=30
+                )
                 # Witin `attempt` we raise only for recoverable errors. These must not be domain
                 # errors, which implies that there is no need to translate them.
                 if _is_recoverable_error(response.status_code):
@@ -162,7 +164,9 @@ class Client:
         """
         for attempt in self.retrying:
             with attempt:
-                response = requests.get(self.base_url + f"/remainder?semaphore={semaphore}")
+                response = requests.get(
+                    self.base_url + f"/remainder?semaphore={semaphore}"
+                )
                 # Witin `attempt` we raise only for recoverable errors. These must not be domain
                 # errors, which implies that there is no need to translate them.
                 if _is_recoverable_error(response.status_code):
