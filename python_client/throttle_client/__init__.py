@@ -217,7 +217,7 @@ class Heartbeat:
         self.thread.join()
 
     def _run(self):
-        # TODO: self.cancel.wait(self.interval_sec)
+        self.cancel.wait(self.interval_sec)
         while self.lease.has_active() and not self.cancel.is_set():
             try:
                 self.client.heartbeat(self.lease)
