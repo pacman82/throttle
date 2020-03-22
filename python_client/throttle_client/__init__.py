@@ -259,6 +259,10 @@ def lock(
     # Remember this moment in order to figure out later how much time has passed since
     # we started to acquire the lock
     start = time()
+    # We pass this as a parameter to the throttle server. It will wait for this amount of time
+    # before answering, that the lease is still pending. In case the lease can be acquired it is
+    # still going to answer immediatly, of course.
+    block_for = timedelta(seconds=5)
     while peer.has_pending():
         if timeout:
             # The time between now and start is the amount of time we are waiting for the
@@ -270,14 +274,8 @@ def lock(
                 raise Timeout
             # If we time out in a timespan < 5 seconds, we want to block only for the time
             # until the timeout.
-            elif timeout - passed < timedelta(seconds=5):
-                block_for = timeout - passed
             else:
-                # Even if the timeout is langer than 5 seconds, block only for that long,
-                # since we do not want to keep the http request open for to long.
-                block_for = timedelta(seconds=5)
-        else:
-            block_for = timedelta(seconds=5)
+                block_for = min(timeout - passed, block_for)
         try:
             _ = client.block_until_acquired(peer, block_for)
         # Catch ConnectionError and Timeout, to be able to recover pending leases
