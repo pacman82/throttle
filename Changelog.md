@@ -20,3 +20,8 @@ Fix: pip installing python client now also installs `requests` dependencies, whi
 -----
 
 * Python Client: `lock` will no longer throw in case of a timeout during the release of the semaphore.
+
+0.1.4
+-----
+
+* Python Client: Use tenacity for all requests

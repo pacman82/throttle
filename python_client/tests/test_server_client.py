@@ -87,3 +87,18 @@ def test_block_on_unknown_semaphore():
     with throttle_client(b"[semaphores]") as client:
         with pytest.raises(Exception, match="Unknown semaphore"):
             client.block_until_acquired(l, block_for=timedelta(seconds=1))
+
+
+def test_lease_recovery_after_server_reboot():
+    """
+    Verify that a newly booted server, recovers leases based on heartbeats
+    """
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        peer = client.acquire("A")
+
+    # Server is shutdown. Boot a new one wich does not know about this peer
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        # Heartbeat should restore server state.
+        client.heartbeat(peer)
+        # Which implies the remainder of A being 0
+        assert client.remainder("A") == 0

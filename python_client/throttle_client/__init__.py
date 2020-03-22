@@ -9,7 +9,7 @@ import requests
 
 from tenacity import Retrying, wait_exponential, stop_after_attempt
 
-from .status_code import is_recoverable as _is_recoverable
+from .status_code import is_recoverable_error as _is_recoverable_error
 
 
 class Peer:
@@ -41,7 +41,7 @@ class Peer:
         self.pending = {}
 
 
-def _raise_for_status(response: requests.Response):
+def _translate_domain_errors(response: requests.Response):
     """
     Wrapper around Response.raise_for_status, translating domain specific errors
     """
@@ -79,11 +79,18 @@ class Client:
     ):
         """
         * `base_url`: Url to the throttle server. E.g. https://my_throttle_instance:8000
-        * `expiration_time`: If the heartbeat does not keep the leases of this peer alive they are
-        going to be released anyway, after this timeout.
+        * `expiration_time`: If the heartbeat does not prolong the lifetime of this peer it leases
+        are going to be released, after this timeout.
         """
         self.expiration_time = expiration_time
         self.base_url = base_url
+
+        # Used for retrying request submitted by this client.
+        self.retrying = Retrying(
+            reraise=True,
+            wait=wait_exponential(multiplier=1, min=4, max=32),
+            stop=stop_after_attempt(10),
+        )
 
     def acquire(
         self, semaphore: str, count: int = 1, expires_in: timedelta = None
@@ -94,8 +101,14 @@ class Client:
             "pending": {semaphore: count},
             "expires_in": _format_timedelta(expires_in),
         }
-        response = requests.post(self.base_url + "/acquire", json=body, timeout=30)
-        _raise_for_status(response)
+        for attempt in self.retrying:
+            with attempt:
+                response = requests.post(self.base_url + "/acquire", json=body, timeout=30)
+                # Witin `attempt` we raise only for recoverable errors. These must not be domain
+                # errors, which implies that there is no need to translate them.
+                if _is_recoverable_error(response.status_code):
+                    response.raise_for_status()
+        _translate_domain_errors(response)
         if response.status_code == 201:  # Created. We got a lease to the semaphore
             return Peer(id=response.text, active={semaphore: count})
         elif response.status_code == 202:  # Accepted. Ticket pending.
@@ -112,11 +125,7 @@ class Client:
         """
         block_for_ms = int(block_for.total_seconds() * 1000)
 
-        for attempt in Retrying(
-            reraise=True,
-            wait=wait_exponential(multiplier=1, min=4, max=32),
-            stop=stop_after_attempt(10),
-        ):
+        for attempt in self.retrying:
             with attempt:
                 response = requests.post(
                     self.base_url
@@ -126,18 +135,15 @@ class Client:
                         "active": peer.active,
                         "pending": peer.pending,
                     },
-                    timeout=block_for_ms / 1000 + 2,
+                    timeout=block_for_ms / 1000 + 30,
                 )
                 # Witin `attempt` we raise only for recoverable errors. These must not be domain
                 # errors, which implies that there is no need to translate them.
-                if response.status_code // 100 != 2:
-                    # Make this an inner if clause, as python is not lazy in its evaluation and
-                    # `_is_recoverabel` raises on non error codes.
-                    if _is_recoverable(response.status_code):
-                        response.raise_for_status()
+                if _is_recoverable_error(response.status_code):
+                    response.raise_for_status()
 
         # Raise to caller of this function and translate domain errors.
-        _raise_for_status(response)
+        _translate_domain_errors(response)
 
         now_active = json.loads(response.text)
         if now_active:
@@ -154,8 +160,14 @@ class Client:
         could become negative, if the semaphores have been overcommitted (due to
         previously reoccuring leases previously considered dead).
         """
-        response = requests.get(self.base_url + f"/remainder?semaphore={semaphore}")
-        _raise_for_status(response)
+        for attempt in self.retrying:
+            with attempt:
+                response = requests.get(self.base_url + f"/remainder?semaphore={semaphore}")
+                # Witin `attempt` we raise only for recoverable errors. These must not be domain
+                # errors, which implies that there is no need to translate them.
+                if _is_recoverable_error(response.status_code):
+                    response.raise_for_status()
+        _translate_domain_errors(response)
 
         return int(response.text)
 
@@ -166,10 +178,16 @@ class Client:
         Yes, it propably is a bad idea to call this in production code. Yet it is useful for
         testing.
         """
-        response = requests.post(
-            self.base_url + f"/freeze?for={_format_timedelta(time)}"
-        )
-        _raise_for_status(response)
+        for attempt in self.retrying:
+            with attempt:
+                response = requests.post(
+                    self.base_url + f"/freeze?for={_format_timedelta(time)}"
+                )
+                # Witin `attempt` we raise only for recoverable errors. These must not be domain
+                # errors, which implies that there is no need to translate them.
+                if _is_recoverable_error(response.status_code):
+                    response.raise_for_status()
+        _translate_domain_errors(response)
 
     def release(self, peer: Peer):
         """
@@ -178,8 +196,14 @@ class Client:
         This is important to unblock other clients which may be waiting for the
         semaphore remainder to increase.
         """
-        response = requests.delete(self.base_url + f"/peers/{peer.id}")
-        _raise_for_status(response)
+        for attempt in self.retrying:
+            with attempt:
+                response = requests.delete(self.base_url + f"/peers/{peer.id}")
+                # Witin `attempt` we raise only for recoverable errors. These must not be domain
+                # errors, which implies that there is no need to translate them.
+                if _is_recoverable_error(response.status_code):
+                    response.raise_for_status()
+        _translate_domain_errors(response)
 
     def remove_expired(self) -> int:
         """
@@ -187,8 +211,14 @@ class Client:
 
         Returns number of expired peers.
         """
-        response = requests.post(self.base_url + "/remove_expired", timeout=30)
-        _raise_for_status(response)
+        for attempt in self.retrying:
+            with attempt:
+                response = requests.post(self.base_url + "/remove_expired", timeout=30)
+                # Witin `attempt` we raise only for recoverable errors. These must not be domain
+                # errors, which implies that there is no need to translate them.
+                if _is_recoverable_error(response.status_code):
+                    response.raise_for_status()
+        _translate_domain_errors(response)
         # Number of expired peers
         return json.loads(response.text)
 
@@ -201,15 +231,21 @@ class Client:
         assert (
             not peer.has_pending()
         ), "Peers with pending leases must not be kept alive via heartbeat."
-        response = requests.put(
-            f"{self.base_url}/peers/{peer.id}",
-            json={
-                "expires_in": _format_timedelta(self.expiration_time),
-                "active": peer.active,
-            },
-            timeout=30,
-        )
-        _raise_for_status(response)
+        for attempt in self.retrying:
+            with attempt:
+                response = requests.put(
+                    f"{self.base_url}/peers/{peer.id}",
+                    json={
+                        "expires_in": _format_timedelta(self.expiration_time),
+                        "active": peer.active,
+                    },
+                    timeout=30,
+                )
+                # Witin `attempt` we raise only for recoverable errors. These must not be domain
+                # errors, which implies that there is no need to translate them.
+                if _is_recoverable_error(response.status_code):
+                    response.raise_for_status()
+        _translate_domain_errors(response)
 
 
 # Heartbeat is implemented via an event, rather than a thread with a sleep, so we can
@@ -304,19 +340,6 @@ def lock(
 
     try:
         client.release(peer)
-    except requests.HTTPError as e:
-        if _is_recoverable(e.response.status_code):
-            # Let's just ignore this error. The litter collection is going to take care of it.
-            #
-            # If this behaviour should ever be found insufficient, at least 409 timeout should not
-            # be repeated. Likely the request will go through, yet the timeout is due to the locking
-            # of internal server state, and more requests are only going to add to the problem.
-            pass
-        else:
-            # Ok, this seems to be a logic error not caused by temporary issues, maybe the user
-            # should know about this
-            raise e
-    except requests.ConnectionError:
-        # Let's not wait for the server. This lease is a case for the
-        # litter collection.
+    except:
+        # Don't raise. Let the litter collection collect this one.
         pass

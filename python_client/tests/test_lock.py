@@ -88,25 +88,6 @@ def test_keep_lease_alive_beyond_expiration():
             assert client.remove_expired() == 0
 
 
-def test_lease_recovery_after_server_reboot():
-    """
-    Verify that a newly booted server, recovers leases based on heartbeats
-    """
-    with NamedTemporaryFile(delete=False) as cfg:
-        cfg.write(b"[semaphores]\nA=1")
-        cfg.close()
-        client = Client(BASE_URL)
-        with cargo_main(cfg.name) as proc:
-            with lock(client, "A", heartbeat_interval=timedelta(milliseconds=100)):
-                # Kill the server, so it looses all it's in memory state
-                proc.kill()
-                # And start a new one, with the heartbeat still active
-                with cargo_main(cfg.name) as _:
-                    # Wait a moment for the heartbeat to update server sate.
-                    sleep(0.3)
-                    assert client.remainder("A") == 0
-
-
 def test_litter_collection():
     """
     Verify that leases don't leak thanks to litter collection
