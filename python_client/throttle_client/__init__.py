@@ -2,7 +2,7 @@ import json
 from contextlib import contextmanager
 from datetime import timedelta
 from threading import Event, Thread
-from time import sleep, time
+from time import time
 from typing import Dict, Iterator, Optional
 
 import requests
