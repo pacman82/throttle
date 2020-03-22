@@ -80,12 +80,12 @@ impl State {
     }
 
     /// Blocks until all the leases of the peer are active, or the timeout expires.
-    /// 
+    ///
     /// Intended te be called repeatedly, until leases are active. Also prevents the peer from being
     /// removed by the litter collection, as it updates the expiration timestamp.
-    /// 
+    ///
     /// ## Return
-    /// 
+    ///
     /// Returns `true` if the the leases could be acquired.
     pub fn block_until_acquired(
         &self,
@@ -110,14 +110,17 @@ impl State {
             );
         }
 
-        let (leases, wait_time_result) = self.released.wait_timeout_while(leases, timeout, |leases| {
-            leases
-                .has_pending(peer_id)
-                .unwrap_or(false)
-        }).unwrap();
+        let (leases, wait_time_result) = self
+            .released
+            .wait_timeout_while(leases, timeout, |leases| {
+                leases.has_pending(peer_id).unwrap_or(false)
+            })
+            .unwrap();
 
         // Can have error if a peer expires while waitinng for a lease.
-        let pending = leases.has_pending(peer_id).ok_or(ThrottleError::UnknownPeer)?;
+        let pending = leases
+            .has_pending(peer_id)
+            .ok_or(ThrottleError::UnknownPeer)?;
         debug_assert!(pending == wait_time_result.timed_out());
         Ok(!pending)
     }
