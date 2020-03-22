@@ -7,6 +7,8 @@ from typing import Dict, Iterator, Optional
 
 import requests
 
+from tenacity import Retrying, wait_exponential, stop_after_attempt
+
 from .status_code import is_recoverable as _is_recoverable
 
 
@@ -110,17 +112,31 @@ class Client:
         """
         block_for_ms = int(block_for.total_seconds() * 1000)
 
-        response = requests.post(
-            self.base_url
-            + f"/peers/{peer.id}/block_until_acquired?timeout_ms={block_for_ms}",
-            json={
-                "expires_in": "5min",
-                "active": peer.active,
-                "pending": peer.pending,
-            },
-            timeout=block_for_ms / 1000 + 2,
-        )
+        for attempt in Retrying(
+            reraise=True,
+            wait=wait_exponential(multiplier=1, min=4, max=32),
+            stop=stop_after_attempt(10),
+        ):
+            with attempt:
+                response = requests.post(
+                    self.base_url
+                    + f"/peers/{peer.id}/block_until_acquired?timeout_ms={block_for_ms}",
+                    json={
+                        "expires_in": "5min",
+                        "active": peer.active,
+                        "pending": peer.pending,
+                    },
+                    timeout=block_for_ms / 1000 + 2,
+                )
+                # Witin `attempt` we raise only for recoverable errors. These must not be domain
+                # errors, which implies that there is no need to translate them.
+                if response.status_code // 100 != 2:
+                    # Make this an inner if clause, as python is not lazy in its evaluation and
+                    # `_is_recoverabel` raises on non error codes.
+                    if _is_recoverable(response.status_code):
+                        response.raise_for_status()
 
+        # Raise to caller of this function and translate domain errors.
         _raise_for_status(response)
 
         now_active = json.loads(response.text)
@@ -276,14 +292,7 @@ def lock(
             # until the timeout.
             else:
                 block_for = min(timeout - passed, block_for)
-        try:
-            _ = client.block_until_acquired(peer, block_for)
-        # Catch ConnectionError and Timeout, to be able to recover pending leases
-        # in case of a server reboot.
-        except requests.ConnectionError:
-            sleep(block_for.total_seconds())
-        except requests.Timeout:
-            pass
+        _ = client.block_until_acquired(peer, block_for)
 
     # Yield and have the heartbeat in an extra thread, during it being active.
     if heartbeat_interval is not None:
