@@ -79,6 +79,14 @@ impl State {
         num_removed
     }
 
+    /// Blocks until all the leases of the peer are active, or the timeout expires.
+    /// 
+    /// Intended te be called repeatedly, until leases are active. Also prevents the peer from being
+    /// removed by the litter collection, as it updates the expiration timestamp.
+    /// 
+    /// ## Return
+    /// 
+    /// Returns `true` if the the leases could be acquired.
     pub fn block_until_acquired(
         &self,
         peer_id: u64,
@@ -101,38 +109,17 @@ impl State {
                 peer_id, active
             );
         }
-        loop {
-            break match leases.has_pending(peer_id) {
-                None => {
-                    // This code path can be reached if a peer expires while waiting for a lease.
-                    warn!(
-                        "Unknown peer blocking to acquire lease. Peer id: {}",
-                        peer_id
-                    );
-                    Err(ThrottleError::UnknownPeer)
-                }
-                Some(true) => Ok(true),
-                Some(false) => {
-                    let elapsed = start.elapsed(); // Uses a monotonic system clock
-                    if elapsed >= timeout {
-                        // Lease is pending, even after timeout is passed
-                        Ok(false)
-                    } else {
-                        // Lease is pending, but timeout hasn't passed yet. Let's wait for changes.
-                        let (mutex_guard, wait_time_result) = self
-                            .released
-                            .wait_timeout(leases, timeout - elapsed)
-                            .unwrap();
-                        if wait_time_result.timed_out() {
-                            Ok(false)
-                        } else {
-                            leases = mutex_guard;
-                            continue;
-                        }
-                    }
-                }
-            };
-        }
+
+        let (leases, wait_time_result) = self.released.wait_timeout_while(leases, timeout, |leases| {
+            leases
+                .has_pending(peer_id)
+                .unwrap_or(false)
+        }).unwrap();
+
+        // Can have error if a peer expires while waitinng for a lease.
+        let pending = leases.has_pending(peer_id).ok_or(ThrottleError::UnknownPeer)?;
+        debug_assert!(pending == wait_time_result.timed_out());
+        Ok(!pending)
     }
 
     pub fn heartbeat_for_active_peer(

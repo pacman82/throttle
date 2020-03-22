@@ -84,7 +84,16 @@ struct MaxTimeout {
     timeout_ms: Option<u64>,
 }
 
-/// Wait for a ticket to be promoted to a lease
+/// Waits for a ticket to be promoted to a lease
+/// 
+/// This function is supposed to be called repeatedly from client side, until the leases are
+/// active. It also updates the expiration timeout to prevent the litter collection from
+/// removing the peer while it is pending. Having repeated short lived requests is preferable
+/// over one long running, as many proxies, firewalls, and Gateways might kill them.
+/// 
+/// ## Return
+/// 
+/// Returns `true` if leases are active.
 #[post("/peers/{id}/block_until_acquired")]
 async fn block_until_acquired(
     path: Path<u64>,

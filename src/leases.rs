@@ -136,7 +136,7 @@ impl Leases {
     }
 
     pub fn has_pending(&self, peer_id: u64) -> Option<bool> {
-        self.ledger.get(&peer_id).map(|lease| lease.active)
+        self.ledger.get(&peer_id).map(|lease| !lease.active)
     }
 
     /// Remove every lease, which is not valid until now.
