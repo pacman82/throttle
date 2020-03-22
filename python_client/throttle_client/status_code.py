@@ -4,7 +4,7 @@ def is_recoverable(status_code: int) -> bool:
     be successful at a later point in time.
     """
     if status_code % 100 == 4:
-        #Request Timeout, Connection Closed Without Response, Client Closed Request
+        # Request Timeout, Connection Closed Without Response, Client Closed Request
         if status_code in [408, 444, 499]:
             return True
         else:
@@ -13,11 +13,10 @@ def is_recoverable(status_code: int) -> bool:
     elif status_code % 100 == 5:
         # Not implemented, HTTP Version not supported, Variant also negoiates, Insufficient Storage,
         # Loop Detected, Not Extended, Network Authentication Required
-        if status_code in [501, 505, 506, 507, 508, 510,511]:
+        if status_code in [501, 505, 506, 507, 508, 510, 511]:
             return False
         else:
             # In general server errors may be fixed later
             return True
     else:
         raise ValueError(f"Not an Http status code indicating an error: {status_code}")
-

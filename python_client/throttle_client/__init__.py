@@ -1,11 +1,11 @@
-import requests
 import json
-
-from typing import Dict, Optional, Iterator
 from contextlib import contextmanager
-from threading import Event, Thread
 from datetime import timedelta
-from time import time, sleep
+from threading import Event, Thread
+from time import sleep, time
+from typing import Dict, Iterator, Optional
+
+import requests
 
 from .status_code import is_recoverable as _is_recoverable
 
