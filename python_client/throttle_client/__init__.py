@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from datetime import timedelta
 from threading import Event, Thread
 from time import time
-from typing import Dict, Iterator, Optional
+from typing import Any, Dict, Iterator, Optional
 
 import requests
 
@@ -72,7 +72,12 @@ def _format_timedelta(interval: timedelta) -> str:
 
 
 class Client:
-    """A Client to lease semaphores from a Throttle service."""
+    """
+    A Client to lease semaphores from a Throttle service.
+    
+    This class is conserned with the HTTP interface of the Server only. For a higher level interface
+    look at the `lock` context manager.
+    """
 
     def __init__(
         self, base_url: str, expiration_time: timedelta = timedelta(minutes=15),
@@ -85,8 +90,8 @@ class Client:
         self.expiration_time = expiration_time
         self.base_url = base_url
 
-        # Used for retrying request submitted by this client.
-        self.retrying = Retrying(
+    def _retrying(self) -> Any:
+        return Retrying(
             reraise=True,
             wait=wait_exponential(multiplier=1, min=4, max=32),
             stop=stop_after_attempt(10),
@@ -101,7 +106,7 @@ class Client:
             "pending": {semaphore: count},
             "expires_in": _format_timedelta(expires_in),
         }
-        for attempt in self.retrying:
+        for attempt in self._retrying():
             with attempt:
                 response = requests.post(
                     self.base_url + "/acquire", json=body, timeout=30
@@ -127,7 +132,7 @@ class Client:
         """
         block_for_ms = int(block_for.total_seconds() * 1000)
 
-        for attempt in self.retrying:
+        for attempt in self._retrying():
             with attempt:
                 response = requests.post(
                     self.base_url
@@ -162,7 +167,7 @@ class Client:
         could become negative, if the semaphores have been overcommitted (due to
         previously reoccuring leases previously considered dead).
         """
-        for attempt in self.retrying:
+        for attempt in self._retrying():
             with attempt:
                 response = requests.get(
                     self.base_url + f"/remainder?semaphore={semaphore}"
@@ -182,7 +187,7 @@ class Client:
         Yes, it propably is a bad idea to call this in production code. Yet it is useful for
         testing.
         """
-        for attempt in self.retrying:
+        for attempt in self._retrying():
             with attempt:
                 response = requests.post(
                     self.base_url + f"/freeze?for={_format_timedelta(time)}"
@@ -200,7 +205,7 @@ class Client:
         This is important to unblock other clients which may be waiting for the
         semaphore remainder to increase.
         """
-        for attempt in self.retrying:
+        for attempt in self._retrying():
             with attempt:
                 response = requests.delete(self.base_url + f"/peers/{peer.id}")
                 # Witin `attempt` we raise only for recoverable errors. These must not be domain
@@ -215,7 +220,7 @@ class Client:
 
         Returns number of expired peers.
         """
-        for attempt in self.retrying:
+        for attempt in self._retrying():
             with attempt:
                 response = requests.post(self.base_url + "/remove_expired", timeout=30)
                 # Witin `attempt` we raise only for recoverable errors. These must not be domain
@@ -235,7 +240,7 @@ class Client:
         assert (
             not peer.has_pending()
         ), "Peers with pending leases must not be kept alive via heartbeat."
-        for attempt in self.retrying:
+        for attempt in self._retrying():
             with attempt:
                 response = requests.put(
                     f"{self.base_url}/peers/{peer.id}",
