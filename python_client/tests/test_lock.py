@@ -122,9 +122,9 @@ def test_lock_count_larger_pends_if_count_is_not_high_enough():
     """
 
     with throttle_client(b"[semaphores]\nA=5") as client:
-        l1 = client.acquire("A", count=3)
-        l2 = client.acquire("A", count=3)
-        assert l2.has_pending()
+        _ = client.acquire("A", count=3)
+        second = client.acquire("A", count=3)
+        assert second.has_pending()
 
 
 def test_exception():
@@ -167,11 +167,11 @@ def test_put_unknown_semaphore():
     An active revenant of an unknown semaphore should throw an exception.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
-        l = client.acquire("A")
+        a = client.acquire("A")
     # Restart Server without "A"
     with throttle_client(b"[semaphores]") as client:
         with pytest.raises(Exception, match="Unknown semaphore"):
-            client.heartbeat(l)
+            client.heartbeat(a)
 
 
 # Sadly it seems requests doesn't care much for my delete timeout in the release of the lock

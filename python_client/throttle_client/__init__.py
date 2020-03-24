@@ -74,7 +74,7 @@ def _format_timedelta(interval: timedelta) -> str:
 class Client:
     """
     A Client to lease semaphores from a Throttle service.
-    
+
     This class is conserned with the HTTP interface of the Server only. For a higher level interface
     look at the `lock` context manager.
     """
@@ -349,6 +349,7 @@ def lock(
 
     try:
         client.release(peer)
-    except:
-        # Don't raise. Let the litter collection collect this one.
+    except requests.ConnectionError:
+        # Ignore recoverable errors. `release` retried alread. The litter collection on
+        # server side, takes care of freeing the lease.
         pass
