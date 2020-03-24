@@ -26,7 +26,7 @@ Fix: pip installing python client now also installs `requests` dependencies, whi
 
 * Python Client: Use tenacity for all requests
 
-Next
-----
+0.1.5
+-----
 
 * Python Client: `Client` can now be pickeled again.
