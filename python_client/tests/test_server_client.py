@@ -82,11 +82,11 @@ def test_block_on_unknown_semaphore():
     with throttle_client(b"[semaphores]\nA=1") as client:
         # Only take first, so second one blocks
         _ = client.acquire("A")
-        l = client.acquire("A")
+        lock_a = client.acquire("A")
     # Restart Server without "A"
     with throttle_client(b"[semaphores]") as client:
         with pytest.raises(Exception, match="Unknown semaphore"):
-            client.block_until_acquired(l, block_for=timedelta(seconds=1))
+            client.block_until_acquired(lock_a, block_for=timedelta(seconds=1))
 
 
 def test_lease_recovery_after_server_reboot():
