@@ -201,7 +201,7 @@ impl State {
         // Most of the work happens in here. Now counts contains the active and pending counts
         self.leases.lock().unwrap().fill_counts(&mut counts);
         for (semaphore, count) in counts {
-            COUNT.with_label_values(&[&semaphore]).set(count.active);
+            COUNT.with_label_values(&[&semaphore]).set(count.acquired);
             PENDING.with_label_values(&[&semaphore]).set(count.pending);
         }
     }
