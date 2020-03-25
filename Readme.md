@@ -12,7 +12,6 @@ Throttle aims to be easy to operate, well-behaved in edge cases and works withou
 
 Work in progress.
 
-* Minimal Feature set (what's there works though)
 * Not yet optimized
 * Unstable interfaces
 
@@ -22,6 +21,8 @@ Work in progress.
 * Python Client available
 * Locks expire to prevent leaking semaphore count due to Network errors or client crashes
 * Locks can be kept indefinetly by sending heartbeats of the server.
+* Fairness
+* Locks with a large count wont get starved by locks with a small count.
 * No persistence backend required
   * Server recovers state from heartbeats in case of reboot
 

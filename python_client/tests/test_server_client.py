@@ -102,3 +102,21 @@ def test_lease_recovery_after_server_reboot():
         client.heartbeat(peer)
         # Which implies the remainder of A being 0
         assert client.remainder("A") == 0
+
+
+def test_does_not_starve_large_locks():
+    """This tests verifies that large locks do not get starved by many smaller ones"""
+    with throttle_client(b"[semaphores]\nA=5") as client:
+        # This lock is acquired immediatly decrementing the semaphore count to 4
+        lock_small = client.acquire("A")
+        # Now try a large one. Of course we can not acquire it yet
+        _ = client.acquire("A", count=5)
+        # This one could be acquired due to semaphore count, but won't, since the larger one is
+        # still pending.
+        _ = client.acquire("A")
+        # Remainder is still 4
+        assert client.remainder("A") == 4
+
+        # We free the first small lock, now the big one can be acquired
+        client.release(lock_small)
+        assert client.remainder("A") == 0

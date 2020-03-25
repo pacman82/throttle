@@ -8,36 +8,39 @@ struct Peer {
     semaphore: String,
     /// `true` if the lease is active (i.e. decrementing the semaphore count), or `false` if the
     /// lease is pending.
-    active: bool,
+    acquired: bool,
     /// The semapohre count is decreased by `amount` if the lease is active.
     amount: i64,
     /// Instant upon which the lease may be removed by litter collection.
     valid_until: Instant,
+    /// Instant of peer creation. Used to implement fairness of semaphores.
+    since: Instant,
 }
 
 /// Accumulated counts for an indiviual Semaphore
 #[derive(Default)]
 pub struct Counts {
-    /// Accumulated count of active leases (aka. the count) of the semaphore.
-    pub active: i64,
+    /// Accumulated count of acquired leases (aka. the count) of the semaphore.
+    pub acquired: i64,
     /// Accumulated count of pending leases.
     pub pending: i64,
 }
 
 impl Peer {
-    fn count_active(&self, semaphore: &str) -> i64 {
-        if self.active && self.semaphore == semaphore {
+    fn count_acquired(&self, semaphore: &str) -> i64 {
+        if self.acquired && self.semaphore == semaphore {
             self.amount
         } else {
             0
         }
     }
 
-    /// Activates a pending lease if semaphore matches and remainder is positiv (>0)
-    fn activate_viable(&mut self, semaphore: &str, remainder: &mut i64) {
-        if !self.active && semaphore == self.semaphore && *remainder >= self.amount {
-            self.active = true;
-            *remainder -= self.amount;
+    /// Semaphore count of this peer regardless of wether the lock is acquired or pending.
+    fn count_demand(&self, semaphore: &str) -> i64 {
+        if self.semaphore == semaphore {
+            self.amount
+        } else {
+            0
         }
     }
 
@@ -46,8 +49,8 @@ impl Peer {
         let mut counts = counts
             .get_mut(&self.semaphore)
             .expect("All available Semaphores must be prefilled in counts.");
-        if self.active {
-            counts.active += self.amount;
+        if self.acquired {
+            counts.acquired += self.amount;
         } else {
             counts.pending += self.amount;
         }
@@ -55,7 +58,7 @@ impl Peer {
 }
 
 pub struct Leases {
-    // Active leases decreasing the semaphore count
+    //  Peers holding pending or acquired leases to the semaphores
     ledger: HashMap<u64, Peer>,
 }
 
@@ -91,29 +94,38 @@ impl Leases {
     ) -> bool {
         let amount = amount as i64;
 
-        let active = max
-            .map(|max| self.count(semaphore) + amount <= max)
+        // Since this creates a new peer, we know it has the most recent timestamp. This implies
+        // that due to fairness every other peer has priority over this one taking the lock.
+        // Therfore we only take the lock (if a check on max is performed at all), if the total
+        // demand is smaller than max.semaphore_service
+        //
+        // Note: This is different than taking the lock from a semaphore for which the count is
+        // smaller than max in situations there e.g. a lock with a count of 5 is pending with while
+        // the remainder is 3.
+        let acquired = max
+            .map(|max| self.demand_smaller_or_equal(semaphore, max))
             .unwrap_or(true);
 
         let old = self.ledger.insert(
             peer_id,
             Peer {
                 semaphore: semaphore.to_owned(),
-                active,
+                acquired,
                 amount,
                 valid_until,
+                since: Instant::now(),
             },
         );
         // There should not be any preexisting entry with this id
         debug_assert!(old.is_none());
-        active
+        acquired
     }
 
     /// Aggregated count of active leases for the semaphore
     pub fn count(&self, semaphore: &str) -> i64 {
         self.ledger
             .values()
-            .map(|lease| lease.count_active(semaphore))
+            .map(|lease| lease.count_acquired(semaphore))
             .sum()
     }
 
@@ -123,20 +135,27 @@ impl Leases {
         self.ledger.remove(&peer_id).map(|l| l.semaphore)
     }
 
-    /// Activates pending leases for the semaphore until its count is >= max
+    /// Acquires pending leases for the semaphore until its count is >= max. It acquires the locks
+    /// pending the longest first.
     pub fn resolve_pending(&mut self, semaphore: &str, max: i64) {
         let mut remainder = max - self.count(semaphore);
-        for lease in self.ledger.values_mut() {
-            // Return early if count is already to high
-            if remainder <= 0 {
+        while remainder > 0 {
+            if let Some(peer) = self.highest_priority_pending(semaphore) {
+                // Decrement the remainder of the amount, regardless of wether we acquire it or not
+                // doing so prevents us from starving locks requesting big amounts.
+                remainder -= peer.amount;
+                if remainder >= 0 {
+                    peer.acquired = true;
+                }
+            } else {
+                // No more pending locks to consider.
                 break;
             }
-            lease.activate_viable(semaphore, &mut remainder);
         }
     }
 
     pub fn has_pending(&self, peer_id: u64) -> Option<bool> {
-        self.ledger.get(&peer_id).map(|lease| !lease.active)
+        self.ledger.get(&peer_id).map(|lease| !lease.acquired)
     }
 
     /// Remove every lease, which is not valid until now.
@@ -186,5 +205,29 @@ impl Leases {
                 return candidate;
             }
         }
+    }
+
+    /// Returns wether the demand (i.e. the sum of pending and acquired lock counts) for this lease
+    /// is smaller or equal to `max`.
+    fn demand_smaller_or_equal(&self, semaphore: &str, max: i64) -> bool {
+        let mut demand = 0;
+        for peer in self.ledger.values() {
+            demand += peer.count_demand(semaphore);
+            // early return
+            if demand <= max {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Return the pending lock with the highest priority for this semaphore. Since we have fair
+    /// semaphores, this is the lock waiting the longest. Returs `None` in case there are not any
+    /// pending locks.
+    fn highest_priority_pending<'a>(&'a mut self, semaphore: &str) -> Option<&'a mut Peer> {
+        self.ledger
+            .values_mut()
+            .filter(|peer| peer.semaphore == semaphore)
+            .min_by_key(|peer| peer.since)
     }
 }
