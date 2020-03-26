@@ -200,9 +200,13 @@ impl State {
         }
         // Most of the work happens in here. Now counts contains the active and pending counts
         self.leases.lock().unwrap().fill_counts(&mut counts);
+        let now = Instant::now();
         for (semaphore, count) in counts {
             COUNT.with_label_values(&[&semaphore]).set(count.acquired);
             PENDING.with_label_values(&[&semaphore]).set(count.pending);
+            LONGEST_PENDING_SEC
+                .with_label_values(&[&semaphore])
+                .set(count.longest_pending(now).as_secs() as i64)
         }
     }
 
@@ -233,6 +237,12 @@ lazy_static! {
     static ref PENDING: IntGaugeVec = register_int_gauge_vec!(
         "throttle_pending",
         "Accumulated count of all pending leases",
+        &["semaphore"]
+    )
+    .expect("Error registering throttle_count metric");
+    static ref LONGEST_PENDING_SEC: IntGaugeVec = register_int_gauge_vec!(
+        "throttle_longest_pending_sec",
+        "Time the longest pending peer is waiting until now, to acquire a lock to a semaphore.",
         &["semaphore"]
     )
     .expect("Error registering throttle_count metric");

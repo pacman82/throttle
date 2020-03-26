@@ -1,5 +1,8 @@
 use rand::random;
-use std::{collections::HashMap, time::Instant};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 /// A peer holds leases to semaphores, which may either be active or pending and share a common
 /// timeout.
@@ -24,6 +27,17 @@ pub struct Counts {
     pub acquired: i64,
     /// Accumulated count of pending leases.
     pub pending: i64,
+    /// The earliest pending lock
+    longest_pending_since: Option<Instant>,
+}
+
+impl Counts {
+    /// Time the longest pending peer is waiting until `now`, to acquire a lock to a semaphore.
+    pub fn longest_pending(&self, now: Instant) -> Duration {
+        self.longest_pending_since
+            .map(|earlier| now.duration_since(earlier))
+            .unwrap_or(Default::default())
+    }
 }
 
 impl Peer {
@@ -53,6 +67,11 @@ impl Peer {
             counts.acquired += self.amount;
         } else {
             counts.pending += self.amount;
+            // If there already has been a minimum, compare. Otherwise just use `self.since`.
+            counts.longest_pending_since = counts
+                .longest_pending_since
+                .map(|min_so_far| std::cmp::min(min_so_far, self.since))
+                .or(Some(self.since));
         }
     }
 }
@@ -154,6 +173,7 @@ impl Leases {
         }
     }
 
+    /// Wether the peer has any pending leases.
     pub fn has_pending(&self, peer_id: u64) -> Option<bool> {
         self.ledger.get(&peer_id).map(|lease| !lease.acquired)
     }
