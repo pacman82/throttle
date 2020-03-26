@@ -8,23 +8,18 @@ Throttle provides semaphores as a service via an http interface. As the name ind
 
 Throttle aims to be easy to operate, well-behaved in edge cases and works without a persistence backend.
 
-## Warning
-
-Work in progress.
-
-* Not yet optimized
-* Unstable interfaces
-
 ## Features
 
-* Server builds and runs on Windows, Linux, and OS-X
-* Python Client available
-* Locks expire to prevent leaking semaphore count due to Network errors or client crashes
-* Locks can be kept indefinetly by sending heartbeats of the server.
-* Fairness
-* Locks with a large count wont get starved by locks with a small count.
-* No persistence backend required
-  * Server recovers state from heartbeats in case of reboot
+* Server builds and runs on Windows, Linux, and OS-X.
+* Python Client is available.
+* Fairness (longer waiting peers have priority)
+  * Peers acquiring locks with a large count, won't be starved by lots of others with a small one.
+* Locks expire to prevent leaking semaphore count due to Network errors or client crashes.
+* Locks can be prolonged indefinetly by sending heartbeats of the server.
+* No persistence backend is required.
+  * Server recovers state from heartbeats in case of reboot.
+
+*Work in progress, interfaces are still unstable.*
 
 ## Usage
 
@@ -101,6 +96,9 @@ throttle_count{semaphore="A"} 0
 # HELP throttle_full_count New leases which would increase the count beyond this limit are pending.
 # TYPE throttle_full_count gauge
 throttle_full_count{semaphore="A"} 42
+# HELP throttle_longest_pending_sec Time the longest pending peer is waiting until now, to acquire a lock to a semaphore.
+# TYPE throttle_longest_pending_sec gauge
+throttle_longest_pending_sec{semaphore="A"} 0
 # HELP throttle_num_404 Number of Get requests to unknown resource.
 # TYPE throttle_num_404 counter
 throttle_num_404 0
