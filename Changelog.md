@@ -31,8 +31,8 @@ Fix: pip installing python client now also installs `requests` dependencies, whi
 
 * Python Client: `Client` can now be pickeled again.
 
-Next
-----
+0.1.6
+-----
 
 * Fairness
 * Large semaphores don't starve
