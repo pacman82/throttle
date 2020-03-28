@@ -6,7 +6,7 @@ const FAVICON: &[u8] = include_bytes!("favicon.ico");
 
 /// Browsers like to ask for an Icon. We do not want to clutter our logs with meaningless 404s so we
 /// just provide one.
-#[get("/favicon")]
+#[get("/favicon.ico")]
 pub fn favicon() -> HttpResponse {
     HttpResponse::Ok()
         .content_type("image/x-icon")
