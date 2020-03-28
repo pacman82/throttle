@@ -122,7 +122,7 @@ impl Leases {
         // smaller than max in situations there e.g. a lock with a count of 5 is pending with while
         // the remainder is 3.
         let acquired = max
-            .map(|max| self.demand_smaller_or_equal(semaphore, max))
+            .map(|max| self.demand_smaller_or_equal(semaphore, max - amount))
             .unwrap_or(true);
 
         let old = self.ledger.insert(
@@ -231,10 +231,16 @@ impl Leases {
     /// is smaller or equal to `max`.
     fn demand_smaller_or_equal(&self, semaphore: &str, max: i64) -> bool {
         let mut demand = 0;
+        debug_assert!(max >= 0);
+        // If we would allow lock counts > semahpore counts in this method we'd need these lines. So
+        // the condition is always false.
+        // if demand > max {
+        //     return false;
+        // }
         for peer in self.ledger.values() {
             demand += peer.count_demand(semaphore);
             // early return
-            if demand <= max {
+            if demand > max {
                 return false;
             }
         }

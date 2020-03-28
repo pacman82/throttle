@@ -247,3 +247,26 @@ lazy_static! {
     )
     .expect("Error registering throttle_count metric");
 }
+
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn acquire_three_leases() {
+        // Semaphore with count of 3
+        let mut semaphores = Semaphores::new();
+        semaphores.insert(String::from("A"), 3);
+        let state = State::new(semaphores);
+
+        // First three locks can be acquired immediatly
+        assert!(state.acquire("A", 1, Duration::from_secs(1)).unwrap().1);
+        assert!(state.acquire("A", 1, Duration::from_secs(1)).unwrap().1);
+        assert!(state.acquire("A", 1, Duration::from_secs(1)).unwrap().1);
+        // The fourth must wait
+        assert!(!state.acquire("A", 1, Duration::from_secs(1)).unwrap().1);
+    }
+
+}

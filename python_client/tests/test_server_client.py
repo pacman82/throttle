@@ -120,3 +120,16 @@ def test_does_not_starve_large_locks():
         # We free the first small lock, now the big one can be acquired
         client.release(lock_small)
         assert client.remainder("A") == 0
+
+
+def test_acquire_three_leases():
+    """
+    This test verifies that three leases can be acquired at once if the semaphore count
+    is three.
+    """
+    with throttle_client(b"[semaphores]\nA=3") as client:
+        assert client.acquire("A").has_active()
+        assert client.acquire("A").has_active()
+        assert client.acquire("A").has_active()
+        assert client.remainder("A") == 0
+        assert client.acquire("A").has_pending()

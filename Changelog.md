@@ -36,3 +36,9 @@ Fix: pip installing python client now also installs `requests` dependencies, whi
 
 * Fairness
 * Large semaphores don't starve
+
+0.1.7
+-----
+
+* Fix: 0.1.6 introduced a behaviour, there acquiring a lock would always fail initialy, for all but
+  the first peer.
