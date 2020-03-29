@@ -43,8 +43,8 @@ Fix: pip installing python client now also installs `requests` dependencies, whi
 * Fix: 0.1.6 introduced a behaviour, there acquiring a lock would always fail initialy, for all but
   the first peer.
 
-Next
-----
+0.1.8
+-----
 
 * Fix: Releasing locks, did fail to stop other locks from pending if a higher priority lock had
 already been acquired.
