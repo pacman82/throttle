@@ -42,3 +42,9 @@ Fix: pip installing python client now also installs `requests` dependencies, whi
 
 * Fix: 0.1.6 introduced a behaviour, there acquiring a lock would always fail initialy, for all but
   the first peer.
+
+Next
+----
+
+* Favicon route is now `favicon.ico` instead of `favicon`.
+* Add route `version` to display current version number.

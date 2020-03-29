@@ -54,6 +54,7 @@ rand = "0.7.3"
 env_logger = "0.7.1"
 humantime-serde = "1.0.0"
 thiserror = "1.0.13"
+version = "3.0.0"
 
 [dependencies.log]
 version = "0.4.8"

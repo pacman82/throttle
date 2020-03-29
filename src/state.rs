@@ -248,7 +248,6 @@ lazy_static! {
     .expect("Error registering throttle_count metric");
 }
 
-
 #[cfg(test)]
 mod tests {
 
@@ -268,5 +267,4 @@ mod tests {
         // The fourth must wait
         assert!(!state.acquire("A", 1, Duration::from_secs(1)).unwrap().1);
     }
-
 }

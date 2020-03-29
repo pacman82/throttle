@@ -29,6 +29,7 @@ mod metrics;
 mod not_found;
 mod semaphore_service;
 mod state;
+mod version;
 
 #[get("/")]
 async fn index() -> &'static str {
@@ -81,6 +82,7 @@ async fn main() -> io::Result<()> {
             .service(health::health)
             .service(metrics::metrics)
             .service(favicon::favicon)
+            .service(version::get_version)
             .service(semaphore_service::acquire)
             .service(semaphore_service::remainder)
             .service(semaphore_service::release)
