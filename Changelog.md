@@ -46,5 +46,7 @@ Fix: pip installing python client now also installs `requests` dependencies, whi
 Next
 ----
 
+* Fix: Releasing locks, did fail to stop other locks from pending if a higher priority lock had
+already been acquired.
 * Favicon route is now `favicon.ico` instead of `favicon`.
 * Add route `version` to display current version number.

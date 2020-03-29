@@ -113,6 +113,9 @@ async fn block_until_acquired(
             .block_until_acquired(lease_id, expires_in, semaphore, amount, timeout)
             .map(Json)
     } else {
+        // Todo: How to best handle a wait for without pending leases? This path won't be triggered
+        // by a correct client. Remark: Wo would not have this problem, if we handled Unknown Peer
+        // at the client side.
         Ok(Json(true))
     }
 }

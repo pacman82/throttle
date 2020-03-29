@@ -267,4 +267,77 @@ mod tests {
         // The fourth must wait
         assert!(!state.acquire("A", 1, Duration::from_secs(1)).unwrap().1);
     }
+
+    #[test]
+    fn resolve_pending() {
+        // Semaphore with count of 3
+        let mut semaphores = Semaphores::new();
+        semaphores.insert(String::from("A"), 3);
+        let state = State::new(semaphores);
+        let one_sec = Duration::from_secs(1);
+
+        // First three locks can be acquired immediatly
+        let (one, _) = state.acquire("A", 1, one_sec).unwrap();
+        let (two, _) = state.acquire("A", 1, one_sec).unwrap();
+        let (three, _) = state.acquire("A", 1, one_sec).unwrap();
+        // The four, five and six must wait
+        state.acquire("A", 1, one_sec).unwrap();
+        state.acquire("A", 1, one_sec).unwrap();
+        state.acquire("A", 1, one_sec).unwrap();
+        
+        // Remainder is zero due to the three leases intially acquired
+        assert_eq!(state.remainder("A").unwrap(), 0);
+        
+        // Release one of the first three. Four should now be acquired.
+        state.release(two);
+        assert_eq!(state.remainder("A").unwrap(), 0);
+
+        // Release another one of the first three. Five should now be acquired.
+        state.release(one);
+        assert_eq!(state.remainder("A").unwrap(), 0);
+
+        // Release last one of the first three. six should now be acquired.
+        state.release(three);
+        assert_eq!(state.remainder("A").unwrap(), 0);
+    }
+
+    #[test]
+    fn fairness() {
+        // Semaphore with count of 3
+        let mut semaphores = Semaphores::new();
+        semaphores.insert(String::from("A"), 3);
+        let state = State::new(semaphores);
+        let one_sec = Duration::from_secs(1);
+        let no_waiting = Duration::new(0, 0);
+
+        // First three locks can be acquired immediatly
+        let (one, _) = state.acquire("A", 1, one_sec).unwrap();
+        let (two, _) = state.acquire("A", 1, one_sec).unwrap();
+        let (three, _) = state.acquire("A", 1, one_sec).unwrap();
+        // The four, five and six must wait
+        let (four, _) = state.acquire("A", 1, one_sec).unwrap();
+        let (five, _) = state.acquire("A", 1, one_sec).unwrap();
+        let (six, _) = state.acquire("A", 1, one_sec).unwrap();
+        
+        // Remainder is zero due to the three leases intially acquired
+        assert_eq!(state.remainder("A").unwrap(), 0);
+        
+        // Release one of the first three. Four should now be acquired.
+        state.release(two);
+        assert!(state
+            .block_until_acquired(four, no_waiting, "A", 1, one_sec)
+            .unwrap());
+
+        // Release another one of the first three. Five should now be acquired.
+        state.release(one);
+        assert!(state
+            .block_until_acquired(five, no_waiting, "A", 1, one_sec)
+            .unwrap());
+
+        // Release last one of the first three. six should now be acquired.
+        state.release(three);
+        assert!(state
+            .block_until_acquired(six, no_waiting, "A", 1, one_sec)
+            .unwrap());
+    }
 }

@@ -253,7 +253,7 @@ impl Leases {
     fn highest_priority_pending<'a>(&'a mut self, semaphore: &str) -> Option<&'a mut Peer> {
         self.ledger
             .values_mut()
-            .filter(|peer| peer.semaphore == semaphore)
+            .filter(|peer| !peer.acquired && peer.semaphore == semaphore)
             .min_by_key(|peer| peer.since)
     }
 }
