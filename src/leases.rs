@@ -157,6 +157,9 @@ impl Leases {
     /// Acquires pending leases for the semaphore until its count is >= max. It acquires the locks
     /// pending the longest first.
     pub fn resolve_pending(&mut self, semaphore: &str, max: i64) {
+        // TODO: If we give a hint in the return value, wether a pending lock has been acquired due
+        // to this function call, we could skip notifying all threads, in case nothing has been
+        // acquired.
         let mut remainder = max - self.count(semaphore);
         while remainder > 0 {
             if let Some(peer) = self.highest_priority_pending(semaphore) {
