@@ -178,8 +178,16 @@ impl Leases {
     }
 
     /// Wether the peer has any pending leases.
-    pub fn has_pending(&self, peer_id: u64) -> Option<bool> {
-        self.ledger.get(&peer_id).map(|lease| !lease.acquired)
+    ///
+    /// # Return
+    ///
+    /// `true` if peer has any pending leases, `false` if not. Returns `UnknownPeer` if peer does
+    /// not exist.
+    pub fn has_pending(&self, peer_id: u64) -> Result<bool, ThrottleError> {
+        self.ledger
+            .get(&peer_id)
+            .ok_or(ThrottleError::UnknownPeer)
+            .map(|lease| !lease.acquired)
     }
 
     /// Remove every lease, which is not valid until now.

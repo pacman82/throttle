@@ -124,9 +124,7 @@ impl State {
             .unwrap();
 
         // Can have error if a peer expires while waitinng for a lease.
-        let pending = leases
-            .has_pending(peer_id)
-            .ok_or(ThrottleError::UnknownPeer)?;
+        let pending = leases.has_pending(peer_id)?;
         debug_assert!(pending == wait_time_result.timed_out());
         Ok(!pending)
     }
