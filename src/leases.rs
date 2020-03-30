@@ -1,3 +1,4 @@
+use crate::error::ThrottleError;
 use rand::random;
 use std::{
     collections::HashMap,
@@ -202,14 +203,18 @@ impl Leases {
     ///
     /// # Return
     ///
-    /// Should the `peer_id` been found `true` returned. `false` otherwise.
-    pub fn update_valid_until(&mut self, peer_id: u64, valid_until: Instant) -> bool {
-        if let Some(lease) = self.ledger.get_mut(&peer_id) {
-            lease.valid_until = valid_until;
-            true
-        } else {
-            false
-        }
+    /// May return `ThrottleError::UnknownPeer` if `peer_id` is not found.
+    pub fn update_valid_until(
+        &mut self,
+        peer_id: u64,
+        valid_until: Instant,
+    ) -> Result<(), ThrottleError> {
+        let peer = self
+            .ledger
+            .get_mut(&peer_id)
+            .ok_or(ThrottleError::UnknownPeer)?;
+        peer.valid_until = valid_until;
+        Ok(())
     }
 
     /// Fills counts with the current accumulated counts for each semaphore. One entry for each

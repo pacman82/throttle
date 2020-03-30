@@ -98,16 +98,22 @@ impl State {
         let mut leases = self.leases.lock().unwrap();
         let start = Instant::now();
         let valid_until = start + expires_in;
-        if !leases.update_valid_until(peer_id, valid_until) {
-            let max = *self
-                .semaphores
-                .get(semaphore)
-                .ok_or(ThrottleError::UnknownSemaphore)?;
-            let active = leases.add(peer_id, semaphore, amount, Some(max), valid_until);
-            warn!(
-                "Revenant Peer {} with pending leases. Active: {}",
-                peer_id, active
-            );
+
+        match leases.update_valid_until(peer_id, valid_until) {
+            Ok(()) => (),
+            Err(ThrottleError::UnknownPeer) => {
+                let max = *self
+                    .semaphores
+                    .get(semaphore)
+                    .ok_or(ThrottleError::UnknownSemaphore)?;
+                let active = leases.add(peer_id, semaphore, amount, Some(max), valid_until);
+                warn!(
+                    "Revenant Peer {} with pending leases. Active: {}",
+                    peer_id, active
+                );
+            }
+            // update valid until can only fail with UnknowPeer
+            Err(_) => unreachable!(),
         }
 
         let (leases, wait_time_result) = self
@@ -135,18 +141,23 @@ impl State {
         let mut leases = self.leases.lock().unwrap();
         // Determine valid_until after acquiring lock, in case we block for a long time.
         let valid_until = Instant::now() + expires_in;
-        if !leases.update_valid_until(peer_id, valid_until) {
-            // Assert semaphore exists. We want to give the client an error and also do not want to
-            // allow any Unknown Semaphore into `leases`.
-            let _max = *self
-                .semaphores
-                .get(semaphore)
-                .ok_or(ThrottleError::UnknownSemaphore)?;
-            // By passing None as max rather than the value obtained above, we opt out checking the
-            // semaphore full count and allow exceeding it.
-            let max = None;
-            leases.add(peer_id, semaphore, amount, max, valid_until);
-            warn!("Revenat peer {} with active leases returned.", peer_id);
+        match leases.update_valid_until(peer_id, valid_until) {
+            Ok(()) => (),
+            Err(ThrottleError::UnknownPeer) => {
+                // Assert semaphore exists. We want to give the client an error and also do not want to
+                // allow any Unknown Semaphore into `leases`.
+                let _max = *self
+                    .semaphores
+                    .get(semaphore)
+                    .ok_or(ThrottleError::UnknownSemaphore)?;
+                // By passing None as max rather than the value obtained above, we opt out checking the
+                // semaphore full count and allow exceeding it.
+                let max = None;
+                leases.add(peer_id, semaphore, amount, max, valid_until);
+                warn!("Revenat peer {} with active leases returned.", peer_id);
+            }
+            // `update_valid_until` can only fail with `UnknownPeer`
+            Err(_) => unreachable!(),
         }
         Ok(())
     }
@@ -284,10 +295,8 @@ mod tests {
         state.acquire("A", 1, one_sec).unwrap();
         state.acquire("A", 1, one_sec).unwrap();
         state.acquire("A", 1, one_sec).unwrap();
-        
         // Remainder is zero due to the three leases intially acquired
         assert_eq!(state.remainder("A").unwrap(), 0);
-        
         // Release one of the first three. Four should now be acquired.
         state.release(two);
         assert_eq!(state.remainder("A").unwrap(), 0);
@@ -318,10 +327,8 @@ mod tests {
         let (four, _) = state.acquire("A", 1, one_sec).unwrap();
         let (five, _) = state.acquire("A", 1, one_sec).unwrap();
         let (six, _) = state.acquire("A", 1, one_sec).unwrap();
-        
         // Remainder is zero due to the three leases intially acquired
         assert_eq!(state.remainder("A").unwrap(), 0);
-        
         // Release one of the first three. Four should now be acquired.
         state.release(two);
         assert!(state
