@@ -157,24 +157,26 @@ impl Leases {
 
     /// Acquires pending leases for the semaphore until its count is >= max. It acquires the locks
     /// pending the longest first.
-    pub fn resolve_pending(&mut self, semaphore: &str, max: i64) {
-        // TODO: If we give a hint in the return value, wether a pending lock has been acquired due
-        // to this function call, we could skip notifying all threads, in case nothing has been
-        // acquired.
+    pub fn resolve_pending(&mut self, semaphore: &str, max: i64) -> Vec<u64> {
+        // Keep book about all peers, those locks have been acquired, so we can notify their pending
+        // requests.
+        let mut resolved_peers = Vec::new();
         let mut remainder = max - self.count(semaphore);
         while remainder > 0 {
-            if let Some(peer) = self.highest_priority_pending(semaphore) {
+            if let Some((id, peer)) = self.highest_priority_pending(semaphore) {
                 // Decrement the remainder of the amount, regardless of wether we acquire it or not
                 // doing so prevents us from starving locks requesting big amounts.
                 remainder -= peer.amount;
                 if remainder >= 0 {
                     peer.acquired = true;
+                    resolved_peers.push(id)
                 }
             } else {
                 // No more pending locks to consider.
                 break;
             }
         }
+        resolved_peers
     }
 
     /// Wether the peer has any pending leases.
@@ -198,13 +200,18 @@ impl Leases {
     ///
     /// # Return
     ///
-    /// The number of removed leases.
-    pub fn remove_expired(&mut self, now: Instant) -> usize {
-        let before = self.ledger.len();
-        self.ledger
-            .retain(|_peer_id, lease| now < lease.valid_until);
-        let after = self.ledger.len();
-        before - after
+    /// List of expired peers
+    pub fn remove_expired(&mut self, now: Instant) -> Vec<u64> {
+        let mut expired_peers = Vec::new();
+        self.ledger.retain(|peer_id, lease| {
+            if now < lease.valid_until {
+                true
+            } else {
+                expired_peers.push(*peer_id);
+                false
+            }
+        });
+        expired_peers
     }
 
     /// Called to increase the timestamp of a lease to prevent it from expiring.
@@ -266,10 +273,11 @@ impl Leases {
     /// Return the pending lock with the highest priority for this semaphore. Since we have fair
     /// semaphores, this is the lock waiting the longest. Returs `None` in case there are not any
     /// pending locks.
-    fn highest_priority_pending<'a>(&'a mut self, semaphore: &str) -> Option<&'a mut Peer> {
+    fn highest_priority_pending<'a>(&'a mut self, semaphore: &str) -> Option<(u64, &'a mut Peer)> {
         self.ledger
-            .values_mut()
-            .filter(|peer| !peer.acquired && peer.semaphore == semaphore)
-            .min_by_key(|peer| peer.since)
+            .iter_mut()
+            .filter(|(_id, peer)| !peer.acquired && peer.semaphore == semaphore)
+            .min_by_key(|(_id, peer)| peer.since)
+            .map(|(id, peer)| (*id, peer))
     }
 }

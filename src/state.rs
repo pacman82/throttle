@@ -71,10 +71,14 @@ impl State {
     ///
     /// Returns number of (now removed) expired leases
     pub fn remove_expired(&self) -> usize {
-        let num_removed = self.leases.lock().unwrap().remove_expired(Instant::now());
+        let expired_peers = self.leases.lock().unwrap().remove_expired(Instant::now());
+        let num_removed = expired_peers.len();
+        // TODO: notify peers indivdually
         if num_removed != 0 {
             self.released.notify_all();
-            warn!("Removed {} leases due to expiration.", num_removed);
+        }
+        for peer_id in expired_peers {
+            warn!("Removed peer {} due to expiration.", peer_id);
         }
         num_removed
     }
@@ -183,8 +187,9 @@ impl State {
                     .semaphores
                     .get(&semaphore)
                     .expect("An active semaphore must always be configured");
-                leases.resolve_pending(&semaphore, *full_count);
+                let _resolved_peers = leases.resolve_pending(&semaphore, *full_count);
                 // Notify waiting requests that lease has changed
+                // TODO: notify peers indiviually
                 self.released.notify_all();
                 true
             }
