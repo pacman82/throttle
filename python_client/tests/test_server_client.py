@@ -160,3 +160,27 @@ def test_unblock_immediatly_after_release():
         t.join(3)
         # If `t` is alive, the join timed out, which should not be the case
         assert not t.is_alive()
+
+
+def test_server_timeout():
+    """
+    Server should answer request to `block_until_acquired` if the timeout has elapsed.
+    """
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        # Acquire first lease
+        _ = client.acquire("A")
+        # Second is pending
+        two = client.acquire("A")
+        # Wait for it in a seperate thread so we do not block forever if this test
+        # fails.
+
+        def wait_for_two():
+            client.block_until_acquired(two, block_for=timedelta(seconds=0.5))
+
+        t = Thread(target=wait_for_two)
+        t.start()
+
+        # Three seconds should be ample time for `t` to return
+        t.join(3)
+        # If `t` is alive, the join timed out, which should not be the case
+        assert not t.is_alive()
