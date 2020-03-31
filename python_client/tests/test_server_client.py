@@ -133,3 +133,30 @@ def test_acquire_three_leases():
         assert client.acquire("A").has_active()
         assert client.remainder("A") == 0
         assert client.acquire("A").has_pending()
+
+
+def test_unblock_immediatly_after_release():
+    """
+    `block_until_acquired` must return immediatly after the pending lock can be acquired and not
+    wait for the next request to go through.
+    """
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        # Acquire first lease
+        one = client.acquire("A")
+        # Second is pending
+        two = client.acquire("A")
+        # Wait for it in a seperate thread so we can use this thread to release `one`
+
+        def wait_for_two():
+            client.block_until_acquired(two, block_for=timedelta(seconds=15))
+
+        t = Thread(target=wait_for_two)
+        t.start()
+
+        # Unblock `t`
+        client.release(one)
+
+        # Three seconds should be ample time for `t` to return
+        t.join(3)
+        # If `t` is alive, the join timed out, which should not be the case
+        assert not t.is_alive()
