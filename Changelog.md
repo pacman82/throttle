@@ -50,3 +50,8 @@ Fix: pip installing python client now also installs `requests` dependencies, whi
 already been acquired.
 * Favicon route is now `favicon.ico` instead of `favicon`.
 * Add route `version` to display current version number.
+
+Next
+----
+
+* New route `is_acquired` tells if all the locks of a peer could be acquired.

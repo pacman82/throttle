@@ -224,6 +224,12 @@ impl State {
         }
     }
 
+    /// Returns true if all the locks of the peer are acquired
+    pub fn is_acquired(&self, peer_id: u64) -> Result<bool, ThrottleError> {
+        let leases = self.leases.lock().unwrap();
+        leases.has_pending(peer_id).map(|pending| !pending)
+    }
+
     /// Lock internal mutex for specified amount of time, and thus preventing any changes. No use in
     /// production, but useful during testing to emulate scenarios there the server is stressed and
     /// to provoke timeouts.
@@ -320,7 +326,6 @@ mod tests {
         semaphores.insert(String::from("A"), 3);
         let state = State::new(semaphores);
         let one_sec = Duration::from_secs(1);
-        let no_waiting = Duration::new(0, 0);
 
         // First three locks can be acquired immediatly
         let (one, _) = state.acquire("A", 1, one_sec).unwrap();
@@ -334,20 +339,15 @@ mod tests {
         assert_eq!(state.remainder("A").unwrap(), 0);
         // Release one of the first three. Four should now be acquired.
         state.release(two);
-        assert!(state
-            .block_until_acquired(four, no_waiting, "A", 1, one_sec)
-            .unwrap());
+        assert!(state.is_acquired(four).unwrap());
 
         // Release another one of the first three. Five should now be acquired.
         state.release(one);
-        assert!(state
-            .block_until_acquired(five, no_waiting, "A", 1, one_sec)
-            .unwrap());
+        assert!(state.is_acquired(five).unwrap());
 
         // Release last one of the first three. six should now be acquired.
         state.release(three);
-        assert!(state
-            .block_until_acquired(six, no_waiting, "A", 1, one_sec)
-            .unwrap());
+        assert!(state.is_acquired(six).unwrap());
     }
 }
+

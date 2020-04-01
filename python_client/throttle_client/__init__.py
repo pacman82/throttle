@@ -100,6 +100,18 @@ class Client:
     def acquire(
         self, semaphore: str, count: int = 1, expires_in: timedelta = None
     ) -> Peer:
+        """
+        Acquire a lock from the server.
+
+        Every call to `acquire` should be matched by a call to `release`. Check out `lock` which as
+        contextmanager does this for you.
+
+        * `semaphore`: Name of the semaphore to be acquired.
+        * `count`: The count of the lock. A larger count represents a larger 'piece' of the
+        resource under procection.
+        * `expires_in`: The amount of time the remains valid. Can be prolonged by calling heartbeat.
+        After the time has passed the lock is considered released on the server side.
+        """
         if not expires_in:
             expires_in = self.expiration_time
         body = {
@@ -179,6 +191,23 @@ class Client:
         _translate_domain_errors(response)
 
         return int(response.text)
+
+    def is_acquired(self, peer: Peer) -> bool:
+        """
+        Ask the server wether all the locks associated with the peer are all acquired.
+        """
+        for attempt in self._retrying():
+            with attempt:
+                response = requests.get(
+                    self.base_url + f"/peers/{peer.id}/is_acquired"
+                )
+                # Witin `attempt` we raise only for recoverable errors. These must not be domain
+                # errors, which implies that there is no need to translate them.
+                if _is_recoverable_error(response.status_code):
+                    response.raise_for_status()
+        _translate_domain_errors(response)
+
+        return json.loads(response.text)
 
     def freeze(self, time: timedelta):
         """

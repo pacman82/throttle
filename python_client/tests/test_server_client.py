@@ -23,11 +23,11 @@ def test_pending_lock():
         # Second lease is pending, because we still hold first
         assert second.has_pending()
         # A request to the server is also telling us so
-        assert client.block_until_acquired(second, block_for=timedelta(seconds=0))
+        assert not client.is_acquired(second)
         client.release(first)
         # After releasing the first lease the second lease should no longer be
         # pending
-        assert not client.block_until_acquired(second, block_for=timedelta(seconds=0))
+        assert client.is_acquired(second)
 
 
 def test_removal_of_expired_leases():
