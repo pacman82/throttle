@@ -144,6 +144,10 @@ impl State {
 
             let acquire_or_timeout =
                 time::timeout(timeout, self.wakers.wait_for_resolving(peer_id));
+
+            // Release lock on leases, while waiting for acquire_or_timeout! Otherwise, we might
+            // deadlock.
+            drop(leases);
             // The outer `Err` indicates a timeout.
             match acquire_or_timeout.await {
                 // Locks could be acquired
