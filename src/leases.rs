@@ -37,7 +37,7 @@ impl Counts {
     pub fn longest_pending(&self, now: Instant) -> Duration {
         self.longest_pending_since
             .map(|earlier| now.duration_since(earlier))
-            .unwrap_or(Default::default())
+            .unwrap_or_default()
     }
 }
 

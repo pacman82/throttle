@@ -26,10 +26,10 @@ impl Future for FutureAcquired {
         let mut shared = self.shared.lock().unwrap();
         match &shared.result {
             None => {
-                if let &mut Some(ref mut waker) = &mut shared.waker {
+                if let Some(ref mut waker) = &mut shared.waker {
                     // If a woker has been previously set, let's reuse the resources from the old
                     // one, rather than allocating a new one.
-                    waker.clone_from(&mut cx.waker())
+                    waker.clone_from(&cx.waker())
                 } else {
                     shared.waker = Some(cx.waker().clone());
                 }
