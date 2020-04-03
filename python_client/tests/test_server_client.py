@@ -202,17 +202,17 @@ def test_resolve_leases_immediatly_after_expiration():
         # Wait for it in a seperate thread so we can use this thread to release `one`
 
         def wait_for_two():
-            client.block_until_acquired(two, block_for=timedelta(seconds=15))
+            client.block_until_acquired(two, block_for=timedelta(seconds=20))
 
         t = Thread(target=wait_for_two)
         t.start()
 
         # Unblock `t`. With expiration
-        client.expiration_time = timedelta(milliseconds=10)
+        client.expiration_time = timedelta(milliseconds=500)
         client.heartbeat(one)
 
         # Three seconds should be ample time for `t` to return
-        t.join(3)
+        t.join(4)
         # If `t` is alive, the join timed out, which should not be the case
         assert not t.is_alive()
 
@@ -221,9 +221,7 @@ def test_block_until_acquired():
     """
     `block_until_acquired` should return `true` while pending and `false` once lock is acquired
     """
-    with throttle_client(
-        b'litter_collection_interval = "10ms"\n' b"[semaphores]\nA=1"
-    ) as client:
+    with throttle_client(b"[semaphores]\nA=1") as client:
         # Acquire first lease
         one = client.acquire("A")
         # Second is pending
