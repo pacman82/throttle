@@ -30,6 +30,7 @@ mod not_found;
 mod semaphore_service;
 mod state;
 mod version;
+mod wakers;
 
 #[get("/")]
 async fn index() -> &'static str {
