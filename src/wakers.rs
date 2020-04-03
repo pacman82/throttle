@@ -1,4 +1,4 @@
-use crate::{error::ThrottleError, leases::Leases};
+use crate::error::ThrottleError;
 use std::{
     future::Future,
     pin::Pin,
@@ -59,22 +59,12 @@ impl Wakers {
             wakers: Mutex::new(Vec::new()),
         }
     }
-    /// Future returns, once the peer has acquired its pending lock, or the peer gets removed.
+    /// A future associated with a peer, which can be resolved using `resolve_with`.
     ///
     /// Attention: Do not call this method while holding a lock to `leases`.
-    pub async fn all_acquired(
-        &self,
-        peer_id: u64,
-        leases: &Mutex<Leases>,
-    ) -> Result<(), ThrottleError> {
-        let result = match leases.lock().unwrap().has_pending(peer_id) {
-            Ok(false) => Some(Ok(())),
-            Ok(true) => None,
-            Err(e) => Some(Err(e)),
-        };
-
+    pub async fn wait_for_resolving(&self, peer_id: u64) -> Result<(), ThrottleError> {
         let strong = Arc::new(Mutex::new(Shared {
-            result,
+            result: None,
             waker: None,
         }));
         let weak = Arc::downgrade(&strong);

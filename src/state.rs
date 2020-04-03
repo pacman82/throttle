@@ -135,18 +135,24 @@ impl State {
             Err(_) => unreachable!(),
         }
 
-        // Free lock. Important NOT to hold lease while polling during .await
-        drop(leases);
+        // Check if we can resolve this immediatly
+        if !leases.has_pending(peer_id)? {
+            Ok(true)
+        } else {
+            // keep holding the lock to `leases` until everything is registered. So we don't miss
+            // the call to `resolve_with`.
 
-        let acquire_or_timeout =
-            time::timeout(timeout, self.wakers.all_acquired(peer_id, &self.leases));
-        match acquire_or_timeout.await {
-            // Locks could be acquired
-            Ok(Ok(())) => Ok(true),
-            // Failure
-            Ok(Err(e)) => Err(e),
-            // Lock could not be acquired in time
-            Err(_) => Ok(false),
+            let acquire_or_timeout =
+                time::timeout(timeout, self.wakers.wait_for_resolving(peer_id));
+            // The outer `Err` indicates a timeout.
+            match acquire_or_timeout.await {
+                // Locks could be acquired
+                Ok(Ok(())) => Ok(true),
+                // Failure
+                Ok(Err(e)) => Err(e),
+                // Lock could not be acquired in time
+                Err(_) => Ok(false),
+            }
         }
     }
 
