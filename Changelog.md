@@ -54,4 +54,6 @@ already been acquired.
 Next
 ----
 
+* Fix: Pending leases are now acquired immediatly. Previously their acquiration could have been
+delayed if the peer holding the lock previously did expire, rather than release its lock.
 * New route `is_acquired` tells if all the locks of a peer could be acquired.

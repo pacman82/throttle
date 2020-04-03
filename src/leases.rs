@@ -196,22 +196,33 @@ impl Leases {
     ///
     /// Under ordinary circumstances leases should be explicitly removed. Yet a client may die due
     /// to an error and never get a chance to free the lease. Therfore we free this litter on
-    /// ocation.
+    /// ocation. After calling this resolved pending should be invoked on the affected semaphores.
     ///
     /// # Return
     ///
-    /// List of expired peers
-    pub fn remove_expired(&mut self, now: Instant) -> Vec<u64> {
+    /// (List of expired peers, affected_semaphores)
+    pub fn remove_expired(&mut self, now: Instant) -> (Vec<u64>, Vec<String>) {
         let mut expired_peers = Vec::new();
+        let mut affected_semaphores = Vec::new();
         self.ledger.retain(|peer_id, lease| {
             if now < lease.valid_until {
                 true
             } else {
                 expired_peers.push(*peer_id);
+                if lease.acquired {
+                    // A little optimization: Let's steal the string, since we won't retain this
+                    // instance anyway.
+                    let mut tmp = String::new();
+                    std::mem::swap(&mut tmp, &mut lease.semaphore);
+                    affected_semaphores.push(tmp);
+                }
                 false
             }
         });
-        expired_peers
+        // Remove duplicates
+        affected_semaphores.sort();
+        affected_semaphores.dedup();
+        (expired_peers, affected_semaphores)
     }
 
     /// Called to increase the timestamp of a lease to prevent it from expiring.

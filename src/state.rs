@@ -71,7 +71,17 @@ impl State {
     ///
     /// Returns number of (now removed) expired leases
     pub fn remove_expired(&self) -> usize {
-        let expired_peers = self.leases.lock().unwrap().remove_expired(Instant::now());
+        let expired_peers = {
+            let mut leases = self.leases.lock().unwrap();
+            let (expired_peers, affected_semaphores) = leases.remove_expired(Instant::now());
+            let mut resolved_peers = Vec::new();
+            for semaphore in affected_semaphores {
+                resolved_peers.extend(
+                    leases.resolve_pending(&semaphore, *self.semaphores.get(&semaphore).unwrap()),
+                );
+            }
+            expired_peers
+        };
         let num_removed = expired_peers.len();
         // TODO: notify peers indivdually
         if num_removed != 0 {
@@ -350,4 +360,3 @@ mod tests {
         assert!(state.is_acquired(six).unwrap());
     }
 }
-

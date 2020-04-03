@@ -184,3 +184,34 @@ def test_server_timeout():
         t.join(3)
         # If `t` is alive, the join timed out, which should not be the case
         assert not t.is_alive()
+
+
+def test_resolve_leases_immediatly_after_expiration():
+    """
+    `block_until_acquired` must return immediatly after the pending lock can be acquired and not
+    wait for the next request to go through. In this test the peer previously holding the lock
+    expires rather than being deleted explicitly.
+    """
+    with throttle_client(
+        b'litter_collection_interval = "10ms"\n' b"[semaphores]\nA=1"
+    ) as client:
+        # Acquire first lease
+        one = client.acquire("A")
+        # Second is pending
+        two = client.acquire("A")
+        # Wait for it in a seperate thread so we can use this thread to release `one`
+
+        def wait_for_two():
+            client.block_until_acquired(two, block_for=timedelta(seconds=15))
+
+        t = Thread(target=wait_for_two)
+        t.start()
+
+        # Unblock `t`. With expiration
+        client.expiration_time = timedelta(milliseconds=10)
+        client.heartbeat(one)
+
+        # Three seconds should be ample time for `t` to return
+        t.join(3)
+        # If `t` is alive, the join timed out, which should not be the case
+        assert not t.is_alive()
