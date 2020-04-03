@@ -56,6 +56,10 @@ humantime-serde = "1.0.0"
 thiserror = "1.0.13"
 version = "3.0.0"
 
+# We use it explicitly for the time::timeout feature
+[dependencies.tokio]
+version = "0.2.13"
+
 [dependencies.log]
 version = "0.4.8"
 features = ["serde"]

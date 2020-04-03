@@ -102,22 +102,24 @@ async fn block_until_acquired(
     state: Data<State>,
 ) -> Result<Json<bool>, ThrottleError> {
     let lease_id = *path;
-    let timeout = Duration::from_millis(query.timeout_ms.unwrap_or(0));
+    let unblock_after = Duration::from_millis(query.timeout_ms.unwrap_or(0));
     debug!(
         "Lease {} is waiting for admission with timeout {:?}",
-        lease_id, timeout
+        lease_id, unblock_after
     );
+    let peer_id = *path;
     let expires_in = body.expires_in;
-    if let Some((semaphore, amount)) = body.pending() {
+    let acquired_in_time = if let Some((semaphore, amount)) = body.pending() {
         state
-            .block_until_acquired(lease_id, expires_in, semaphore, amount, timeout)
-            .map(Json)
+            .block_until_acquired(peer_id, expires_in, semaphore, amount, unblock_after)
+            .await?
     } else {
         // Todo: How to best handle a wait for without pending leases? This path won't be triggered
         // by a correct client. Remark: Wo would not have this problem, if we handled Unknown Peer
         // at the client side.
-        Ok(Json(true))
-    }
+        true
+    };
+    Ok(Json(acquired_in_time))
 }
 
 /// Query parameters for getting remaining semaphore count
@@ -172,7 +174,6 @@ async fn put_peer(
     } else {
         warn!("Empty heartbeat (no active leases) for {}", lease_id);
     }
-
     Ok("Ok")
 }
 

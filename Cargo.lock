@@ -1403,6 +1403,7 @@ dependencies = [
  "structopt 0.3.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "structopt-derive 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tokio 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "version 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]

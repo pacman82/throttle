@@ -2,26 +2,31 @@ use crate::{
     application_cfg::Semaphores,
     error::ThrottleError,
     leases::{Counts, Leases},
+    wakers::Wakers,
 };
 use lazy_static::lazy_static;
 use log::{debug, warn};
 use prometheus::IntGaugeVec;
 use std::{
     collections::HashMap,
-    sync::{Condvar, Mutex},
+    mem::drop,
+    sync::Mutex,
     time::{Duration, Instant},
 };
+use tokio::time;
 
 /// State of the Semaphore service, shared between threads
+///
+/// This class combines the confguration of the `semaphores`, with the state of the peers in
+/// `leases` and makes them consumable in an asynchronous, mulithreaded consumer.
 pub struct State {
+    /// All known semaphores and their full count
+    semaphores: Semaphores,
     /// Bookeeping for leases, protected by mutex so multiple threads (i.e. requests) can manipulate
     /// it. Must not contain any leases not configured in semaphores.
     leases: Mutex<Leases>,
-    /// Condition variable. Notify is called thenever a lease is released, so it's suitable for
-    /// blocking on request to pending leases.
-    released: Condvar,
-    /// All known semaphores and their full count
-    semaphores: Semaphores,
+    /// Peer id and weak references to mutex for each pending request.
+    wakers: Wakers,
 }
 
 impl State {
@@ -29,8 +34,8 @@ impl State {
     pub fn new(semaphores: Semaphores) -> State {
         State {
             leases: Mutex::new(Leases::new()),
-            released: Condvar::new(),
             semaphores,
+            wakers: Wakers::new(),
         }
     }
 
@@ -71,7 +76,7 @@ impl State {
     ///
     /// Returns number of (now removed) expired leases
     pub fn remove_expired(&self) -> usize {
-        let expired_peers = {
+        let (expired_peers, resolved_peers) = {
             let mut leases = self.leases.lock().unwrap();
             let (expired_peers, affected_semaphores) = leases.remove_expired(Instant::now());
             let mut resolved_peers = Vec::new();
@@ -80,17 +85,17 @@ impl State {
                     leases.resolve_pending(&semaphore, *self.semaphores.get(&semaphore).unwrap()),
                 );
             }
-            expired_peers
+            (expired_peers, resolved_peers)
         };
-        let num_removed = expired_peers.len();
-        // TODO: notify peers indivdually
-        if num_removed != 0 {
-            self.released.notify_all();
+        if !expired_peers.is_empty() {
+            warn!("Removed {} peers due to expiration.", expired_peers.len());
+            // It is not enough to notify only the requests for the removed peers, as other peers
+            // might be able to acquire their locks due to the removal of these.
+            self.wakers.resolve_with(&resolved_peers, Ok(()));
+            self.wakers
+                .resolve_with(&expired_peers, Err(ThrottleError::UnknownPeer));
         }
-        for peer_id in expired_peers {
-            warn!("Removed peer {} due to expiration.", peer_id);
-        }
-        num_removed
+        expired_peers.len()
     }
 
     /// Blocks until all the leases of the peer are active, or the timeout expires.
@@ -100,8 +105,8 @@ impl State {
     ///
     /// ## Return
     ///
-    /// Returns `true` if the the leases could be acquired.
-    pub fn block_until_acquired(
+    /// Returns `true` if the the leases could be acquired in time.
+    pub async fn block_until_acquired(
         &self,
         peer_id: u64,
         expires_in: Duration,
@@ -130,17 +135,19 @@ impl State {
             Err(_) => unreachable!(),
         }
 
-        let (leases, wait_time_result) = self
-            .released
-            .wait_timeout_while(leases, timeout, |leases| {
-                leases.has_pending(peer_id).unwrap_or(false)
-            })
-            .unwrap();
+        // Free lock. Important NOT to hold lease while polling during .await
+        drop(leases);
 
-        // Can have error if a peer expires while waitinng for a lease.
-        let pending = leases.has_pending(peer_id)?;
-        debug_assert!(pending == wait_time_result.timed_out());
-        Ok(!pending)
+        let acquire_or_timeout =
+            time::timeout(timeout, self.wakers.all_acquired(peer_id, &self.leases));
+        match acquire_or_timeout.await {
+            // Locks could be acquired
+            Ok(Ok(())) => Ok(true),
+            // Failure
+            Ok(Err(e)) => Err(e),
+            // Lock could not be acquired in time
+            Err(_) => Ok(false),
+        }
     }
 
     pub fn heartbeat_for_active_peer(
@@ -197,10 +204,9 @@ impl State {
                     .semaphores
                     .get(&semaphore)
                     .expect("An active semaphore must always be configured");
-                let _resolved_peers = leases.resolve_pending(&semaphore, *full_count);
-                // Notify waiting requests that lease has changed
-                // TODO: notify peers indiviually
-                self.released.notify_all();
+                let resolved_peers = leases.resolve_pending(&semaphore, *full_count);
+                drop(leases); // Don't hold this longer than we need to.
+                self.wakers.resolve_with(&resolved_peers, Ok(()));
                 true
             }
             None => {

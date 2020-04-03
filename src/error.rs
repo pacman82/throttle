@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 /// Enumerates errors which can occur interacting with server state.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone, Copy)]
 pub enum ThrottleError {
     #[error("Unknown semaphore")]
     UnknownSemaphore,

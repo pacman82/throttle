@@ -215,3 +215,22 @@ def test_resolve_leases_immediatly_after_expiration():
         t.join(3)
         # If `t` is alive, the join timed out, which should not be the case
         assert not t.is_alive()
+
+
+def test_block_until_acquired():
+    """
+    `block_until_acquired` should return `true` while pending and `false` once lock is acquired
+    """
+    with throttle_client(
+        b'litter_collection_interval = "10ms"\n' b"[semaphores]\nA=1"
+    ) as client:
+        # Acquire first lease
+        one = client.acquire("A")
+        # Second is pending
+        two = client.acquire("A")
+        assert client.block_until_acquired(two, block_for=timedelta(milliseconds=10))
+        # Release one, so second is acquired
+        client.release(one)
+        assert not client.block_until_acquired(
+            two, block_for=timedelta(milliseconds=10)
+        )
