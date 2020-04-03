@@ -51,8 +51,8 @@ already been acquired.
 * Favicon route is now `favicon.ico` instead of `favicon`.
 * Add route `version` to display current version number.
 
-Next
-----
+0.1.9
+-----
 
 * Fix: Pending leases are now acquired immediatly. Previously their acquiration could have been
 delayed if the peer holding the lock previously did expire, rather than release its lock.

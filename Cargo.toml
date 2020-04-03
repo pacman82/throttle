@@ -1,6 +1,6 @@
 [package]
 name = "throttle-server"
-version = "0.1.8"
+version = "0.1.9"
 authors = ["Markus Klein"]
 edition = "2018"
 license = "MIT"
