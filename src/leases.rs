@@ -148,6 +148,9 @@ impl Peer {
     }
 }
 
+/// Does the bookeeping for all the peers, which 'lease' Semaphores by acquiring locks to them. This
+/// is a purely a bookeeping struct and does not provide any synchronization mechanisms. Rather they
+/// are build arount this type.
 pub struct Leases {
     //  Peers holding pending or acquired leases to the semaphores
     ledger: HashMap<u64, Peer>,
@@ -160,8 +163,48 @@ impl Leases {
         }
     }
 
-    /// Creates a new unique peer id and adds it to the ledger. If the count of the semaphore is
-    /// high enough, the lease is going to be active, otherwise it is pending.
+    /// Creates a new empty peer with no locks.
+    ///
+    /// # Return
+    ///
+    /// The id identifying the new peer. Used as a key in this datastructure to access and
+    /// manipulate its state.
+    pub fn new_peer(&mut self, valid_until: Instant) -> u64 {
+        let id = self.new_unique_peer_id();
+        let old = self.ledger.insert(
+            id,
+            Peer {
+                lock: None,
+                valid_until,
+            },
+        );
+        // There should not be any preexisting entry with this id
+        debug_assert!(old.is_none());
+        id
+    }
+
+    /// Creates a new peer with an existing peer id.
+    ///
+    /// This is useful, to restore revenants (i.e. Peers for which we receive a heartbeat after we
+    /// removed them, due to expiration). This way we can restore them without having to change the
+    /// peer id on the client side.
+    ///
+    /// It's the responsibility of the caller to ensure this method is not called with an already
+    /// existing peer id.
+    pub fn new_peer_at(&mut self, id: u64, valid_until: Instant) {
+        let old = self.ledger.insert(
+            id,
+            Peer {
+                lock: None,
+                valid_until,
+            },
+        );
+        // There should not be any preexisting entry with this id
+        assert!(old.is_none());
+    }
+
+    /// Acquires a lock for a peer. If the count of the semaphore is high enough, the lease is going
+    /// to be acquired, otherwise it remains pending. This method does not block.
     ///
     /// # Parameters
     ///
@@ -175,13 +218,12 @@ impl Leases {
     /// # Return
     ///
     /// Returns `true` if, and only if all leases of the peer are active.
-    pub fn add(
+    pub fn acquire(
         &mut self,
         peer_id: u64,
         semaphore: &str,
         amount: u32,
         max: Option<i64>,
-        valid_until: Instant,
     ) -> bool {
         let amount = amount as i64;
 
@@ -197,20 +239,13 @@ impl Leases {
             .map(|max| self.demand_smaller_or_equal(semaphore, max - amount))
             .unwrap_or(true);
 
-        let old = self.ledger.insert(
-            peer_id,
-            Peer {
-                lock: Some(Lock {
-                    semaphore: semaphore.to_owned(),
-                    acquired,
-                    amount,
-                    since: Instant::now(),
-                }),
-                valid_until,
-            },
-        );
-        // There should not be any preexisting entry with this id
-        debug_assert!(old.is_none());
+        self.ledger.get_mut(&peer_id).unwrap().lock = Some(Lock {
+            semaphore: semaphore.to_owned(),
+            acquired,
+            amount,
+            since: Instant::now(),
+        });
+
         acquired
     }
 
@@ -325,7 +360,7 @@ impl Leases {
     }
 
     /// Generates a random new peer id which does not collide with any preexisting
-    pub fn new_unique_peer_id(&self) -> u64 {
+    fn new_unique_peer_id(&self) -> u64 {
         loop {
             let candidate = random();
             if self.ledger.get(&candidate).is_none() {

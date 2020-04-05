@@ -56,8 +56,8 @@ impl State {
             let mut leases = self.leases.lock().unwrap();
             let valid_until = Instant::now() + expires_in;
             // This is a new peer. Let's make a new `peer_id` to remember it by.
-            let peer_id = leases.new_unique_peer_id();
-            let active = leases.add(peer_id, semaphore, amount, Some(max), valid_until);
+            let peer_id = leases.new_peer(valid_until);
+            let active = leases.acquire(peer_id, semaphore, amount, Some(max));
             if active {
                 debug!("Peer {} acquired lease to '{}'.", peer_id, semaphore);
                 Ok((peer_id, true))
@@ -125,7 +125,8 @@ impl State {
                     .semaphores
                     .get(semaphore)
                     .ok_or(ThrottleError::UnknownSemaphore)?;
-                let active = leases.add(peer_id, semaphore, amount, Some(max), valid_until);
+                leases.new_peer_at(peer_id, valid_until);
+                let active = leases.acquire(peer_id, semaphore, amount, Some(max));
                 warn!(
                     "Revenant Peer {} with pending leases. Active: {}",
                     peer_id, active
@@ -182,7 +183,8 @@ impl State {
                 // By passing None as max rather than the value obtained above, we opt out checking the
                 // semaphore full count and allow exceeding it.
                 let max = None;
-                leases.add(peer_id, semaphore, amount, max, valid_until);
+                leases.new_peer_at(peer_id, valid_until);
+                leases.acquire(peer_id, semaphore, amount, max);
                 warn!("Revenat peer {} with active leases returned.", peer_id);
             }
             // `update_valid_until` can only fail with `UnknownPeer`
