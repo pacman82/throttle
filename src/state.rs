@@ -39,8 +39,16 @@ impl State {
         }
     }
 
+    /// Creates a new peer.
+    pub fn new_peer(&self, expires_in: Duration) -> u64 {
+        let mut leases = self.leases.lock().unwrap();
+        let valid_until = Instant::now() + expires_in;
+        leases.new_peer(valid_until)
+    }
+
     pub fn acquire(
         &self,
+        peer_id: u64,
         semaphore: &str,
         amount: u32,
         expires_in: Duration,
@@ -55,8 +63,7 @@ impl State {
             }
             let mut leases = self.leases.lock().unwrap();
             let valid_until = Instant::now() + expires_in;
-            // This is a new peer. Let's make a new `peer_id` to remember it by.
-            let peer_id = leases.new_peer(valid_until);
+            leases.update_valid_until(peer_id, valid_until)?;
             let active = leases.acquire(peer_id, semaphore, amount, Some(max));
             if active {
                 debug!("Peer {} acquired lease to '{}'.", peer_id, semaphore);
@@ -307,13 +314,18 @@ mod tests {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), 3);
         let state = State::new(semaphores);
+        let one_sec = Duration::from_secs(1);
 
         // First three locks can be acquired immediatly
-        assert!(state.acquire("A", 1, Duration::from_secs(1)).unwrap().1);
-        assert!(state.acquire("A", 1, Duration::from_secs(1)).unwrap().1);
-        assert!(state.acquire("A", 1, Duration::from_secs(1)).unwrap().1);
+        let one = state.new_peer(one_sec);
+        assert!(state.acquire(one, "A", 1, one_sec).unwrap().1);
+        let two = state.new_peer(one_sec);
+        assert!(state.acquire(two, "A", 1, one_sec).unwrap().1);
+        let three = state.new_peer(one_sec);
+        assert!(state.acquire(three, "A", 1, one_sec).unwrap().1);
         // The fourth must wait
-        assert!(!state.acquire("A", 1, Duration::from_secs(1)).unwrap().1);
+        let four = state.new_peer(one_sec);
+        assert!(!state.acquire(four, "A", 1, one_sec).unwrap().1);
     }
 
     #[test]
@@ -324,29 +336,33 @@ mod tests {
         let state = State::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
+        // Create six peers
+        let p : Vec<_> = (0..6).map(|_| state.new_peer(one_sec)).collect();
+
         // First three locks can be acquired immediatly
-        let (one, _) = state.acquire("A", 1, one_sec).unwrap();
-        let (two, _) = state.acquire("A", 1, one_sec).unwrap();
-        let (three, _) = state.acquire("A", 1, one_sec).unwrap();
+        state.acquire(p[0], "A", 1, one_sec).unwrap();
+        state.acquire(p[1], "A", 1, one_sec).unwrap();
+        state.acquire(p[2], "A", 1, one_sec).unwrap();
         // The four, five and six must wait
-        state.acquire("A", 1, one_sec).unwrap();
-        state.acquire("A", 1, one_sec).unwrap();
-        state.acquire("A", 1, one_sec).unwrap();
+        state.acquire(p[3], "A", 1, one_sec).unwrap();
+        state.acquire(p[4], "A", 1, one_sec).unwrap();
+        state.acquire(p[5], "A", 1, one_sec).unwrap();
         // Remainder is zero due to the three leases intially acquired
         assert_eq!(state.remainder("A").unwrap(), 0);
         // Release one of the first three. Four should now be acquired.
-        state.release(two);
+        state.release(p[1]);
         assert_eq!(state.remainder("A").unwrap(), 0);
 
         // Release another one of the first three. Five should now be acquired.
-        state.release(one);
+        state.release(p[0]);
         assert_eq!(state.remainder("A").unwrap(), 0);
 
         // Release last one of the first three. six should now be acquired.
-        state.release(three);
+        state.release(p[2]);
         assert_eq!(state.remainder("A").unwrap(), 0);
     }
 
+    /// Pending locks must be acquired in the same order the have been requested.
     #[test]
     fn fairness() {
         // Semaphore with count of 3
@@ -355,26 +371,29 @@ mod tests {
         let state = State::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
+        // Create six peers
+        let p : Vec<_> = (0..6).map(|_| state.new_peer(one_sec)).collect();
+
         // First three locks can be acquired immediatly
-        let (one, _) = state.acquire("A", 1, one_sec).unwrap();
-        let (two, _) = state.acquire("A", 1, one_sec).unwrap();
-        let (three, _) = state.acquire("A", 1, one_sec).unwrap();
+        state.acquire(p[0], "A", 1, one_sec).unwrap();
+        state.acquire(p[1], "A", 1, one_sec).unwrap();
+        state.acquire(p[2], "A", 1, one_sec).unwrap();
         // The four, five and six must wait
-        let (four, _) = state.acquire("A", 1, one_sec).unwrap();
-        let (five, _) = state.acquire("A", 1, one_sec).unwrap();
-        let (six, _) = state.acquire("A", 1, one_sec).unwrap();
+        state.acquire(p[3], "A", 1, one_sec).unwrap();
+        state.acquire(p[4], "A", 1, one_sec).unwrap();
+        state.acquire(p[5], "A", 1, one_sec).unwrap();
         // Remainder is zero due to the three leases intially acquired
         assert_eq!(state.remainder("A").unwrap(), 0);
         // Release one of the first three. Four should now be acquired.
-        state.release(two);
-        assert!(state.is_acquired(four).unwrap());
+        state.release(p[1]);
+        assert!(state.is_acquired(p[3]).unwrap());
 
         // Release another one of the first three. Five should now be acquired.
-        state.release(one);
-        assert!(state.is_acquired(five).unwrap());
+        state.release(p[0]);
+        assert!(state.is_acquired(p[4]).unwrap());
 
         // Release last one of the first three. six should now be acquired.
-        state.release(three);
-        assert!(state.is_acquired(six).unwrap());
+        state.release(p[2]);
+        assert!(state.is_acquired(p[5]).unwrap());
     }
 }

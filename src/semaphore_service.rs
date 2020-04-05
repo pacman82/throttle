@@ -27,14 +27,24 @@ impl ResponseError for ThrottleError {
 
 type Leases = HashMap<String, u32>;
 
+/// Strict alias around `Duration`. Yet it serializes from a human readable representation.
+#[derive(Deserialize)]
+struct HumanDuration(#[serde(with = "humantime_serde")] Duration);
+
+/// Used as a query parameter in requests. E.g. `?expires_in=5m`.
+#[derive(Deserialize)]
+struct ExpiresIn {
+    #[serde(with = "humantime_serde")]
+    expires_in: Duration,
+}
+
 /// Parameters for acquiring a lease
 #[derive(Deserialize)]
 pub struct PendingLeases {
     pending: Leases,
     /// Duration in seconds. After the specified time has passed the lease may be freed by litter
     /// collection.
-    #[serde(with = "humantime_serde")]
-    expires_in: Duration,
+    expires_in: HumanDuration,
 }
 
 impl PendingLeases {
@@ -66,10 +76,35 @@ impl ActiveLeases {
 }
 
 /// Acquire a new lease to a Semaphore
+///
+/// Returns id of the new peer
+#[post("/new_peer")]
+async fn new_peer(body: Json<Duration>, state: Data<State>) -> Json<u64> {
+    Json(state.new_peer(*body))
+}
+
+// /// Acquire a lock to a Semaphore. Does not block.
+// #[post("/peer/{id}/{semaphore}/acquire")]
+// async fn acquire(
+//     path: Path<(u64, String)>,
+//     expires_in: Query<ExpiresIn>,
+//     body: Json<u32>,
+//     state: Data<State>,
+// ) -> HttpResponse {
+//     let amount = body;
+//     match state.acquire(semaphore, amount, expires_in) {
+//         Ok((lease_id, true)) => HttpResponse::Created().json(lease_id),
+//         Ok((lease_id, false)) => HttpResponse::Accepted().json(lease_id),
+//         Err(error) => HttpResponse::from_error(error.into()),
+//     }
+// }
+
+/// Acquire a new lease to a Semaphore
 #[post("/acquire")]
 async fn acquire(body: Json<PendingLeases>, state: Data<State>) -> HttpResponse {
+    let peer_id = state.new_peer(body.expires_in.0);
     if let Some((semaphore, amount)) = body.pending() {
-        match state.acquire(semaphore, amount, body.expires_in) {
+        match state.acquire(peer_id, semaphore, amount, body.expires_in.0) {
             Ok((lease_id, true)) => HttpResponse::Created().json(lease_id),
             Ok((lease_id, false)) => HttpResponse::Accepted().json(lease_id),
             Err(error) => HttpResponse::from_error(error.into()),
@@ -108,7 +143,7 @@ async fn block_until_acquired(
         lease_id, unblock_after
     );
     let peer_id = *path;
-    let expires_in = body.expires_in;
+    let expires_in = body.expires_in.0;
     let acquired_in_time = if let Some((semaphore, amount)) = body.pending() {
         state
             .block_until_acquired(peer_id, expires_in, semaphore, amount, unblock_after)
@@ -180,12 +215,12 @@ async fn put_peer(
 /// Query parameters for freeze
 #[derive(Deserialize)]
 struct FreezeQuery {
-    #[serde(with = "humantime_serde", rename = "for")]
-    time: Duration,
+    #[serde(rename = "for")]
+    time: HumanDuration,
 }
 
 #[post("/freeze")]
 async fn freeze(query: Query<FreezeQuery>, state: Data<State>) -> &'static str {
-    state.freeze(query.time);
+    state.freeze(query.time.0);
     "Ok"
 }
