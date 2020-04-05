@@ -91,11 +91,29 @@ class Client:
         self.base_url = base_url
 
     def _retrying(self) -> Any:
+        """
+        Configures tenacity for our needs. We don't store the object, since it is not pickable.
+        """
         return Retrying(
             reraise=True,
             wait=wait_exponential(multiplier=1, min=4, max=32),
             stop=stop_after_attempt(10),
         )
+
+    # TODO: How can we express a Function Signature, if using type annotations.
+    def _try_request(self, send_request: Any) -> requests.Response:
+        """
+        Wraps `send_request` in some custom error handling for Requests.
+        """
+        for attempt in self._retrying():
+            with attempt:
+                response = send_request()
+                # Witin `attempt` we raise only for recoverable errors. These must not be domain
+                # errors, which implies that there is no need to translate them.
+                if _is_recoverable_error(response.status_code):
+                    response.raise_for_status()
+        _translate_domain_errors(response)
+        return response
 
     def acquire(
         self, semaphore: str, count: int = 1, expires_in: timedelta = None
@@ -118,16 +136,13 @@ class Client:
             "pending": {semaphore: count},
             "expires_in": _format_timedelta(expires_in),
         }
-        for attempt in self._retrying():
-            with attempt:
-                response = requests.post(
-                    self.base_url + "/acquire", json=body, timeout=30
-                )
-                # Witin `attempt` we raise only for recoverable errors. These must not be domain
-                # errors, which implies that there is no need to translate them.
-                if _is_recoverable_error(response.status_code):
-                    response.raise_for_status()
-        _translate_domain_errors(response)
+
+        def send_request():
+            return requests.post(
+                self.base_url + "/acquire", json=body, timeout=30
+            )
+
+        response = self._try_request(send_request)
         if response.status_code == 201:  # Created. We got a lease to the semaphore
             return Peer(id=response.text, active={semaphore: count})
         elif response.status_code == 202:  # Accepted. Ticket pending.
@@ -144,26 +159,20 @@ class Client:
         """
         block_for_ms = int(block_for.total_seconds() * 1000)
 
-        for attempt in self._retrying():
-            with attempt:
-                response = requests.post(
-                    self.base_url
-                    + f"/peers/{peer.id}/block_until_acquired?timeout_ms={block_for_ms}",
-                    json={
-                        "expires_in": "5min",
-                        "active": peer.active,
-                        "pending": peer.pending,
-                    },
-                    timeout=block_for_ms / 1000 + 30,
-                )
-                # Witin `attempt` we raise only for recoverable errors. These must not be domain
-                # errors, which implies that there is no need to translate them.
-                if _is_recoverable_error(response.status_code):
-                    response.raise_for_status()
+        def send_request():
+            response = requests.post(
+                self.base_url
+                + f"/peers/{peer.id}/block_until_acquired?timeout_ms={block_for_ms}",
+                json={
+                    "expires_in": "5min",
+                    "active": peer.active,
+                    "pending": peer.pending,
+                },
+                timeout=block_for_ms / 1000 + 30,
+            )
+            return response
 
-        # Raise to caller of this function and translate domain errors.
-        _translate_domain_errors(response)
-
+        response = self._try_request(send_request)
         now_active = json.loads(response.text)
         if now_active:
             # Server told us all leases of this peer are active. Let's upate our local
@@ -179,34 +188,26 @@ class Client:
         could become negative, if the semaphores have been overcommitted (due to
         previously reoccuring leases previously considered dead).
         """
-        for attempt in self._retrying():
-            with attempt:
-                response = requests.get(
-                    self.base_url + f"/remainder?semaphore={semaphore}"
-                )
-                # Witin `attempt` we raise only for recoverable errors. These must not be domain
-                # errors, which implies that there is no need to translate them.
-                if _is_recoverable_error(response.status_code):
-                    response.raise_for_status()
-        _translate_domain_errors(response)
+        def send_request():
+            response = requests.get(
+                self.base_url + f"/remainder?semaphore={semaphore}"
+            )
+            return response
 
+        response = self._try_request(send_request)
         return int(response.text)
 
     def is_acquired(self, peer: Peer) -> bool:
         """
         Ask the server wether all the locks associated with the peer are all acquired.
         """
-        for attempt in self._retrying():
-            with attempt:
-                response = requests.get(
-                    self.base_url + f"/peers/{peer.id}/is_acquired"
-                )
-                # Witin `attempt` we raise only for recoverable errors. These must not be domain
-                # errors, which implies that there is no need to translate them.
-                if _is_recoverable_error(response.status_code):
-                    response.raise_for_status()
-        _translate_domain_errors(response)
+        def send_request():
+            response = requests.get(
+                self.base_url + f"/peers/{peer.id}/is_acquired"
+            )
+            return response
 
+        response = self._try_request(send_request)
         return json.loads(response.text)
 
     def freeze(self, time: timedelta):
@@ -216,16 +217,13 @@ class Client:
         Yes, it propably is a bad idea to call this in production code. Yet it is useful for
         testing.
         """
-        for attempt in self._retrying():
-            with attempt:
-                response = requests.post(
-                    self.base_url + f"/freeze?for={_format_timedelta(time)}"
-                )
-                # Witin `attempt` we raise only for recoverable errors. These must not be domain
-                # errors, which implies that there is no need to translate them.
-                if _is_recoverable_error(response.status_code):
-                    response.raise_for_status()
-        _translate_domain_errors(response)
+        def send_request():
+            response = requests.post(
+                self.base_url + f"/freeze?for={_format_timedelta(time)}"
+            )
+            return response
+
+        self._try_request(send_request)
 
     def release(self, peer: Peer):
         """
@@ -234,14 +232,11 @@ class Client:
         This is important to unblock other clients which may be waiting for the
         semaphore remainder to increase.
         """
-        for attempt in self._retrying():
-            with attempt:
-                response = requests.delete(self.base_url + f"/peers/{peer.id}")
-                # Witin `attempt` we raise only for recoverable errors. These must not be domain
-                # errors, which implies that there is no need to translate them.
-                if _is_recoverable_error(response.status_code):
-                    response.raise_for_status()
-        _translate_domain_errors(response)
+        def send_request():
+            response = requests.delete(self.base_url + f"/peers/{peer.id}")
+            return response
+
+        self._try_request(send_request)
 
     def remove_expired(self) -> int:
         """
@@ -249,14 +244,11 @@ class Client:
 
         Returns number of expired peers.
         """
-        for attempt in self._retrying():
-            with attempt:
-                response = requests.post(self.base_url + "/remove_expired", timeout=30)
-                # Witin `attempt` we raise only for recoverable errors. These must not be domain
-                # errors, which implies that there is no need to translate them.
-                if _is_recoverable_error(response.status_code):
-                    response.raise_for_status()
-        _translate_domain_errors(response)
+        def send_request():
+            response = requests.post(self.base_url + "/remove_expired", timeout=30)
+            return response
+
+        response = self._try_request(send_request)
         # Number of expired peers
         return json.loads(response.text)
 
@@ -265,25 +257,22 @@ class Client:
         Sends a PUT request to the server, updating the expiration timestamp and
         repeating the information of the peer.
         """
-
         assert (
             not peer.has_pending()
         ), "Peers with pending leases must not be kept alive via heartbeat."
-        for attempt in self._retrying():
-            with attempt:
-                response = requests.put(
-                    f"{self.base_url}/peers/{peer.id}",
-                    json={
-                        "expires_in": _format_timedelta(self.expiration_time),
-                        "active": peer.active,
-                    },
-                    timeout=30,
-                )
-                # Witin `attempt` we raise only for recoverable errors. These must not be domain
-                # errors, which implies that there is no need to translate them.
-                if _is_recoverable_error(response.status_code):
-                    response.raise_for_status()
-        _translate_domain_errors(response)
+
+        def send_request():
+            response = requests.put(
+                f"{self.base_url}/peers/{peer.id}",
+                json={
+                    "expires_in": _format_timedelta(self.expiration_time),
+                    "active": peer.active,
+                },
+                timeout=30,
+            )
+            return response
+
+        self._try_request(send_request)
 
 
 # Heartbeat is implemented via an event, rather than a thread with a sleep, so we can
