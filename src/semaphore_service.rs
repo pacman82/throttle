@@ -40,7 +40,7 @@ struct ExpiresIn {
 
 /// Parameters for acquiring a lease
 #[derive(Deserialize)]
-pub struct PendingLeases {
+struct PendingLeases {
     pending: Leases,
     /// Duration in seconds. After the specified time has passed the lease may be freed by litter
     /// collection.
@@ -79,38 +79,25 @@ impl ActiveLeases {
 ///
 /// Returns id of the new peer
 #[post("/new_peer")]
-async fn new_peer(body: Json<Duration>, state: Data<State>) -> Json<u64> {
-    Json(state.new_peer(*body))
+async fn new_peer(body: Json<ExpiresIn>, state: Data<State>) -> Json<u64> {
+    Json(state.new_peer(body.expires_in))
 }
 
-// /// Acquire a lock to a Semaphore. Does not block.
-// #[post("/peer/{id}/{semaphore}/acquire")]
-// async fn acquire(
-//     path: Path<(u64, String)>,
-//     expires_in: Query<ExpiresIn>,
-//     body: Json<u32>,
-//     state: Data<State>,
-// ) -> HttpResponse {
-//     let amount = body;
-//     match state.acquire(semaphore, amount, expires_in) {
-//         Ok((lease_id, true)) => HttpResponse::Created().json(lease_id),
-//         Ok((lease_id, false)) => HttpResponse::Accepted().json(lease_id),
-//         Err(error) => HttpResponse::from_error(error.into()),
-//     }
-// }
-
-/// Acquire a new lease to a Semaphore
-#[post("/acquire")]
-async fn acquire(body: Json<PendingLeases>, state: Data<State>) -> HttpResponse {
-    let peer_id = state.new_peer(body.expires_in.0);
-    if let Some((semaphore, amount)) = body.pending() {
-        match state.acquire(peer_id, semaphore, amount, body.expires_in.0) {
-            Ok((lease_id, true)) => HttpResponse::Created().json(lease_id),
-            Ok((lease_id, false)) => HttpResponse::Accepted().json(lease_id),
-            Err(error) => HttpResponse::from_error(error.into()),
-        }
-    } else {
-        HttpResponse::BadRequest().json("Empty leases are not supported, yet.")
+/// Acquire a lock to a Semaphore. Does not block.
+#[post("/peer/{id}/{semaphore}/acquire")]
+async fn acquire(
+    path: Path<(u64, String)>,
+    query: Query<ExpiresIn>,
+    body: Json<u32>,
+    state: Data<State>,
+) -> HttpResponse {
+    let amount = body.0;
+    let peer_id = path.0;
+    let semaphore = &path.1;
+    match state.acquire(peer_id, semaphore, amount, query.expires_in) {
+        Ok((lease_id, true)) => HttpResponse::Created().json(lease_id),
+        Ok((lease_id, false)) => HttpResponse::Accepted().json(lease_id),
+        Err(error) => HttpResponse::from_error(error.into()),
     }
 }
 

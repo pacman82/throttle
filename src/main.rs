@@ -84,6 +84,7 @@ async fn main() -> io::Result<()> {
             .service(metrics::metrics)
             .service(favicon::favicon)
             .service(version::get_version)
+            .service(semaphore_service::new_peer)
             .service(semaphore_service::acquire)
             .service(semaphore_service::remainder)
             .service(semaphore_service::release)
