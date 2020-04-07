@@ -132,17 +132,25 @@ class Client:
         """
         if not expires_in:
             expires_in = self.expiration_time
-        body = {
-            "pending": {semaphore: count},
-            "expires_in": _format_timedelta(expires_in),
-        }
+        expires_in = _format_timedelta(expires_in)
 
-        def send_request():
+        def send_new_peer():
+            body = {
+                "expires_in": expires_in,
+            }
+            return requests.post(self.base_url + "/new_peer", json=body, timeout=30)
+
+        response = self._try_request(send_new_peer)
+        peer_id = response.text
+
+        def send_acquire():
             return requests.post(
-                self.base_url + "/acquire", json=body, timeout=30
+                f"{self.base_url}/peer/{peer_id}/{semaphore}/acquire?expires_in={expires_in}",
+                json=count,
+                timeout=30,
             )
 
-        response = self._try_request(send_request)
+        response = self._try_request(send_acquire)
         if response.status_code == 201:  # Created. We got a lease to the semaphore
             return Peer(id=response.text, active={semaphore: count})
         elif response.status_code == 202:  # Accepted. Ticket pending.
@@ -188,10 +196,9 @@ class Client:
         could become negative, if the semaphores have been overcommitted (due to
         previously reoccuring leases previously considered dead).
         """
+
         def send_request():
-            response = requests.get(
-                self.base_url + f"/remainder?semaphore={semaphore}"
-            )
+            response = requests.get(self.base_url + f"/remainder?semaphore={semaphore}")
             return response
 
         response = self._try_request(send_request)
@@ -201,10 +208,9 @@ class Client:
         """
         Ask the server wether all the locks associated with the peer are all acquired.
         """
+
         def send_request():
-            response = requests.get(
-                self.base_url + f"/peers/{peer.id}/is_acquired"
-            )
+            response = requests.get(self.base_url + f"/peers/{peer.id}/is_acquired")
             return response
 
         response = self._try_request(send_request)
@@ -217,6 +223,7 @@ class Client:
         Yes, it propably is a bad idea to call this in production code. Yet it is useful for
         testing.
         """
+
         def send_request():
             response = requests.post(
                 self.base_url + f"/freeze?for={_format_timedelta(time)}"
@@ -232,6 +239,7 @@ class Client:
         This is important to unblock other clients which may be waiting for the
         semaphore remainder to increase.
         """
+
         def send_request():
             response = requests.delete(self.base_url + f"/peers/{peer.id}")
             return response
@@ -244,6 +252,7 @@ class Client:
 
         Returns number of expired peers.
         """
+
         def send_request():
             response = requests.post(self.base_url + "/remove_expired", timeout=30)
             return response
