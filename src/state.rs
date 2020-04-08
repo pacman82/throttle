@@ -43,7 +43,9 @@ impl State {
     pub fn new_peer(&self, expires_in: Duration) -> u64 {
         let mut leases = self.leases.lock().unwrap();
         let valid_until = Instant::now() + expires_in;
-        leases.new_peer(valid_until)
+        let peer_id = leases.new_peer(valid_until);
+        debug!("Created new peer {}.", peer_id);
+        peer_id
     }
 
     pub fn acquire(

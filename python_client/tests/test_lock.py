@@ -5,7 +5,7 @@ from tempfile import NamedTemporaryFile
 from threading import Thread
 from time import sleep
 
-import pytest
+import pytest  # type: ignore
 
 from throttle_client import Client, Timeout, lock
 
@@ -42,8 +42,8 @@ def test_server_recovers_pending_lock_after_state_loss():
 
     acquired_lease = False
 
-    def acquire_lease_concurrent():
-        with lock(Client("http://localhost:8000"), "A", timeout=timedelta(seconds=10)):
+    def acquire_lease_concurrent(client):
+        with lock(client, "A", timeout=timedelta(seconds=10)):
             nonlocal acquired_lease
             acquired_lease = True
 
@@ -52,14 +52,14 @@ def test_server_recovers_pending_lock_after_state_loss():
         cfg.close()
         client = Client(BASE_URL)
         with cargo_main(cfg=cfg.name) as proc:
-            # Acquire first lease
-            _ = client.acquire("A")
+            # Acquire first peer
+            _ = client.acquire_with_new_peer("A")
             # Acquire second lease
-            t = Thread(target=acquire_lease_concurrent)
+            t = Thread(target=acquire_lease_concurrent, args=[client])
             t.start()
             # Give the acquire request some time to go through, so we hit the edge case
-            # of getting an 'Unknown lease' response from the server
-            sleep(2)
+            # of getting an 'Unknown peer' response from the server
+            sleep(4)
             proc.kill()
 
         # Invoking this context manager anew terminates and restarts the server. I.e.
@@ -95,10 +95,11 @@ def test_litter_collection():
     with throttle_client(
         (b'litter_collection_interval="10ms"\n' b"[semaphores]\n" b"A=1\n")
     ) as client:
-        client.expiration_time = timedelta(seconds=0.1)
         # Acquire lease, but since we don't use the context manager we never release
         # it.
-        _ = client.acquire("A")
+        peer = client.new_peer()
+        client.expiration_time = timedelta(seconds=0.1)
+        _ = client.acquire(peer, "A")
         # No, worry time will take care of this.
         sleep(0.2)
         assert client.remainder("A") == 1
@@ -122,8 +123,8 @@ def test_lock_count_larger_pends_if_count_is_not_high_enough():
     """
 
     with throttle_client(b"[semaphores]\nA=5") as client:
-        _ = client.acquire("A", count=3)
-        second = client.acquire("A", count=3)
+        _ = client.acquire_with_new_peer("A", count=3)
+        second = client.acquire_with_new_peer("A", count=3)
         assert second.has_pending()
 
 
@@ -147,7 +148,7 @@ def test_lock_count_larger_than_full_count():
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         with pytest.raises(ValueError, match="block forever"):
-            client.acquire("A", count=2)
+            client.acquire_with_new_peer("A", count=2)
 
 
 def test_try_lock():
@@ -156,7 +157,7 @@ def test_try_lock():
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         # We hold the lease, all following calls are going to block
-        _ = client.acquire("A")
+        _ = client.acquire_with_new_peer("A")
         with pytest.raises(Timeout):
             with lock(client, "A", timeout=timedelta(seconds=1)):
                 pass
@@ -167,7 +168,7 @@ def test_put_unknown_semaphore():
     An active revenant of an unknown semaphore should throw an exception.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
-        a = client.acquire("A")
+        a = client.acquire_with_new_peer("A")
     # Restart Server without "A"
     with throttle_client(b"[semaphores]") as client:
         with pytest.raises(Exception, match="Unknown semaphore"):
