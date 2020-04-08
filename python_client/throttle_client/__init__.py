@@ -6,8 +6,8 @@ from time import time
 from typing import Any, Dict, Iterator, Optional
 
 import requests
-
-from tenacity import Retrying, wait_exponential, stop_after_attempt  # type: ignore
+from tenacity import (Retrying, stop_after_attempt,  # type: ignore
+                      wait_exponential)
 
 from .status_code import is_recoverable_error as _is_recoverable_error
 
@@ -115,11 +115,78 @@ class Client:
         _translate_domain_errors(response)
         return response
 
+    def new_peer(self, expires_in: timedelta = None) -> Peer:
+        """
+        Register a new peer with the server.
+
+        A is used to acquire locks and keep the leases to them alive. A Peer owns the
+        locks which it acquires and releasing it is going to release the owned locks as
+        well.
+
+        Every call to `new_peer` should be matched by a call to `release`.
+
+        Creating a peer `new_peer` is separated from `acquire` in an extra Request
+        mostly to make `acquire` idempotent. This prevents a call to acquire from
+        acquiring more than one semaphore in case it is repeated due to a timeout.
+        """
+        if not expires_in:
+            expires_in = self.expiration_time
+        expires_in_str = _format_timedelta(expires_in)
+
+        def send_new_peer():
+            body = {
+                "expires_in": expires_in_str,
+            }
+            return requests.post(self.base_url + "/new_peer", json=body, timeout=30)
+
+        response = self._try_request(send_new_peer)
+        return Peer(id=response.text, active={}, pending={})
+
     def acquire(
+        self, peer: Peer, semaphore: str, count: int = 1, expires_in: timedelta = None
+    ) -> bool:
+        """
+        Acquire a lock from the server.
+
+        Every call to `acquire` should be matched by a call to `release`. Check out
+        `lock` which as contextmanager does this for you.
+
+        * `semaphore`: Name of the semaphore to be acquired.
+        * `count`: The count of the lock. A larger count represents a larger 'piece' of
+        the resource under procection.
+        * `expires_in`: The amount of time the remains valid. Can be prolonged by
+        calling heartbeat. After the time has passed the lock is considered released on
+        the server side.
+
+        Return `True` if the lock is active.
+        """
+        if not expires_in:
+            expires_in = self.expiration_time
+        expires_in_str = _format_timedelta(expires_in)
+
+        def send_acquire():
+            return requests.post(
+                f"{self.base_url}/peer/{peer.id}/{semaphore}/acquire?expires_in={expires_in_str}",
+                json=count,
+                timeout=30,
+            )
+
+        response = self._try_request(send_acquire)
+        if response.status_code == 201:  # Created. We got a lease to the semaphore
+            peer.active = {semaphore: count}
+            return True
+        elif response.status_code == 202:  # Accepted. Ticket pending.
+            peer.pending = {semaphore: count}
+            return False
+        else:
+            # This should never be reached
+            raise RuntimeError("Unexpected response from Server")
+
+    def acquire_with_new_peer(
         self, semaphore: str, count: int = 1, expires_in: timedelta = None
     ) -> Peer:
         """
-        Acquire a lock from the server.
+        Creates a new peer and acquires a lock from the server for it.
 
         Every call to `acquire` should be matched by a call to `release`. Check out `lock` which as
         contextmanager does this for you.
@@ -130,34 +197,9 @@ class Client:
         * `expires_in`: The amount of time the remains valid. Can be prolonged by calling heartbeat.
         After the time has passed the lock is considered released on the server side.
         """
-        if not expires_in:
-            expires_in = self.expiration_time
-        expires_in = _format_timedelta(expires_in)
-
-        def send_new_peer():
-            body = {
-                "expires_in": expires_in,
-            }
-            return requests.post(self.base_url + "/new_peer", json=body, timeout=30)
-
-        response = self._try_request(send_new_peer)
-        peer_id = response.text
-
-        def send_acquire():
-            return requests.post(
-                f"{self.base_url}/peer/{peer_id}/{semaphore}/acquire?expires_in={expires_in}",
-                json=count,
-                timeout=30,
-            )
-
-        response = self._try_request(send_acquire)
-        if response.status_code == 201:  # Created. We got a lease to the semaphore
-            return Peer(id=response.text, active={semaphore: count})
-        elif response.status_code == 202:  # Accepted. Ticket pending.
-            return Peer(id=response.text, pending={semaphore: count})
-        else:
-            # This should never be reached
-            raise RuntimeError("Unexpected response from Server")
+        peer = self.new_peer(expires_in=expires_in)
+        self.acquire(peer, semaphore, count, expires_in)
+        return peer
 
     def block_until_acquired(self, peer: Peer, block_for: timedelta) -> bool:
         """
@@ -343,7 +385,8 @@ def lock(
     * `heartbeat_interval`: Default interval for reneval of peer. Setting it to `None` will
     deactivate the heartbeat.
     """
-    peer = client.acquire(semaphore, count=count)
+    peer = client.new_peer()
+    _ = client.acquire(peer, semaphore, count=count)
     # Remember this moment in order to figure out later how much time has passed since
     # we started to acquire the lock
     start = time()
