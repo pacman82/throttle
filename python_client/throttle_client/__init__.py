@@ -52,7 +52,10 @@ def _translate_domain_errors(response: requests.Response):
         # supposedly caused by wrong arguments passed to this code by the
         # application. Let's forward the error as an exception, so the App
         # developer can act on it.
-        raise ValueError(response.text)
+        if "Unknown peer" == response.text:
+            raise UnknownPeer()
+        else:
+            raise ValueError(response.text)
     # Conflict
     #
     # This is returned by the server e.g. if requesting a lock with a count higher than max.
@@ -71,6 +74,17 @@ def _format_timedelta(interval: timedelta) -> str:
     return f"{total_milliseconds}ms"
 
 
+class UnknownPeer(Exception):
+    """
+    The Throttle server does no longer know or has never known the peer id specified in
+    this request. Possible causes are expiration of a peer on the server side, or a
+    reboot of the server. To be robust against this kind of errors, the client can
+    recover by using `new_peer` and restoring the state of the old one.
+    """
+
+    pass
+
+
 class Client:
     """
     A Client to lease semaphores from a Throttle service.
@@ -84,8 +98,8 @@ class Client:
     ):
         """
         * `base_url`: Url to the throttle server. E.g. https://my_throttle_instance:8000
-        * `expiration_time`: If the heartbeat does not prolong the lifetime of this peer it leases
-        are going to be released, after this timeout.
+        * `expiration_time`: If the heartbeat does not prolong the lifetime of this peer
+        its locks are going to be released, after this timeout.
         """
         self.expiration_time = expiration_time
         self.base_url = base_url
@@ -385,8 +399,15 @@ def lock(
     * `heartbeat_interval`: Default interval for reneval of peer. Setting it to `None` will
     deactivate the heartbeat.
     """
-    peer = client.new_peer()
-    _ = client.acquire(peer, semaphore, count=count)
+    # Recover from `UnknownPeer` if server forgets state between `new_peer` and `acquire`
+    for _ in range(1, 5):
+        peer = client.new_peer()
+        try:
+            _ = client.acquire(peer, semaphore, count=count)
+        except UnknownPeer:
+            # Peer has no prior state, just repeart acquiring the lock
+            continue
+        break
     # Remember this moment in order to figure out later how much time has passed since
     # we started to acquire the lock
     start = time()

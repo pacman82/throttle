@@ -175,24 +175,32 @@ def test_put_unknown_semaphore():
             client.heartbeat(a)
 
 
-# Sadly it seems requests doesn't care much for my delete timeout in the release of the lock
+def test_recover_from_unknown_peer_during_acquisition_lock():
+    """
+    The lock interface must recreate the peer if it is removed from the server, between
+    `new_peer` and acquire.
+    """
+    acquired_lease = False
 
-# def test_timeout_during_release():
-#     """
-#     Test ensuring http timeouts during a delete operation are ignored.
-#     """
+    def acquire_lease_concurrent(client):
+        with lock(client, "A", timeout=timedelta(seconds=10)):
+            nonlocal acquired_lease
+            acquired_lease = True
 
-#     # There is room for improvement here. We could fire the request asynchronously and not care
-#     # for the response
-#     def freeze_server():
-#         client.freeze(timedelta(seconds=10))
+    # Trigger `UnknownPeer` using litter collection. Let the peer expire really fast
+    with throttle_client(
+        b'litter_collection_interval="10ms"\n' b"[semaphores]\nA=1"
+    ) as client:
+        # Next peer should expire immediatly
+        client.expiration_time = timedelta(seconds=0)
+        t = Thread(target=acquire_lease_concurrent, args=[client])
+        t.start()
 
-#     with throttle_client(b"[semaphores]\nA=1") as client:
-#         with lock(client, "A", heartbeat_interval=None):
-#             t = Thread(target=freeze_server)
-#             t.start()
-#             # Give freeze request time to pass through
-#             sleep(1.0)
-#         # If we get to this point without throwing the test is considered successful
-#         t.join()
-#         assert True
+        # Give `new_peer` some time to go through, so we hit the edge case of getting an
+        # 'Unknown peer' response from the server during `acquire`.
+        sleep(2)
+
+        client.expiration_time = timedelta(minutes=5)
+        t.join(timeout=10)
+
+        assert acquired_lease
