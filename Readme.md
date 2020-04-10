@@ -131,7 +131,6 @@ with lock(c, "A"):
 * GET `/health`: Always answers with `200 OK`
 * GET `/metrics:`: Metrics for prometheus
 * GET `/version`: Returns server version.
-* POST `/freeze?for=<duration>`: Locks the server state for `duration`. Only useful for testing. `duration` must be specified with a unit for time. E.g.: `freeze?for=1m`. To lock the server state for one minute.
 
 WIP document routes used to acquire / relaese / hold semaphores.
 

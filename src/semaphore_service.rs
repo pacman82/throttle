@@ -199,15 +199,3 @@ async fn put_peer(
     Ok("Ok")
 }
 
-/// Query parameters for freeze
-#[derive(Deserialize)]
-struct FreezeQuery {
-    #[serde(rename = "for")]
-    time: HumanDuration,
-}
-
-#[post("/freeze")]
-async fn freeze(query: Query<FreezeQuery>, state: Data<State>) -> &'static str {
-    state.freeze(query.time.0);
-    "Ok"
-}
