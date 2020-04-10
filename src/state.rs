@@ -339,7 +339,7 @@ mod tests {
         let one_sec = Duration::from_secs(1);
 
         // Create six peers
-        let p : Vec<_> = (0..6).map(|_| state.new_peer(one_sec)).collect();
+        let p: Vec<_> = (0..6).map(|_| state.new_peer(one_sec)).collect();
 
         // First three locks can be acquired immediatly
         state.acquire(p[0], "A", 1, one_sec).unwrap();
@@ -374,7 +374,7 @@ mod tests {
         let one_sec = Duration::from_secs(1);
 
         // Create six peers
-        let p : Vec<_> = (0..6).map(|_| state.new_peer(one_sec)).collect();
+        let p: Vec<_> = (0..6).map(|_| state.new_peer(one_sec)).collect();
 
         // First three locks can be acquired immediatly
         state.acquire(p[0], "A", 1, one_sec).unwrap();
