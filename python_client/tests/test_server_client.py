@@ -88,21 +88,6 @@ def test_restore_peer_with_unknown_semaphore():
             client.restore(peer)
 
 
-def test_lease_recovery_after_server_reboot():
-    """
-    Verify that a newly booted server, recovers leases based on heartbeats
-    """
-    with throttle_client(b"[semaphores]\nA=1") as client:
-        peer = client.acquire_with_new_peer("A")
-
-    # Server is shutdown. Boot a new one wich does not know about this peer
-    with throttle_client(b"[semaphores]\nA=1") as client:
-        # Heartbeat should restore server state.
-        client.heartbeat(peer)
-        # Which implies the remainder of A being 0
-        assert client.remainder("A") == 0
-
-
 def test_does_not_starve_large_locks():
     """This tests verifies that large locks do not get starved by many smaller ones"""
     with throttle_client(b"[semaphores]\nA=5") as client:
@@ -127,9 +112,9 @@ def test_acquire_three_leases():
     is three.
     """
     with throttle_client(b"[semaphores]\nA=3") as client:
-        assert client.acquire_with_new_peer("A").has_active()
-        assert client.acquire_with_new_peer("A").has_active()
-        assert client.acquire_with_new_peer("A").has_active()
+        assert client.acquire_with_new_peer("A").has_acquired()
+        assert client.acquire_with_new_peer("A").has_acquired()
+        assert client.acquire_with_new_peer("A").has_acquired()
         assert client.remainder("A") == 0
         assert client.acquire_with_new_peer("A").has_pending()
 
@@ -231,3 +216,15 @@ def test_block_until_acquired():
         assert not client.block_until_acquired(
             two, block_for=timedelta(milliseconds=10)
         )
+
+
+def test_put_unknown_semaphore():
+    """
+    An active revenant of an unknown semaphore should throw an exception.
+    """
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        a = client.acquire_with_new_peer("A")
+    # Restart Server without "A"
+    with throttle_client(b"[semaphores]") as client:
+        with pytest.raises(Exception, match="Unknown semaphore"):
+            client.restore(a)

@@ -11,7 +11,7 @@ use actix_web::{
     web::{Data, Json, Path, Query},
     HttpResponse, ResponseError,
 };
-use log::{debug, warn};
+use log::debug;
 use serde::Deserialize;
 use std::{collections::HashMap, time::Duration};
 
@@ -38,25 +38,6 @@ struct HumanDuration(#[serde(with = "humantime_serde")] Duration);
 struct ExpiresIn {
     #[serde(with = "humantime_serde")]
     expires_in: Duration,
-}
-
-/// Parameters for heartbeat to a lease
-#[derive(Deserialize)]
-pub struct ActiveLeases {
-    active: Leases,
-    /// Duration in seconds. After the specified time has passed the lease may be freed by litter
-    /// collection.
-    #[serde(with = "humantime_serde")]
-    expires_in: Duration,
-}
-
-impl ActiveLeases {
-    fn active(&self) -> Option<(&str, u32)> {
-        self.active
-            .iter()
-            .next()
-            .map(|(sem, &amount)| (sem.as_str(), amount))
-    }
 }
 
 /// Create a new peer with no acquired locks.
@@ -136,17 +117,22 @@ pub struct Restore {
     expires_in: Duration,
     peer_id: PeerId,
     pending: Leases,
+    acquired: Leases,
 }
 
+/// Called by the client, after receiving `Unknown Peer`. Restores the state of the peer. The
+/// acquired locks of the peer are guaranteed to be acquired. Even if this means going over the full
+/// count of the semaphore. Pending locks may be resolved, if this is possible without going over
+/// the semaphores full count, or violating fairness.
 #[post("/restore")]
 pub async fn restore(body: Json<Restore>, state: Data<State>) -> Result<Json<bool>, ThrottleError> {
-    let (semaphore, &count) = body
-        .pending
-        .iter()
-        .next()
-        .ok_or(ThrottleError::NotImplemented)?;
+    // Take the firs element of pending. Should that not exist take the first of acquired.
+    let pending = body.pending.iter().next().map(|(s, c)| (false, s, c));
+    let acquired = body.acquired.iter().next().map(|(s, c)| (true, s, c));
+    let (had_been_acquired, semaphore, &count) =
+        pending.or(acquired).ok_or(ThrottleError::NotImplemented)?;
     state
-        .restore_pending(body.peer_id, body.expires_in, semaphore, count)
+        .restore(body.peer_id, body.expires_in, semaphore, count, had_been_acquired)
         .map(Json)
 }
 
@@ -182,15 +168,10 @@ async fn remove_expired(state: Data<State>) -> Json<usize> {
 #[put("/peers/{id}")]
 async fn put_peer(
     path: Path<PeerId>,
-    body: Json<ActiveLeases>,
+    body: Json<ExpiresIn>,
     state: Data<State>,
 ) -> Result<&'static str, ThrottleError> {
-    let lease_id = *path;
-    if let Some((semaphore, amount)) = body.active() {
-        debug!("Received heartbeat for {}", lease_id);
-        state.heartbeat_for_active_peer(lease_id, semaphore, amount, body.expires_in)?;
-    } else {
-        warn!("Empty heartbeat (no active leases) for {}", lease_id);
-    }
+    let peer_id = *path;
+    state.heartbeat(peer_id, body.expires_in)?;
     Ok("Ok")
 }

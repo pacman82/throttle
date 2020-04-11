@@ -15,7 +15,7 @@ from .client import Client, Peer, UnknownPeer
 class Heartbeat:
     def __init__(self, client: Client, peer: Peer, interval: timedelta):
         self.client = client
-        self.lease = peer
+        self.peer = peer
         # Interval in between heartbeats for an active lease
         self.interval_sec = interval.total_seconds()
         self.cancel = Event()
@@ -31,9 +31,11 @@ class Heartbeat:
 
     def _run(self):
         self.cancel.wait(self.interval_sec)
-        while self.lease.has_active() and not self.cancel.is_set():
+        while self.peer.has_acquired() and not self.cancel.is_set():
             try:
-                self.client.heartbeat(self.lease)
+                self.client.heartbeat(self.peer)
+            except UnknownPeer:
+                self.client.restore(self.peer)
             except requests.ConnectionError:
                 pass
             self.cancel.wait(self.interval_sec)
@@ -69,7 +71,7 @@ def lock(
     deactivate the heartbeat.
     """
     # Recover from `UnknownPeer` if server forgets state between `new_peer` and `acquire`
-    for _ in range(1, 5):
+    while True:
         peer = client.new_peer()
         try:
             _ = client.acquire(peer, semaphore, count=count)

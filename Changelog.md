@@ -61,4 +61,6 @@ delayed if the peer holding the lock previously did expire, rather than release 
 0.2.0 Next
 ----------
 
-* Removed HTTP route `freeze`.
+* Removed HTTP route `/freeze`.
+* Recover from unknown peer is now handled on the client side.
+  * Uses new route `/restore`.

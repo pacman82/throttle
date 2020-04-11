@@ -19,27 +19,27 @@ class Peer:
     """
 
     def __init__(
-        self, id: int, active: Dict[str, int] = {}, pending: Dict[str, int] = {},
+        self, id: int, acquired: Dict[str, int] = {}, pending: Dict[str, int] = {},
     ):
         self.id = id
         # The server does also keep this state, but we also keep it on the client side,
         # so we can recover it in case the server looses the state.
-        self.active = active
+        self.acquired = acquired
         self.pending = pending
 
     def has_pending(self) -> bool:
         """Returns true if this peer has pending leases."""
         return len(self.pending) != 0
 
-    def has_active(self) -> bool:
+    def has_acquired(self) -> bool:
         """Returns true if this peer has active leases."""
-        return len(self.active) != 0
+        return len(self.acquired) != 0
 
     def _make_active(self):
         """
         Call this to tell the lease that the pending admissions are now active
         """
-        self.active.update(self.pending)
+        self.acquired.update(self.pending)
         self.pending = {}
 
 
@@ -156,7 +156,7 @@ class Client:
             return requests.post(self.base_url + "/new_peer", json=body, timeout=30)
 
         response = self._try_request(send_new_peer)
-        return Peer(id=int(response.text), active={}, pending={})
+        return Peer(id=int(response.text), acquired={}, pending={})
 
     def acquire(
         self, peer: Peer, semaphore: str, count: int = 1, expires_in: timedelta = None
@@ -189,7 +189,7 @@ class Client:
 
         response = self._try_request(send_acquire)
         if response.status_code == 200:  # Ok. Acquired lock to semaphore.
-            peer.active = {semaphore: count}
+            peer.acquired = {semaphore: count}
             return True
         elif response.status_code == 202:  # Accepted. Ticket pending.
             peer.pending = {semaphore: count}
@@ -247,9 +247,10 @@ class Client:
             response = requests.post(
                 f"{self.base_url}/restore",
                 json={
-                    "expires_in": "5min",
+                    "expires_in": _format_timedelta(self.expiration_time),
                     "peer_id": peer.id,
                     "pending": peer.pending,
+                    "acquired": peer.acquired,
                 },
             )
             return response
@@ -337,8 +338,7 @@ class Client:
 
     def heartbeat(self, peer: Peer):
         """
-        Sends a PUT request to the server, updating the expiration timestamp and
-        repeating the information of the peer.
+        Sends a PUT request to the server, updating the expiration timestamp.
         """
         assert (
             not peer.has_pending()
@@ -349,7 +349,6 @@ class Client:
                 f"{self.base_url}/peers/{peer.id}",
                 json={
                     "expires_in": _format_timedelta(self.expiration_time),
-                    "active": peer.active,
                 },
                 timeout=30,
             )
