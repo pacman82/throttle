@@ -64,7 +64,6 @@ impl Lock {
     }
 }
 
-
 /// Accumulated counts for an indiviual Semaphore
 #[derive(Default)]
 pub struct Counts {
@@ -84,7 +83,6 @@ impl Counts {
             .unwrap_or_default()
     }
 }
-
 
 /// A peer holds leases to semaphores, which may either be active or pending and share a common
 /// timeout.
@@ -151,12 +149,15 @@ impl Peer {
     }
 }
 
+/// Every peer has a unique PeerId associated with it for bookkeeping.
+pub type PeerId = u64;
+
 /// Does the bookeeping for all the peers, which 'lease' Semaphores by acquiring locks to them. This
 /// is a purely a bookeeping struct and does not provide any synchronization mechanisms. Rather they
 /// are build arount this type.
 pub struct Leases {
     //  Peers holding pending or acquired leases to the semaphores
-    ledger: HashMap<u64, Peer>,
+    ledger: HashMap<PeerId, Peer>,
 }
 
 impl Leases {
@@ -172,7 +173,7 @@ impl Leases {
     ///
     /// The id identifying the new peer. Used as a key in this datastructure to access and
     /// manipulate its state.
-    pub fn new_peer(&mut self, valid_until: Instant) -> u64 {
+    pub fn new_peer(&mut self, valid_until: Instant) -> PeerId {
         let id = self.new_unique_peer_id();
         let old = self.ledger.insert(
             id,
@@ -194,7 +195,7 @@ impl Leases {
     ///
     /// It's the responsibility of the caller to ensure this method is not called with an already
     /// existing peer id.
-    pub fn new_peer_at(&mut self, id: u64, valid_until: Instant) {
+    pub fn new_peer_at(&mut self, id: PeerId, valid_until: Instant) {
         let old = self.ledger.insert(
             id,
             Peer {
@@ -223,7 +224,7 @@ impl Leases {
     /// Returns `true` if, and only if, all locks of the peer are acquired.
     pub fn acquire(
         &mut self,
-        peer_id: u64,
+        peer_id: PeerId,
         semaphore: &str,
         amount: u32,
         max: Option<i64>,
@@ -232,7 +233,10 @@ impl Leases {
 
         // Compare with previous state of the lock. If the same amount for the same semaphore has
         // been demanded already, do nothing.
-        let peer = self.ledger.get(&peer_id).ok_or(ThrottleError::UnknownPeer)?;
+        let peer = self
+            .ledger
+            .get(&peer_id)
+            .ok_or(ThrottleError::UnknownPeer)?;
         let previous_demand = peer.count_demand(semaphore);
         if previous_demand != 0 {
             match amount.cmp(&previous_demand) {
@@ -275,7 +279,7 @@ impl Leases {
 
     /// Should a peer with `peer_id` be found, it is removed and the name of the semaphore it
     /// holds is returned.
-    pub fn remove(&mut self, peer_id: u64) -> Option<String> {
+    pub fn remove(&mut self, peer_id: PeerId) -> Option<String> {
         self.ledger
             .remove(&peer_id)
             .map(|p| p.lock.map(|l| l.semaphore))
@@ -312,7 +316,7 @@ impl Leases {
     ///
     /// `true` if peer has any pending leases, `false` if not. Returns `UnknownPeer` if peer does
     /// not exist.
-    pub fn has_pending(&self, peer_id: u64) -> Result<bool, ThrottleError> {
+    pub fn has_pending(&self, peer_id: PeerId) -> Result<bool, ThrottleError> {
         self.ledger
             .get(&peer_id)
             .ok_or(ThrottleError::UnknownPeer)
@@ -328,7 +332,7 @@ impl Leases {
     /// # Return
     ///
     /// (List of expired peers, affected_semaphores)
-    pub fn remove_expired(&mut self, now: Instant) -> (Vec<u64>, Vec<String>) {
+    pub fn remove_expired(&mut self, now: Instant) -> (Vec<PeerId>, Vec<String>) {
         let mut expired_peers = Vec::new();
         let mut affected_semaphores = Vec::new();
         self.ledger.retain(|peer_id, peer| {
@@ -356,7 +360,7 @@ impl Leases {
     /// May return `ThrottleError::UnknownPeer` if `peer_id` is not found.
     pub fn update_valid_until(
         &mut self,
-        peer_id: u64,
+        peer_id: PeerId,
         valid_until: Instant,
     ) -> Result<(), ThrottleError> {
         let peer = self
@@ -376,7 +380,7 @@ impl Leases {
     }
 
     /// Generates a random new peer id which does not collide with any preexisting
-    fn new_unique_peer_id(&self) -> u64 {
+    fn new_unique_peer_id(&self) -> PeerId {
         loop {
             let candidate = random();
             if self.ledger.get(&candidate).is_none() {
@@ -408,7 +412,10 @@ impl Leases {
     /// Return the pending lock with the highest priority for this semaphore. Since we have fair
     /// semaphores, this is the lock waiting the longest. Returs `None` in case there are not any
     /// pending locks.
-    fn highest_priority_pending<'a>(&'a mut self, semaphore: &str) -> Option<(u64, &'a mut Lock)> {
+    fn highest_priority_pending<'a>(
+        &'a mut self,
+        semaphore: &str,
+    ) -> Option<(PeerId, &'a mut Lock)> {
         self.ledger
             .iter_mut()
             .filter_map(|(id, peer)| {

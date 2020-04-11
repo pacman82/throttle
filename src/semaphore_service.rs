@@ -3,7 +3,7 @@
 //! deserialize paramaters and serialize respones, or deciding on which HTTP methods to map the
 //! functions.
 
-use crate::{error::ThrottleError, state::State};
+use crate::{error::ThrottleError, leases::PeerId, state::State};
 use actix_web::{
     delete, get,
     http::StatusCode,
@@ -81,12 +81,12 @@ impl ActiveLeases {
 ///
 /// Returns id of the new peer
 #[post("/new_peer")]
-async fn new_peer(body: Json<ExpiresIn>, state: Data<State>) -> Json<u64> {
+async fn new_peer(body: Json<ExpiresIn>, state: Data<State>) -> Json<PeerId> {
     Json(state.new_peer(body.expires_in))
 }
 
 #[delete("/peers/{id}")]
-async fn release(path: Path<u64>, state: Data<State>) -> HttpResponse {
+async fn release(path: Path<PeerId>, state: Data<State>) -> HttpResponse {
     if state.release(*path) {
         HttpResponse::Ok().json("Peer released")
     } else {
@@ -98,7 +98,7 @@ async fn release(path: Path<u64>, state: Data<State>) -> HttpResponse {
 /// Acquire a lock to a Semaphore. Does not block.
 #[put("/peer/{id}/{semaphore}")]
 async fn acquire(
-    path: Path<(u64, String)>,
+    path: Path<(PeerId, String)>,
     query: Query<ExpiresIn>,
     body: Json<u32>,
     state: Data<State>,
@@ -130,7 +130,7 @@ struct MaxTimeout {
 /// Returns `true` if leases are active.
 #[post("/peers/{id}/block_until_acquired")]
 async fn block_until_acquired(
-    path: Path<u64>,
+    path: Path<PeerId>,
     query: Query<MaxTimeout>,
     body: Json<PendingLeases>,
     state: Data<State>,
@@ -174,7 +174,7 @@ async fn remainder(
 /// Returns wether all the locks of the peer have been acquired. This route will not block, but
 /// return immediatly.
 #[get("/peers/{id}/is_acquired")]
-async fn is_acquired(path: Path<u64>, state: Data<State>) -> Result<Json<bool>, ThrottleError> {
+async fn is_acquired(path: Path<PeerId>, state: Data<State>) -> Result<Json<bool>, ThrottleError> {
     state.is_acquired(*path).map(Json)
 }
 
@@ -187,7 +187,7 @@ async fn remove_expired(state: Data<State>) -> Json<usize> {
 
 #[put("/peers/{id}")]
 async fn put_peer(
-    path: Path<u64>,
+    path: Path<PeerId>,
     body: Json<ActiveLeases>,
     state: Data<State>,
 ) -> Result<&'static str, ThrottleError> {
@@ -200,4 +200,3 @@ async fn put_peer(
     }
     Ok("Ok")
 }
-

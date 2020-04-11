@@ -1,7 +1,7 @@
 use crate::{
     application_cfg::Semaphores,
     error::ThrottleError,
-    leases::{Counts, Leases},
+    leases::{Counts, Leases, PeerId},
     wakers::Wakers,
 };
 use lazy_static::lazy_static;
@@ -40,7 +40,7 @@ impl State {
     }
 
     /// Creates a new peer.
-    pub fn new_peer(&self, expires_in: Duration) -> u64 {
+    pub fn new_peer(&self, expires_in: Duration) -> PeerId {
         let mut leases = self.leases.lock().unwrap();
         let valid_until = Instant::now() + expires_in;
         let peer_id = leases.new_peer(valid_until);
@@ -52,7 +52,7 @@ impl State {
     /// semaphore allow it.
     pub fn acquire(
         &self,
-        peer_id: u64,
+        peer_id: PeerId,
         semaphore: &str,
         amount: u32,
         expires_in: Duration,
@@ -119,7 +119,7 @@ impl State {
     /// Returns `true` if the the leases could be acquired in time.
     pub async fn block_until_acquired(
         &self,
-        peer_id: u64,
+        peer_id: PeerId,
         expires_in: Duration,
         semaphore: &str,
         amount: u32,
@@ -174,7 +174,7 @@ impl State {
 
     pub fn heartbeat_for_active_peer(
         &self,
-        peer_id: u64,
+        peer_id: PeerId,
         semaphore: &str,
         amount: u32,
         expires_in: Duration,
@@ -219,7 +219,7 @@ impl State {
     ///
     /// Returns `false` should the peer not be found and `true` otherwise. `false` could occur due
     /// to e.g. the peer already being removed by litter collection.
-    pub fn release(&self, peer_id: u64) -> bool {
+    pub fn release(&self, peer_id: PeerId) -> bool {
         let mut leases = self.leases.lock().unwrap();
         match leases.remove(peer_id) {
             Some(semaphore) => {
@@ -264,7 +264,7 @@ impl State {
     }
 
     /// Returns true if all the locks of the peer are acquired
-    pub fn is_acquired(&self, peer_id: u64) -> Result<bool, ThrottleError> {
+    pub fn is_acquired(&self, peer_id: PeerId) -> Result<bool, ThrottleError> {
         let leases = self.leases.lock().unwrap();
         leases.has_pending(peer_id).map(|pending| !pending)
     }
