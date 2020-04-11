@@ -9,6 +9,8 @@ from time import sleep
 
 import pytest  # type: ignore
 
+from throttle_client import Peer
+
 from . import throttle_client
 
 
@@ -75,18 +77,15 @@ def test_pending_leases_dont_expire():
         assert client.remove_expired() == 0
 
 
-def test_block_on_unknown_semaphore():
+def test_restore_peer_with_unknown_semaphore():
     """
-    A pending revenant of an unknown semaphore should throw an exception.
+    A revenant Peer may not acquire a semaphore which does not exist on the server.
     """
-    with throttle_client(b"[semaphores]\nA=1") as client:
-        # Only take first, so second one blocks
-        _ = client.acquire_with_new_peer("A")
-        lock_a = client.acquire_with_new_peer("A")
     # Restart Server without "A"
     with throttle_client(b"[semaphores]") as client:
         with pytest.raises(Exception, match="Unknown semaphore"):
-            client.block_until_acquired(lock_a, block_for=timedelta(seconds=1))
+            peer = Peer(id=1, pending={"A": 1})
+            client.restore(peer)
 
 
 def test_lease_recovery_after_server_reboot():

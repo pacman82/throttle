@@ -3,8 +3,11 @@ from datetime import timedelta
 from typing import Any, Dict
 
 import requests
-from tenacity import (Retrying, stop_after_attempt,  # type: ignore
-                      wait_exponential)
+from tenacity import (  # type: ignore
+    Retrying,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from .status_code import is_recoverable_error as _is_recoverable_error
 
@@ -16,9 +19,11 @@ class Peer:
     """
 
     def __init__(
-        self, id: str, active: Dict[str, int] = {}, pending: Dict[str, int] = {},
+        self, id: int, active: Dict[str, int] = {}, pending: Dict[str, int] = {},
     ):
         self.id = id
+        # The server does also keep this state, but we also keep it on the client side,
+        # so we can recover it in case the server looses the state.
         self.active = active
         self.pending = pending
 
@@ -151,7 +156,7 @@ class Client:
             return requests.post(self.base_url + "/new_peer", json=body, timeout=30)
 
         response = self._try_request(send_new_peer)
-        return Peer(id=response.text, active={}, pending={})
+        return Peer(id=int(response.text), active={}, pending={})
 
     def acquire(
         self, peer: Peer, semaphore: str, count: int = 1, expires_in: timedelta = None
@@ -224,11 +229,7 @@ class Client:
             response = requests.post(
                 self.base_url
                 + f"/peers/{peer.id}/block_until_acquired?timeout_ms={block_for_ms}",
-                json={
-                    "expires_in": "5min",
-                    "active": peer.active,
-                    "pending": peer.pending,
-                },
+                json={"expires_in": "5min"},
                 timeout=block_for_ms / 1000 + 30,
             )
             return response
@@ -240,6 +241,26 @@ class Client:
             # bookeeping accordingly.
             peer._make_active()
         return peer.has_pending()
+
+    def restore(self, peer: Peer) -> bool:
+        def send_request():
+            response = requests.post(
+                f"{self.base_url}/restore",
+                json={
+                    "expires_in": "5min",
+                    "peer_id": peer.id,
+                    "pending": peer.pending,
+                },
+            )
+            return response
+
+        response = self._try_request(send_request)
+        acquired = json.loads(response.text)
+        if acquired:
+            # Server told us all leases of this peer are active. Let's upate our local
+            # bookeeping accordingly.
+            peer._make_active()
+        return acquired
 
     def remainder(self, semaphore: str) -> int:
         """

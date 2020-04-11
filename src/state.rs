@@ -121,31 +121,13 @@ impl State {
         &self,
         peer_id: PeerId,
         expires_in: Duration,
-        semaphore: &str,
-        amount: u32,
         timeout: Duration,
     ) -> Result<bool, ThrottleError> {
         let mut leases = self.leases.lock().unwrap();
         let start = Instant::now();
         let valid_until = start + expires_in;
 
-        match leases.update_valid_until(peer_id, valid_until) {
-            Ok(()) => (),
-            Err(ThrottleError::UnknownPeer) => {
-                let max = *self
-                    .semaphores
-                    .get(semaphore)
-                    .ok_or(ThrottleError::UnknownSemaphore)?;
-                leases.new_peer_at(peer_id, valid_until);
-                let active = leases.acquire(peer_id, semaphore, amount, Some(max))?;
-                warn!(
-                    "Revenant Peer {} with pending leases. Active: {}",
-                    peer_id, active
-                );
-            }
-            // update valid until can only fail with UnknowPeer
-            Err(_) => unreachable!(),
-        }
+        leases.update_valid_until(peer_id, valid_until)?;
 
         // Check if we can resolve this immediatly
         if !leases.has_pending(peer_id)? {
@@ -170,6 +152,29 @@ impl State {
                 Err(_) => Ok(false),
             }
         }
+    }
+
+    /// Restore pending peer
+    pub fn restore_pending(
+        &self,
+        peer_id: PeerId,
+        expires_in: Duration,
+        semaphore: &str,
+        amount: u32,
+    ) -> Result<bool, ThrottleError>{
+        let max = *self
+            .semaphores
+            .get(semaphore)
+            .ok_or(ThrottleError::UnknownSemaphore)?;
+        let mut leases = self.leases.lock().unwrap();
+        let valid_until = Instant::now() + expires_in;
+        leases.new_peer_at(peer_id, valid_until);
+        let acquired = leases.acquire(peer_id, semaphore, amount, Some(max))?;
+        warn!(
+            "Revenant Peer {} with pending leases. Acquired: {}",
+            peer_id, acquired
+        );
+        Ok(acquired)
     }
 
     pub fn heartbeat_for_active_peer(

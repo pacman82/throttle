@@ -40,24 +40,6 @@ struct ExpiresIn {
     expires_in: Duration,
 }
 
-/// Parameters for acquiring a lease
-#[derive(Deserialize)]
-struct PendingLeases {
-    pending: Leases,
-    /// Duration in seconds. After the specified time has passed the lease may be freed by litter
-    /// collection.
-    expires_in: HumanDuration,
-}
-
-impl PendingLeases {
-    fn pending(&self) -> Option<(&str, u32)> {
-        self.pending
-            .iter()
-            .next()
-            .map(|(sem, &amount)| (sem.as_str(), amount))
-    }
-}
-
 /// Parameters for heartbeat to a lease
 #[derive(Deserialize)]
 pub struct ActiveLeases {
@@ -132,7 +114,7 @@ struct MaxTimeout {
 async fn block_until_acquired(
     path: Path<PeerId>,
     query: Query<MaxTimeout>,
-    body: Json<PendingLeases>,
+    body: Json<ExpiresIn>,
     state: Data<State>,
 ) -> Result<Json<bool>, ThrottleError> {
     let lease_id = *path;
@@ -142,18 +124,30 @@ async fn block_until_acquired(
         lease_id, unblock_after
     );
     let peer_id = *path;
-    let expires_in = body.expires_in.0;
-    let acquired_in_time = if let Some((semaphore, amount)) = body.pending() {
-        state
-            .block_until_acquired(peer_id, expires_in, semaphore, amount, unblock_after)
-            .await?
-    } else {
-        // Todo: How to best handle a wait for without pending leases? This path won't be triggered
-        // by a correct client. Remark: Wo would not have this problem, if we handled Unknown Peer
-        // at the client side.
-        true
-    };
+    let acquired_in_time = state
+        .block_until_acquired(peer_id, body.expires_in, unblock_after)
+        .await?;
     Ok(Json(acquired_in_time))
+}
+
+#[derive(Deserialize)]
+pub struct Restore {
+    #[serde(with = "humantime_serde")]
+    expires_in: Duration,
+    peer_id: PeerId,
+    pending: Leases,
+}
+
+#[post("/restore")]
+pub async fn restore(body: Json<Restore>, state: Data<State>) -> Result<Json<bool>, ThrottleError> {
+    let (semaphore, &count) = body
+        .pending
+        .iter()
+        .next()
+        .ok_or(ThrottleError::NotImplemented)?;
+    state
+        .restore_pending(body.peer_id, body.expires_in, semaphore, count)
+        .map(Json)
 }
 
 /// Query parameters for getting remaining semaphore count
