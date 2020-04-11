@@ -97,7 +97,11 @@ def lock(
             # until the timeout.
             else:
                 block_for = min(timeout - passed, block_for)
-        _ = client.block_until_acquired(peer, block_for)
+
+        try:
+            _ = client.block_until_acquired(peer, block_for)
+        except UnknownPeer:
+            client.restore(peer)
 
     # Yield and have the heartbeat in an extra thread, during it being active.
     if heartbeat_interval is not None:
