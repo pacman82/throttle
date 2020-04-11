@@ -48,13 +48,15 @@ impl State {
         peer_id
     }
 
+    /// Sets the lock count for this peer and semaphore to `amount`. Should the remainder of the
+    /// semaphore allow it.
     pub fn acquire(
         &self,
         peer_id: u64,
         semaphore: &str,
         amount: u32,
         expires_in: Duration,
-    ) -> Result<(u64, bool), ThrottleError> {
+    ) -> Result<bool, ThrottleError> {
         if let Some(&max) = self.semaphores.get(semaphore) {
             // Return early if lease could never be active, no matter how long we wait
             if max < amount as i64 {
@@ -66,13 +68,13 @@ impl State {
             let mut leases = self.leases.lock().unwrap();
             let valid_until = Instant::now() + expires_in;
             leases.update_valid_until(peer_id, valid_until)?;
-            let active = leases.acquire(peer_id, semaphore, amount, Some(max));
+            let active = leases.acquire(peer_id, semaphore, amount, Some(max))?;
             if active {
                 debug!("Peer {} acquired lease to '{}'.", peer_id, semaphore);
-                Ok((peer_id, true))
+                Ok(true)
             } else {
                 debug!("Peer {} waiting for lease to '{}'.", peer_id, semaphore);
-                Ok((peer_id, false))
+                Ok(false)
             }
         } else {
             warn!("Unknown semaphore '{}' requested", semaphore);
@@ -135,7 +137,7 @@ impl State {
                     .get(semaphore)
                     .ok_or(ThrottleError::UnknownSemaphore)?;
                 leases.new_peer_at(peer_id, valid_until);
-                let active = leases.acquire(peer_id, semaphore, amount, Some(max));
+                let active = leases.acquire(peer_id, semaphore, amount, Some(max))?;
                 warn!(
                     "Revenant Peer {} with pending leases. Active: {}",
                     peer_id, active
@@ -193,7 +195,7 @@ impl State {
                 // semaphore full count and allow exceeding it.
                 let max = None;
                 leases.new_peer_at(peer_id, valid_until);
-                leases.acquire(peer_id, semaphore, amount, max);
+                leases.acquire(peer_id, semaphore, amount, max)?;
                 warn!("Revenat peer {} with active leases returned.", peer_id);
             }
             // `update_valid_until` can only fail with `UnknownPeer`
@@ -310,14 +312,14 @@ mod tests {
 
         // First three locks can be acquired immediatly
         let one = state.new_peer(one_sec);
-        assert!(state.acquire(one, "A", 1, one_sec).unwrap().1);
+        assert!(state.acquire(one, "A", 1, one_sec).unwrap());
         let two = state.new_peer(one_sec);
-        assert!(state.acquire(two, "A", 1, one_sec).unwrap().1);
+        assert!(state.acquire(two, "A", 1, one_sec).unwrap());
         let three = state.new_peer(one_sec);
-        assert!(state.acquire(three, "A", 1, one_sec).unwrap().1);
+        assert!(state.acquire(three, "A", 1, one_sec).unwrap());
         // The fourth must wait
         let four = state.new_peer(one_sec);
-        assert!(!state.acquire(four, "A", 1, one_sec).unwrap().1);
+        assert!(!state.acquire(four, "A", 1, one_sec).unwrap());
     }
 
     #[test]
@@ -387,5 +389,21 @@ mod tests {
         // Release last one of the first three. six should now be acquired.
         state.release(p[2]);
         assert!(state.is_acquired(p[5]).unwrap());
+    }
+
+    #[test]
+    fn idempotent_acquire() {
+        let mut semaphores = Semaphores::new();
+        semaphores.insert(String::from("A"), 1);
+        let state = State::new(semaphores);
+        let one_sec = Duration::from_secs(1);
+
+        let first = state.new_peer(one_sec);
+        assert!(state.acquire(first, "A", 1, one_sec).unwrap());
+        assert!(state.acquire(first, "A", 1, one_sec).unwrap());
+
+        let second = state.new_peer(one_sec);
+        assert!(!state.acquire(second, "A", 1, one_sec).unwrap());
+        assert!(!state.acquire(second, "A", 1, one_sec).unwrap());
     }
 }

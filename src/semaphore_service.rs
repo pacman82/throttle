@@ -21,6 +21,8 @@ impl ResponseError for ThrottleError {
             ThrottleError::UnknownPeer => StatusCode::BAD_REQUEST,
             ThrottleError::UnknownSemaphore => StatusCode::BAD_REQUEST,
             ThrottleError::ForeverPending { .. } => StatusCode::CONFLICT,
+            ThrottleError::Deadlock => StatusCode::CONFLICT,
+            ThrottleError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
         }
     }
 }
@@ -75,7 +77,7 @@ impl ActiveLeases {
     }
 }
 
-/// Acquire a new lease to a Semaphore
+/// Create a new peer with no acquired locks.
 ///
 /// Returns id of the new peer
 #[post("/new_peer")]
@@ -83,8 +85,18 @@ async fn new_peer(body: Json<ExpiresIn>, state: Data<State>) -> Json<u64> {
     Json(state.new_peer(body.expires_in))
 }
 
+#[delete("/peers/{id}")]
+async fn release(path: Path<u64>, state: Data<State>) -> HttpResponse {
+    if state.release(*path) {
+        HttpResponse::Ok().json("Peer released")
+    } else {
+        // Post condition of lease not being there is satisfied, let's make this request 200 still.
+        HttpResponse::Ok().json("Peer not found")
+    }
+}
+
 /// Acquire a lock to a Semaphore. Does not block.
-#[post("/peer/{id}/{semaphore}/acquire")]
+#[put("/peer/{id}/{semaphore}")]
 async fn acquire(
     path: Path<(u64, String)>,
     query: Query<ExpiresIn>,
@@ -95,8 +107,8 @@ async fn acquire(
     let peer_id = path.0;
     let semaphore = &path.1;
     match state.acquire(peer_id, semaphore, amount, query.expires_in) {
-        Ok((lease_id, true)) => HttpResponse::Created().json(lease_id),
-        Ok((lease_id, false)) => HttpResponse::Accepted().json(lease_id),
+        Ok(true) => HttpResponse::Ok().json(peer_id),
+        Ok(false) => HttpResponse::Accepted().json(peer_id),
         Err(error) => HttpResponse::from_error(error.into()),
     }
 }
@@ -164,16 +176,6 @@ async fn remainder(
 #[get("/peers/{id}/is_acquired")]
 async fn is_acquired(path: Path<u64>, state: Data<State>) -> Result<Json<bool>, ThrottleError> {
     state.is_acquired(*path).map(Json)
-}
-
-#[delete("/peers/{id}")]
-async fn release(path: Path<u64>, state: Data<State>) -> HttpResponse {
-    if state.release(*path) {
-        HttpResponse::Ok().json("Peer released")
-    } else {
-        // Post condition of lease not being there is satisfied, let's make this request 200 still.
-        HttpResponse::Ok().json("Peer not found")
-    }
 }
 
 /// Manually remove all expired semapahores. Usefull for testing

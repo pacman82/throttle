@@ -12,4 +12,8 @@ pub enum ThrottleError {
         {max:?}."
     )]
     ForeverPending { asked: i64, max: i64 },
+    #[error("May Deadlock. Due to violation of lock hierarchy.")]
+    Deadlock,
+    #[error("Not Implemented.")]
+    NotImplemented,
 }

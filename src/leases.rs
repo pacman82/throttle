@@ -1,6 +1,7 @@
 use crate::error::ThrottleError;
 use rand::random;
 use std::{
+    cmp::Ordering,
     collections::HashMap,
     time::{Duration, Instant},
 };
@@ -63,13 +64,6 @@ impl Lock {
     }
 }
 
-/// A peer holds leases to semaphores, which may either be active or pending and share a common
-/// timeout.
-struct Peer {
-    lock: Option<Lock>,
-    /// Instant upon which the lease may be removed by litter collection.
-    valid_until: Instant,
-}
 
 /// Accumulated counts for an indiviual Semaphore
 #[derive(Default)]
@@ -89,6 +83,15 @@ impl Counts {
             .map(|earlier| now.duration_since(earlier))
             .unwrap_or_default()
     }
+}
+
+
+/// A peer holds leases to semaphores, which may either be active or pending and share a common
+/// timeout.
+struct Peer {
+    lock: Option<Lock>,
+    /// Instant upon which the lease may be removed by litter collection.
+    valid_until: Instant,
 }
 
 impl Peer {
@@ -217,15 +220,28 @@ impl Leases {
     ///
     /// # Return
     ///
-    /// Returns `true` if, and only if all leases of the peer are active.
+    /// Returns `true` if, and only if, all locks of the peer are acquired.
     pub fn acquire(
         &mut self,
         peer_id: u64,
         semaphore: &str,
         amount: u32,
         max: Option<i64>,
-    ) -> bool {
+    ) -> Result<bool, ThrottleError> {
         let amount = amount as i64;
+
+        // Compare with previous state of the lock. If the same amount for the same semaphore has
+        // been demanded already, do nothing.
+        let peer = self.ledger.get(&peer_id).ok_or(ThrottleError::UnknownPeer)?;
+        let previous_demand = peer.count_demand(semaphore);
+        if previous_demand != 0 {
+            match amount.cmp(&previous_demand) {
+                // TODO: Reduce lock count and notify if not pending.
+                Ordering::Less => return Err(ThrottleError::NotImplemented),
+                Ordering::Equal => return Ok(peer.all_acquired()),
+                Ordering::Greater => return Err(ThrottleError::Deadlock),
+            }
+        }
 
         // Since this creates a new peer, we know it has the most recent timestamp. This implies
         // that due to fairness every other peer has priority over this one taking the lock.
@@ -246,7 +262,7 @@ impl Leases {
             since: Instant::now(),
         });
 
-        acquired
+        Ok(acquired)
     }
 
     /// Aggregated count of active leases for the semaphore

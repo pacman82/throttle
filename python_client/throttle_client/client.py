@@ -86,8 +86,8 @@ class Client:
     """
     A Client to lease semaphores from a Throttle service.
 
-    This class is conserned with the HTTP interface of the Server only. For a higher level interface
-    look at the `lock` context manager.
+    This class is conserned with the HTTP interface of the Server only. For a higher
+    level interface look at the `lock` context manager.
     """
 
     def __init__(
@@ -176,14 +176,14 @@ class Client:
         expires_in_str = _format_timedelta(expires_in)
 
         def send_acquire():
-            return requests.post(
-                f"{self.base_url}/peer/{peer.id}/{semaphore}/acquire?expires_in={expires_in_str}",
+            return requests.put(
+                f"{self.base_url}/peer/{peer.id}/{semaphore}?expires_in={expires_in_str}",
                 json=count,
                 timeout=30,
             )
 
         response = self._try_request(send_acquire)
-        if response.status_code == 201:  # Created. We got a lease to the semaphore
+        if response.status_code == 200:  # Ok. Acquired lock to semaphore.
             peer.active = {semaphore: count}
             return True
         elif response.status_code == 202:  # Accepted. Ticket pending.
