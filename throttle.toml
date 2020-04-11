@@ -17,3 +17,8 @@
 # port = 12201
 ## Set this to either ERROR, WARN, INFO, DEBUG or TRACE.
 # level = "INFO"
+
+# Uncomment below lines to log to console.
+# [logging.console]
+## Set this to either ERROR, WARN, INFO, DEBUG or TRACE.
+# level = "INFO"

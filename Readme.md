@@ -85,6 +85,12 @@ port = 12201
 level = "INFO"
 ```
 
+# Optional logging config, to log to stderr
+[logging.console]
+## Set this to either ERROR, WARN, INFO, DEBUG or TRACE.
+level = "INFO"
+```
+
 #### Metrics
 
 Throttle supports Prometheus metrics, via the `/metrics` endpoint. Depending on your configuration and state they may e.g. look like this:
