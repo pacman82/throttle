@@ -7,7 +7,7 @@ from time import sleep
 
 import pytest  # type: ignore
 
-from throttle_client import Client, Timeout, lock
+from throttle_client import Client, Heartbeat, Timeout, lock
 
 from . import BASE_URL, cargo_main, throttle_client
 
@@ -163,18 +163,6 @@ def test_try_lock():
                 pass
 
 
-def test_put_unknown_semaphore():
-    """
-    An active revenant of an unknown semaphore should throw an exception.
-    """
-    with throttle_client(b"[semaphores]\nA=1") as client:
-        a = client.acquire_with_new_peer("A")
-    # Restart Server without "A"
-    with throttle_client(b"[semaphores]") as client:
-        with pytest.raises(Exception, match="Unknown semaphore"):
-            client.heartbeat(a)
-
-
 def test_recover_from_unknown_peer_during_acquisition_lock():
     """
     The lock interface must recreate the peer if it is removed from the server, between
@@ -204,3 +192,22 @@ def test_recover_from_unknown_peer_during_acquisition_lock():
         t.join(timeout=10)
 
         assert acquired_lease
+
+
+def test_peer_recovery_after_server_reboot():
+    """
+    Verify that a newly booted server, recovers peers based on heartbeats
+    """
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        peer = client.acquire_with_new_peer("A")
+
+    heartbeat = Heartbeat(client, peer, interval=timedelta(milliseconds=10))
+    # Server is shutdown. Boot a new one wich does not know about this peer
+    with throttle_client(b"[semaphores]\nA=1") as client:
+        heartbeat.start()
+        # Wait for heartbeat and restore, to go through
+        sleep(2)
+        heartbeat.stop()
+        # Which implies the remainder of A being 0
+        assert client.remainder("A") == 0
+

@@ -154,14 +154,17 @@ impl State {
         }
     }
 
-    /// Restore pending peer
-    pub fn restore_pending(
+    /// Restore peer
+    pub fn restore(
         &self,
         peer_id: PeerId,
         expires_in: Duration,
         semaphore: &str,
-        amount: u32,
-    ) -> Result<bool, ThrottleError>{
+        count: u32,
+        acquired: bool,
+    ) -> Result<bool, ThrottleError> {
+        // Assert semaphore exists. We want to give the client an error and also do not want to
+        // allow any Unknown Semaphore into `leases`.
         let max = *self
             .semaphores
             .get(semaphore)
@@ -169,43 +172,28 @@ impl State {
         let mut leases = self.leases.lock().unwrap();
         let valid_until = Instant::now() + expires_in;
         leases.new_peer_at(peer_id, valid_until);
-        let acquired = leases.acquire(peer_id, semaphore, amount, Some(max))?;
-        warn!(
-            "Revenant Peer {} with pending leases. Acquired: {}",
-            peer_id, acquired
-        );
+        let max = if acquired {
+            // If the restored lease has the lock already acquired, there is no point in checking it
+            // against the full semaphore count. The resource the semaphore is protecting is already
+            // being accessed by it. Better to count it as acquired anyway, even if we increment our
+            // active semaphore count beyond the full count.
+            //
+            // By passing None as max rather than the value obtained above, we opt out checking the
+            // semaphore full count and allow exceeding it.
+            None
+        } else {
+            Some(max)
+        };
+        let acquired = leases.acquire(peer_id, semaphore, count, max)?;
+        warn!("Revenant Peer {}.", peer_id);
         Ok(acquired)
     }
 
-    pub fn heartbeat_for_active_peer(
-        &self,
-        peer_id: PeerId,
-        semaphore: &str,
-        amount: u32,
-        expires_in: Duration,
-    ) -> Result<(), ThrottleError> {
+    pub fn heartbeat(&self, peer_id: PeerId, expires_in: Duration) -> Result<(), ThrottleError> {
         let mut leases = self.leases.lock().unwrap();
         // Determine valid_until after acquiring lock, in case we block for a long time.
         let valid_until = Instant::now() + expires_in;
-        match leases.update_valid_until(peer_id, valid_until) {
-            Ok(()) => (),
-            Err(ThrottleError::UnknownPeer) => {
-                // Assert semaphore exists. We want to give the client an error and also do not want to
-                // allow any Unknown Semaphore into `leases`.
-                let _max = *self
-                    .semaphores
-                    .get(semaphore)
-                    .ok_or(ThrottleError::UnknownSemaphore)?;
-                // By passing None as max rather than the value obtained above, we opt out checking the
-                // semaphore full count and allow exceeding it.
-                let max = None;
-                leases.new_peer_at(peer_id, valid_until);
-                leases.acquire(peer_id, semaphore, amount, max)?;
-                warn!("Revenat peer {} with active leases returned.", peer_id);
-            }
-            // `update_valid_until` can only fail with `UnknownPeer`
-            Err(_) => unreachable!(),
-        }
+        leases.update_valid_until(peer_id, valid_until)?;
         Ok(())
     }
 
