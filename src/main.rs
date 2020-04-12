@@ -88,7 +88,6 @@ async fn main() -> io::Result<()> {
             .service(semaphore_service::acquire)
             .service(semaphore_service::remainder)
             .service(semaphore_service::release)
-            .service(semaphore_service::block_until_acquired)
             .service(semaphore_service::restore)
             .service(semaphore_service::remove_expired)
             .service(semaphore_service::put_peer)

@@ -50,7 +50,7 @@ impl State {
 
     /// Sets the lock count for this peer and semaphore to `amount`. Should the remainder of the
     /// semaphore allow it.
-    /// 
+    ///
     /// * `peer_id`: Identifies the peer for which we are setting the lock count
     /// * `semaphore`: Name of the semaphore to which we want to acquire the lock count.
     /// * `amount`: The count of the lock. Outside of revenants (i.e. expired peers, which do
@@ -69,7 +69,10 @@ impl State {
         wait_for: Option<Duration>,
         expires_in: Duration,
     ) -> Result<bool, ThrottleError> {
-        let max = *self.semaphores.get(semaphore).ok_or(ThrottleError::UnknownSemaphore)?;
+        let max = *self
+            .semaphores
+            .get(semaphore)
+            .ok_or(ThrottleError::UnknownSemaphore)?;
         // Return early if lease can never be acquired
         if max < amount as i64 {
             return Err(ThrottleError::ForeverPending {
@@ -86,7 +89,10 @@ impl State {
             debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
             Ok(true)
         } else {
-            debug!("Peer {} waiting for lock to '{}'.", peer_id, semaphore);
+            debug!(
+                "Peer {} waiting for lock to '{}'",
+                peer_id, semaphore
+            );
 
             // We could not acquire the lock immediatly. Are we going to wait for it?
             if let Some(wait_for) = wait_for {
@@ -142,51 +148,6 @@ impl State {
                 .resolve_with(&expired_peers, Err(ThrottleError::UnknownPeer));
         }
         expired_peers.len()
-    }
-
-    /// Blocks until all the leases of the peer are active, or the timeout expires.
-    ///
-    /// Intended te be called repeatedly, until leases are active. Also prevents the peer from being
-    /// removed by the litter collection, as it updates the expiration timestamp.
-    ///
-    /// ## Return
-    ///
-    /// Returns `true` if the the leases could be acquired in time.
-    pub async fn block_until_acquired(
-        &self,
-        peer_id: PeerId,
-        expires_in: Duration,
-        timeout: Duration,
-    ) -> Result<bool, ThrottleError> {
-        let mut leases = self.leases.lock().unwrap();
-        let start = Instant::now();
-        let valid_until = start + expires_in;
-
-        leases.update_valid_until(peer_id, valid_until)?;
-
-        // Check if we can resolve this immediatly
-        if !leases.has_pending(peer_id)? {
-            Ok(true)
-        } else {
-            // keep holding the lock to `leases` until everything is registered. So we don't miss
-            // the call to `resolve_with`.
-
-            let acquire_or_timeout =
-                time::timeout(timeout, self.wakers.wait_for_resolving(peer_id));
-
-            // Release lock on leases, while waiting for acquire_or_timeout! Otherwise, we might
-            // deadlock.
-            drop(leases);
-            // The outer `Err` indicates a timeout.
-            match acquire_or_timeout.await {
-                // Locks could be acquired
-                Ok(Ok(())) => Ok(true),
-                // Failure
-                Ok(Err(e)) => Err(e),
-                // Lock could not be acquired in time
-                Err(_) => Ok(false),
-            }
-        }
     }
 
     /// Restore peer
