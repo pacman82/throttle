@@ -69,7 +69,7 @@ async fn acquire(
     let amount = body.0;
     let peer_id = path.0;
     let semaphore = &path.1;
-    match state.acquire(peer_id, semaphore, amount, query.expires_in) {
+    match state.acquire(peer_id, semaphore, amount, None, query.expires_in).await {
         Ok(true) => HttpResponse::Ok().json(peer_id),
         Ok(false) => HttpResponse::Accepted().json(peer_id),
         Err(error) => HttpResponse::from_error(error.into()),
