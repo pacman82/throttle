@@ -18,7 +18,7 @@
 ## Set this to either ERROR, WARN, INFO, DEBUG or TRACE.
 # level = "INFO"
 
-# Uncomment below lines to log to console.
+# Uncomment below lines to log to standard error.
 # [logging.stderr]
-## Set this to either ERROR, WARN, INFO, DEBUG or TRACE.
-# level = "INFO"
+## Set this to either ERROR, WARN, INFO, DEBUG or TRACE. Default is WARN.
+# level = "WARN"
