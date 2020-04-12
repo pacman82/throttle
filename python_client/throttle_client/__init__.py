@@ -71,14 +71,7 @@ def lock(
     deactivate the heartbeat.
     """
     # Recover from `UnknownPeer` if server forgets state between `new_peer` and `acquire`
-    while True:
-        peer = client.new_peer()
-        try:
-            _ = client.acquire(peer, semaphore, count=count)
-        except UnknownPeer:
-            # Peer has no prior state, just repeart acquiring the lock
-            continue
-        break
+    peer = client.new_peer()
     # Remember this moment in order to figure out later how much time has passed since
     # we started to acquire the lock
     start = time()
@@ -86,7 +79,8 @@ def lock(
     # before answering, that the lease is still pending. In case the lease can be acquired it is
     # still going to answer immediatly, of course.
     block_for = timedelta(seconds=5)
-    while peer.has_pending():
+    acquired = False
+    while not acquired:
         if timeout:
             # The time between now and start is the amount of time we are waiting for the
             # lock.
@@ -101,7 +95,7 @@ def lock(
                 block_for = min(timeout - passed, block_for)
 
         try:
-            _ = client.acquire(
+            acquired = client.acquire(
                 peer, semaphore, count=count, block_for=block_for
             )
         except UnknownPeer:

@@ -36,8 +36,7 @@ def test_remainder():
 
 def test_server_recovers_pending_lock_after_state_loss():
     """
-    Verify pending leases recover from server state loss and are acquired
-    after reboot.
+    Verify pending leases recover from server state loss and are acquired after reboot.
     """
 
     acquired_lease = False
@@ -210,4 +209,3 @@ def test_peer_recovery_after_server_reboot():
         heartbeat.stop()
         # Which implies the remainder of A being 0
         assert client.remainder("A") == 0
-
