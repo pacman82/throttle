@@ -19,28 +19,22 @@ class Peer:
     """
 
     def __init__(
-        self, id: int, acquired: Dict[str, int] = {}, pending: Dict[str, int] = {},
+        self, id: int, acquired: Dict[str, int] = {},
     ):
         self.id = id
         # The server does also keep this state, but we also keep it on the client side,
         # so we can recover it in case the server looses the state.
         self.acquired = acquired
-        self.pending = pending
-
-    def has_pending(self) -> bool:
-        """Returns true if this peer has pending leases."""
-        return len(self.pending) != 0
 
     def has_acquired(self) -> bool:
-        """Returns true if this peer has active leases."""
+        """`True` if this peer has acquired locks."""
         return len(self.acquired) != 0
 
-    def _make_active(self):
+    def _acquired(self, semaphore: str, count: int):
         """
-        Call this to tell the lease that the pending admissions are now active
+        Remember that the pending lock is now acquired.
         """
-        self.acquired.update(self.pending)
-        self.pending = {}
+        self.acquired.update({semaphore: count})
 
 
 def _translate_domain_errors(response: requests.Response):
@@ -156,7 +150,7 @@ class Client:
             return requests.post(self.base_url + "/new_peer", json=body, timeout=30)
 
         response = self._try_request(send_new_peer)
-        return Peer(id=int(response.text), acquired={}, pending={})
+        return Peer(id=int(response.text), acquired={})
 
     def acquire(
         self,
@@ -203,11 +197,9 @@ class Client:
         response = self._try_request(send_acquire)
         if response.status_code == 200:  # Ok. Acquired lock to semaphore.
             peer.acquired = {semaphore: count}
-            peer.pending = {}
             return True
         elif response.status_code == 202:  # Accepted. Ticket pending.
             peer.acquired = {}
-            peer.pending = {semaphore: count}
             return False
         else:
             # This should never be reached
@@ -232,26 +224,19 @@ class Client:
         self.acquire(peer, semaphore, count, expires_in)
         return peer
 
-    def restore(self, peer: Peer) -> bool:
+    def restore(self, peer: Peer):
         def send_request():
             response = requests.post(
                 f"{self.base_url}/restore",
                 json={
                     "expires_in": _format_timedelta(self.expiration_time),
                     "peer_id": peer.id,
-                    "pending": peer.pending,
                     "acquired": peer.acquired,
                 },
             )
             return response
 
-        response = self._try_request(send_request)
-        acquired = json.loads(response.text)
-        if acquired:
-            # Server told us all leases of this peer are active. Let's upate our local
-            # bookeeping accordingly.
-            peer._make_active()
-        return acquired
+        self._try_request(send_request)
 
     def remainder(self, semaphore: str) -> int:
         """
@@ -314,10 +299,6 @@ class Client:
         """
         Sends a PUT request to the server, updating the expiration timestamp.
         """
-        assert (
-            not peer.has_pending()
-        ), "Peers with pending leases must not be kept alive via heartbeat."
-
         def send_request():
             response = requests.put(
                 f"{self.base_url}/peers/{peer.id}",

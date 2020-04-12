@@ -64,3 +64,5 @@ delayed if the peer holding the lock previously did expire, rather than release 
 * Removed HTTP route `/freeze`.
 * Recover from unknown peer is now handled on the client side.
   * Uses new route `/restore`.
+* Removed `Peer.has_pending()`.
+* Acquiring locks is now idempotent

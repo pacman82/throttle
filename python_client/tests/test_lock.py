@@ -38,7 +38,6 @@ def test_server_recovers_pending_lock_after_state_loss():
     """
     Verify pending leases recover from server state loss and are acquired after reboot.
     """
-
     acquired_lease = False
 
     def acquire_lease_concurrent(client):
@@ -122,9 +121,10 @@ def test_lock_count_larger_pends_if_count_is_not_high_enough():
     """
 
     with throttle_client(b"[semaphores]\nA=5") as client:
-        _ = client.acquire_with_new_peer("A", count=3)
-        second = client.acquire_with_new_peer("A", count=3)
-        assert second.has_pending()
+        one = client.new_peer()
+        two = client.new_peer()
+        _ = client.acquire(one, "A", count=3)
+        assert not client.acquire(two, "A", count=3)
 
 
 def test_exception():
