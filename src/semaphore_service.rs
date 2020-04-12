@@ -30,7 +30,7 @@ impl ResponseError for ThrottleError {
 type Leases = HashMap<String, u32>;
 
 /// Strict alias around `Duration`. Yet it serializes from a human readable representation.
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy)]
 struct HumanDuration(#[serde(with = "humantime_serde")] Duration);
 
 /// Used as a query parameter in requests. E.g. `?expires_in=5m`.
@@ -58,57 +58,41 @@ async fn release(path: Path<PeerId>, state: Data<State>) -> HttpResponse {
     }
 }
 
-/// Acquire a lock to a Semaphore. Does not block.
+/// Used as a query parameter in requests. E.g. `?expires_in=5m`.
+#[derive(Deserialize)]
+struct AcquireQuery {
+    #[serde(with = "humantime_serde")]
+    expires_in: Duration,
+    // Don't know how to use `humantime_serde` without wrapper inside an `Option`.
+    block_for: Option<HumanDuration>,
+}
+
+/// Acquire a lock to a semaphore.
+///
+/// This function is supposed to be called repeatedly from client side, until the lock is acquired
+/// It also updates the expiration timeout to prevent the litter collection from removing the peer
+/// while it is pending. Having repeated short lived requests is preferable over one long running,
+/// as many proxies, firewalls, and Gateways might kill them.
 #[put("/peer/{id}/{semaphore}")]
 async fn acquire(
     path: Path<(PeerId, String)>,
-    query: Query<ExpiresIn>,
+    query: Query<AcquireQuery>,
     body: Json<u32>,
     state: Data<State>,
 ) -> HttpResponse {
     let amount = body.0;
     let peer_id = path.0;
     let semaphore = &path.1;
-    match state.acquire(peer_id, semaphore, amount, None, query.expires_in).await {
+    // Turn `Option<HumantimeDuratino>` into `Option<Duration>`.
+    let wait_for = query.block_for.map(|hd|hd.0);
+    match state
+        .acquire(peer_id, semaphore, amount, wait_for, query.expires_in)
+        .await
+    {
         Ok(true) => HttpResponse::Ok().json(peer_id),
         Ok(false) => HttpResponse::Accepted().json(peer_id),
         Err(error) => HttpResponse::from_error(error.into()),
     }
-}
-
-#[derive(Deserialize)]
-struct MaxTimeout {
-    timeout_ms: Option<u64>,
-}
-
-/// Waits for a ticket to be promoted to a lease
-///
-/// This function is supposed to be called repeatedly from client side, until the leases are
-/// active. It also updates the expiration timeout to prevent the litter collection from
-/// removing the peer while it is pending. Having repeated short lived requests is preferable
-/// over one long running, as many proxies, firewalls, and Gateways might kill them.
-///
-/// ## Return
-///
-/// Returns `true` if leases are active.
-#[post("/peers/{id}/block_until_acquired")]
-async fn block_until_acquired(
-    path: Path<PeerId>,
-    query: Query<MaxTimeout>,
-    body: Json<ExpiresIn>,
-    state: Data<State>,
-) -> Result<Json<bool>, ThrottleError> {
-    let lease_id = *path;
-    let unblock_after = Duration::from_millis(query.timeout_ms.unwrap_or(0));
-    debug!(
-        "Lease {} is waiting for admission with timeout {:?}",
-        lease_id, unblock_after
-    );
-    let peer_id = *path;
-    let acquired_in_time = state
-        .block_until_acquired(peer_id, body.expires_in, unblock_after)
-        .await?;
-    Ok(Json(acquired_in_time))
 }
 
 #[derive(Deserialize)]
@@ -132,7 +116,13 @@ pub async fn restore(body: Json<Restore>, state: Data<State>) -> Result<Json<boo
     let (had_been_acquired, semaphore, &count) =
         pending.or(acquired).ok_or(ThrottleError::NotImplemented)?;
     state
-        .restore(body.peer_id, body.expires_in, semaphore, count, had_been_acquired)
+        .restore(
+            body.peer_id,
+            body.expires_in,
+            semaphore,
+            count,
+            had_been_acquired,
+        )
         .map(Json)
 }
 

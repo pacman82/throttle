@@ -101,7 +101,9 @@ def lock(
                 block_for = min(timeout - passed, block_for)
 
         try:
-            _ = client.block_until_acquired(peer, block_for)
+            _ = client.acquire(
+                peer, semaphore, count=count, block_for=block_for
+            )
         except UnknownPeer:
             client.restore(peer)
 

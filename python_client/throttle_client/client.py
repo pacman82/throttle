@@ -159,7 +159,12 @@ class Client:
         return Peer(id=int(response.text), acquired={}, pending={})
 
     def acquire(
-        self, peer: Peer, semaphore: str, count: int = 1, expires_in: timedelta = None
+        self,
+        peer: Peer,
+        semaphore: str,
+        count: int = 1,
+        expires_in: timedelta = None,
+        block_for: timedelta = None,
     ) -> bool:
         """
         Acquire a lock from the server.
@@ -170,6 +175,9 @@ class Client:
         * `semaphore`: Name of the semaphore to be acquired.
         * `count`: The count of the lock. A larger count represents a larger 'piece' of
         the resource under procection.
+        * `block_for`: The request returns as soon as the lock could be acquireod or
+        after the duration has elapsed, even if the lock could not be acquired. If set to
+        `None`, the request returns immediatly.
         * `expires_in`: The amount of time the remains valid. Can be prolonged by
         calling heartbeat. After the time has passed the lock is considered released on
         the server side.
@@ -180,9 +188,14 @@ class Client:
             expires_in = self.expiration_time
         expires_in_str = _format_timedelta(expires_in)
 
+        if block_for:
+            blockstr = f"block_for={_format_timedelta(block_for)}&"
+        else:
+            blockstr = ""
+
         def send_acquire():
             return requests.put(
-                f"{self.base_url}/peer/{peer.id}/{semaphore}?expires_in={expires_in_str}",
+                f"{self.base_url}/peer/{peer.id}/{semaphore}?{blockstr}expires_in={expires_in_str}",
                 json=count,
                 timeout=30,
             )
@@ -190,8 +203,10 @@ class Client:
         response = self._try_request(send_acquire)
         if response.status_code == 200:  # Ok. Acquired lock to semaphore.
             peer.acquired = {semaphore: count}
+            peer.pending = {}
             return True
         elif response.status_code == 202:  # Accepted. Ticket pending.
+            peer.acquired = {}
             peer.pending = {semaphore: count}
             return False
         else:
@@ -216,31 +231,6 @@ class Client:
         peer = self.new_peer(expires_in=expires_in)
         self.acquire(peer, semaphore, count, expires_in)
         return peer
-
-    def block_until_acquired(self, peer: Peer, block_for: timedelta) -> bool:
-        """
-        Block until all the leases of the peer are acquired, or the timespan specified
-        in block_for has passed. Returns True if and only if the peer has leases which
-        are still pending.
-        """
-        block_for_ms = int(block_for.total_seconds() * 1000)
-
-        def send_request():
-            response = requests.post(
-                self.base_url
-                + f"/peers/{peer.id}/block_until_acquired?timeout_ms={block_for_ms}",
-                json={"expires_in": "5min"},
-                timeout=block_for_ms / 1000 + 30,
-            )
-            return response
-
-        response = self._try_request(send_request)
-        now_active = json.loads(response.text)
-        if now_active:
-            # Server told us all leases of this peer are active. Let's upate our local
-            # bookeeping accordingly.
-            peer._make_active()
-        return peer.has_pending()
 
     def restore(self, peer: Peer) -> bool:
         def send_request():
@@ -347,9 +337,7 @@ class Client:
         def send_request():
             response = requests.put(
                 f"{self.base_url}/peers/{peer.id}",
-                json={
-                    "expires_in": _format_timedelta(self.expiration_time),
-                },
+                json={"expires_in": _format_timedelta(self.expiration_time)},
                 timeout=30,
             )
             return response
