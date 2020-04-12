@@ -84,7 +84,7 @@ async fn acquire(
     let peer_id = path.0;
     let semaphore = &path.1;
     // Turn `Option<HumantimeDuratino>` into `Option<Duration>`.
-    let wait_for = query.block_for.map(|hd|hd.0);
+    let wait_for = query.block_for.map(|hd| hd.0);
     match state
         .acquire(peer_id, semaphore, amount, wait_for, query.expires_in)
         .await
@@ -110,19 +110,13 @@ pub struct Restore {
 /// the semaphores full count, or violating fairness.
 #[post("/restore")]
 pub async fn restore(body: Json<Restore>, state: Data<State>) -> Result<Json<bool>, ThrottleError> {
-    // Take the firs element of pending. Should that not exist take the first of acquired.
-    let pending = body.pending.iter().next().map(|(s, c)| (false, s, c));
-    let acquired = body.acquired.iter().next().map(|(s, c)| (true, s, c));
-    let (had_been_acquired, semaphore, &count) =
-        pending.or(acquired).ok_or(ThrottleError::NotImplemented)?;
+    // Take the firs elements of pending and acquired. Ignore the rest, as of now peers can only
+    // one lock at a time.
+    let pending = body.pending.iter().next().map(|(s, &c)| (s.as_str(), c));
+    let acquired = body.acquired.iter().next().map(|(s, &c)| (s.as_str(), c));
+
     state
-        .restore(
-            body.peer_id,
-            body.expires_in,
-            semaphore,
-            count,
-            had_been_acquired,
-        )
+        .restore(body.peer_id, body.expires_in, pending, acquired)
         .map(Json)
 }
 
