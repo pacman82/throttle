@@ -128,6 +128,8 @@ impl State {
         let (expired_peers, resolved_peers) = {
             let mut leases = self.leases.lock().unwrap();
             let (expired_peers, affected_semaphores) = leases.remove_expired(Instant::now());
+            // It is not enough to notify only the requests for the removed peers, as other peers
+            // might be able to acquire their locks due to the removal of these.
             let mut resolved_peers = Vec::new();
             for semaphore in affected_semaphores {
                 leases.resolve_pending(
@@ -140,8 +142,6 @@ impl State {
         };
         if !expired_peers.is_empty() {
             warn!("Removed {} peers due to expiration.", expired_peers.len());
-            // It is not enough to notify only the requests for the removed peers, as other peers
-            // might be able to acquire their locks due to the removal of these.
             self.wakers.resolve_with(&resolved_peers, Ok(()));
             self.wakers
                 .resolve_with(&expired_peers, Err(ThrottleError::UnknownPeer));
@@ -216,7 +216,7 @@ impl State {
     /// to e.g. the peer already being removed by litter collection.
     pub fn release(&self, peer_id: PeerId) -> bool {
         let mut leases = self.leases.lock().unwrap();
-        match leases.remove(peer_id) {
+        match leases.remove_peer(peer_id) {
             Ok(semaphores) => {
                 // Keep book about all peers, those locks have been acquired, so we can notify their pending
                 // requests.
@@ -268,6 +268,18 @@ impl State {
     pub fn is_acquired(&self, peer_id: PeerId) -> Result<bool, ThrottleError> {
         let leases = self.leases.lock().unwrap();
         leases.has_pending(peer_id).map(|pending| !pending)
+    }
+
+    /// Releases a lock associated with the peer. Due to the relased lock, other locks may be
+    /// acquired, futures may need to be woken.
+    pub fn release_lock(&self, peer_id: PeerId, semaphore: &str) -> Result<(), ThrottleError> {
+        let &max = self.semaphores.get(semaphore).ok_or(ThrottleError::UnknownSemaphore)?;
+        let mut leases = self.leases.lock().unwrap();
+        leases.release_lock(peer_id, semaphore)?;
+        let mut resolved_peers = Vec::new();
+        leases.resolve_pending(semaphore, max, &mut resolved_peers);
+        self.wakers.resolve_with(&resolved_peers, Ok(()));
+        Ok(())
     }
 }
 
