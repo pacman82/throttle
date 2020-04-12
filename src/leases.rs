@@ -39,14 +39,6 @@ impl Lock {
             .or(Some(self.since));
     }
 
-    /// Increments the suitable entries in `counts`.
-    fn update_counts_acquired(&self, counts: &mut HashMap<String, Counts>) {
-        let mut counts = counts
-            .get_mut(&self.semaphore)
-            .expect("All available Semaphores must be prefilled in counts.");
-        counts.acquired += self.count;
-    }
-
     /// Creation timestamp of the lock
     fn since(&self, semaphore: &str) -> Option<Instant> {
         if self.semaphore == semaphore {
@@ -80,18 +72,27 @@ impl Counts {
 /// A peer holds leases to semaphores, which may either be active or pending and share a common
 /// expiration time.
 struct Peer {
-    acquired: Option<Lock>,
+    /// A peer may acquire locks to multiple semaphores.
+    acquired: HashMap<String, i64>,
+    /// Only one lock can be pending for any given peer.
     pending: Option<Lock>,
     /// Instant upon which the lease may be removed by litter collection.
     valid_until: Instant,
 }
 
 impl Peer {
+
+    /// Creates a new Peer instance with no locks associated.
+    fn new(valid_until: Instant) -> Self {
+        Self {
+            acquired: HashMap::new(),
+            pending: None,
+            valid_until,
+        }
+    }
+
     fn count_acquired(&self, semaphore: &str) -> i64 {
-        self.acquired
-            .as_ref()
-            .map(|l| l.count(semaphore))
-            .unwrap_or(0)
+        self.acquired.get(semaphore).copied().unwrap_or(0)
     }
 
     /// Semaphore count of this peer regardless of wether the lock is acquired or pending.
@@ -106,29 +107,31 @@ impl Peer {
             pending
         } else {
             // Not found in pending, look in acquired
-            self.acquired
-                .as_ref()
-                .map(|l| l.count(semaphore))
-                .unwrap_or(0)
+            self.count_acquired(semaphore)
         }
     }
 
     /// Increments the suitable entries in `counts`.
     fn update_counts(&self, counts: &mut HashMap<String, Counts>) {
-        if let Some(lock) = &self.acquired {
-            lock.update_counts_acquired(counts);
+        for (semaphore, count) in &self.acquired {
+            counts
+                .get_mut(semaphore)
+                .expect("Only known semaphores must be managed by peers.")
+                .acquired += count;
         }
         if let Some(lock) = &self.pending {
             lock.update_counts_pending(counts);
         }
     }
 
-    /// Empties the peer. Returns name of associated semaphore, if available.
-    fn clear(&mut self) -> Option<String> {
+    /// Empties the peer. Returns name of associated semaphores, if available.
+    fn clear(&mut self) -> Vec<String> {
         self.pending
             .take()
-            .or(self.acquired.take())
             .map(|l| l.semaphore)
+            .into_iter()
+            .chain(self.acquired.drain().map(|(semaphore, _count)| semaphore))
+            .collect()
     }
 
     // Check wether the peer is expired. If so its `lock` will be released.
@@ -136,8 +139,8 @@ impl Peer {
     // # Return
     //
     // Outer `Option` indicates wether the peer is still valid. If so it is `None`. If not the inner
-    // Option holds the name of the semaphore if available.
-    fn remove_expired(&mut self, now: Instant) -> Option<Option<String>> {
+    // Option holds the name of the semaphores if available.
+    fn remove_expired(&mut self, now: Instant) -> Option<Vec<String>> {
         if self.valid_until < now {
             // Peer is expired
             Some(self.clear())
@@ -152,17 +155,13 @@ impl Peer {
         self.pending.is_none()
     }
 
-    // Adds a lock to the semaphore
+    /// Adds a lock for the semaphore to the peer
     fn add_lock(&mut self, semaphore: String, count: i64, acquired: bool) {
-        let since = Instant::now();
         if acquired {
-            debug_assert!(self.acquired.is_none());
-            self.acquired = Some(Lock {
-                semaphore,
-                count,
-                since,
-            });
+            let prev = self.acquired.insert(semaphore, count);
+            debug_assert!(prev.is_none());
         } else {
+            let since = Instant::now();
             debug_assert!(self.pending.is_none());
             self.pending = Some(Lock {
                 semaphore,
@@ -185,10 +184,14 @@ impl Peer {
     ///
     /// `true` if the lock has been acquired.
     fn try_resolve(&mut self, remainder: &mut i64) -> bool {
-        debug_assert!(self.acquired.is_none());
         *remainder -= self.pending.as_ref().unwrap().count;
         if *remainder >= 0 {
-            std::mem::swap(&mut self.acquired, &mut self.pending);
+            let lock = self
+                .pending
+                .take()
+                .expect("Peer without pending lock must not be resolved.");
+            let prev = self.acquired.insert(lock.semaphore, lock.count);
+            debug_assert!(prev.is_none());
             true
         } else {
             false
@@ -222,14 +225,7 @@ impl Leases {
     /// manipulate its state.
     pub fn new_peer(&mut self, valid_until: Instant) -> PeerId {
         let id = self.new_unique_peer_id();
-        let old = self.ledger.insert(
-            id,
-            Peer {
-                acquired: None,
-                pending: None,
-                valid_until,
-            },
-        );
+        let old = self.ledger.insert(id, Peer::new(valid_until));
         // There should not be any preexisting entry with this id
         debug_assert!(old.is_none());
         id
@@ -244,14 +240,7 @@ impl Leases {
     /// It's the responsibility of the caller to ensure this method is not called with an already
     /// existing peer id.
     pub fn new_peer_at(&mut self, id: PeerId, valid_until: Instant) {
-        let old = self.ledger.insert(
-            id,
-            Peer {
-                acquired: None,
-                pending: None,
-                valid_until,
-            },
-        );
+        let old = self.ledger.insert(id, Peer::new(valid_until));
         // There should not be any preexisting entry with this id
         assert!(old.is_none());
     }
@@ -324,26 +313,25 @@ impl Leases {
             .sum()
     }
 
-    /// Should a peer with `peer_id` be found, it is removed and the name of the semaphore it
+    /// Should a peer with `peer_id` be found, it is removed and the names of the semaphores it
     /// holds is returned.
-    pub fn remove(&mut self, peer_id: PeerId) -> Option<String> {
-        self.ledger
+    pub fn remove(&mut self, peer_id: PeerId) -> Result<Vec<String>, ThrottleError> {
+        let semaphores = self
+            .ledger
             .remove(&peer_id)
-            .map(|mut p| p.clear())
-            .flatten()
+            .ok_or(ThrottleError::UnknownPeer)?
+            .clear();
+
+        Ok(semaphores)
     }
 
     /// Acquires pending leases for the semaphore until its count is >= max. It acquires the locks
     /// pending the longest first.
-    pub fn resolve_pending(&mut self, semaphore: &str, max: i64) -> Vec<u64> {
-        // Keep book about all peers, those locks have been acquired, so we can notify their pending
-        // requests.
-        let mut resolved_peers = Vec::new();
+    pub fn resolve_pending(&mut self, semaphore: &str, max: i64, resolved_peers: &mut Vec<PeerId>) {
         let mut remainder = max - self.count(semaphore);
         while let Some(peer_id) = self.resolve_highest_priority_pending(semaphore, &mut remainder) {
             resolved_peers.push(peer_id);
         }
-        resolved_peers
     }
 
     /// Wether the peer has any pending leases.
