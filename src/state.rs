@@ -50,35 +50,70 @@ impl State {
 
     /// Sets the lock count for this peer and semaphore to `amount`. Should the remainder of the
     /// semaphore allow it.
-    pub fn acquire(
+    /// 
+    /// * `peer_id`: Identifies the peer for which we are setting the lock count
+    /// * `semaphore`: Name of the semaphore to which we want to acquire the lock count.
+    /// * `amount`: The count of the lock. Outside of revenants (i.e. expired peers, which do
+    /// return). Throttle is goingt to see to it that the combined lock count is not going beyond
+    /// the configured max count.
+    /// * `wait_for`: The future returns as soon as the lock could be acquireod or after the
+    /// duration has elapsed, even if the lock could not be acquired. If set to `None`, the future
+    /// returns immediatly.
+    /// * `expires_in`: Used to prolong the expiration timestamp of the affected peer. This saves us
+    /// an extra heartbeat request.
+    pub async fn acquire(
         &self,
         peer_id: PeerId,
         semaphore: &str,
         amount: u32,
+        wait_for: Option<Duration>,
         expires_in: Duration,
     ) -> Result<bool, ThrottleError> {
-        if let Some(&max) = self.semaphores.get(semaphore) {
-            // Return early if lease could never be active, no matter how long we wait
-            if max < amount as i64 {
-                return Err(ThrottleError::ForeverPending {
-                    asked: amount as i64,
-                    max,
-                });
-            }
-            let mut leases = self.leases.lock().unwrap();
-            let valid_until = Instant::now() + expires_in;
-            leases.update_valid_until(peer_id, valid_until)?;
-            let active = leases.acquire(peer_id, semaphore, amount, Some(max))?;
-            if active {
-                debug!("Peer {} acquired lease to '{}'.", peer_id, semaphore);
-                Ok(true)
-            } else {
-                debug!("Peer {} waiting for lease to '{}'.", peer_id, semaphore);
-                Ok(false)
-            }
+        let max = *self.semaphores.get(semaphore).ok_or(ThrottleError::UnknownSemaphore)?;
+        // Return early if lease can never be acquired
+        if max < amount as i64 {
+            return Err(ThrottleError::ForeverPending {
+                asked: amount as i64,
+                max,
+            });
+        }
+        let mut leases = self.leases.lock().unwrap();
+        let valid_until = Instant::now() + expires_in;
+        leases.update_valid_until(peer_id, valid_until)?;
+        let acquired = leases.acquire(peer_id, semaphore, amount, Some(max))?;
+        if acquired {
+            // Resolve this immediatly, if we can
+            debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
+            Ok(true)
         } else {
-            warn!("Unknown semaphore '{}' requested", semaphore);
-            Err(ThrottleError::UnknownSemaphore)
+            debug!("Peer {} waiting for lock to '{}'.", peer_id, semaphore);
+
+            // We could not acquire the lock immediatly. Are we going to wait for it?
+            if let Some(wait_for) = wait_for {
+                // keep holding the lock to `leases` until everything is registered. So we don't miss
+                // the call to `resolve_with`.
+
+                let acquire_or_timeout =
+                    time::timeout(wait_for, self.wakers.wait_for_resolving(peer_id));
+
+                // Release lock on leases, while waiting for acquire_or_timeout! Otherwise, we might
+                // deadlock.
+                drop(leases);
+                // The outer `Err` indicates a timeout.
+                match acquire_or_timeout.await {
+                    // Locks could be acquired
+                    Ok(Ok(())) => {
+                        debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
+                        Ok(true)
+                    }
+                    // Failure
+                    Ok(Err(e)) => Err(e),
+                    // Lock could not be acquired in time
+                    Err(_) => Ok(false),
+                }
+            } else {
+                Ok(acquired)
+            }
         }
     }
 
@@ -294,9 +329,10 @@ lazy_static! {
 mod tests {
 
     use super::*;
+    use tokio;
 
-    #[test]
-    fn acquire_three_leases() {
+    #[tokio::test]
+    async fn acquire_three_leases() {
         // Semaphore with count of 3
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), 3);
@@ -305,18 +341,18 @@ mod tests {
 
         // First three locks can be acquired immediatly
         let one = state.new_peer(one_sec);
-        assert!(state.acquire(one, "A", 1, one_sec).unwrap());
+        assert!(state.acquire(one, "A", 1, None, one_sec).await.unwrap());
         let two = state.new_peer(one_sec);
-        assert!(state.acquire(two, "A", 1, one_sec).unwrap());
+        assert!(state.acquire(two, "A", 1, None, one_sec).await.unwrap());
         let three = state.new_peer(one_sec);
-        assert!(state.acquire(three, "A", 1, one_sec).unwrap());
+        assert!(state.acquire(three, "A", 1, None, one_sec).await.unwrap());
         // The fourth must wait
         let four = state.new_peer(one_sec);
-        assert!(!state.acquire(four, "A", 1, one_sec).unwrap());
+        assert!(!state.acquire(four, "A", 1, None, one_sec).await.unwrap());
     }
 
-    #[test]
-    fn resolve_pending() {
+    #[tokio::test]
+    async fn resolve_pending() {
         // Semaphore with count of 3
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), 3);
@@ -327,13 +363,13 @@ mod tests {
         let p: Vec<_> = (0..6).map(|_| state.new_peer(one_sec)).collect();
 
         // First three locks can be acquired immediatly
-        state.acquire(p[0], "A", 1, one_sec).unwrap();
-        state.acquire(p[1], "A", 1, one_sec).unwrap();
-        state.acquire(p[2], "A", 1, one_sec).unwrap();
+        state.acquire(p[0], "A", 1, None, one_sec).await.unwrap();
+        state.acquire(p[1], "A", 1, None, one_sec).await.unwrap();
+        state.acquire(p[2], "A", 1, None, one_sec).await.unwrap();
         // The four, five and six must wait
-        state.acquire(p[3], "A", 1, one_sec).unwrap();
-        state.acquire(p[4], "A", 1, one_sec).unwrap();
-        state.acquire(p[5], "A", 1, one_sec).unwrap();
+        state.acquire(p[3], "A", 1, None, one_sec).await.unwrap();
+        state.acquire(p[4], "A", 1, None, one_sec).await.unwrap();
+        state.acquire(p[5], "A", 1, None, one_sec).await.unwrap();
         // Remainder is zero due to the three leases intially acquired
         assert_eq!(state.remainder("A").unwrap(), 0);
         // Release one of the first three. Four should now be acquired.
@@ -350,8 +386,8 @@ mod tests {
     }
 
     /// Pending locks must be acquired in the same order the have been requested.
-    #[test]
-    fn fairness() {
+    #[tokio::test]
+    async fn fairness() {
         // Semaphore with count of 3
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), 3);
@@ -362,13 +398,13 @@ mod tests {
         let p: Vec<_> = (0..6).map(|_| state.new_peer(one_sec)).collect();
 
         // First three locks can be acquired immediatly
-        state.acquire(p[0], "A", 1, one_sec).unwrap();
-        state.acquire(p[1], "A", 1, one_sec).unwrap();
-        state.acquire(p[2], "A", 1, one_sec).unwrap();
+        state.acquire(p[0], "A", 1, None, one_sec).await.unwrap();
+        state.acquire(p[1], "A", 1, None, one_sec).await.unwrap();
+        state.acquire(p[2], "A", 1, None, one_sec).await.unwrap();
         // The four, five and six must wait
-        state.acquire(p[3], "A", 1, one_sec).unwrap();
-        state.acquire(p[4], "A", 1, one_sec).unwrap();
-        state.acquire(p[5], "A", 1, one_sec).unwrap();
+        state.acquire(p[3], "A", 1, None, one_sec).await.unwrap();
+        state.acquire(p[4], "A", 1, None, one_sec).await.unwrap();
+        state.acquire(p[5], "A", 1, None, one_sec).await.unwrap();
         // Remainder is zero due to the three leases intially acquired
         assert_eq!(state.remainder("A").unwrap(), 0);
         // Release one of the first three. Four should now be acquired.
@@ -384,19 +420,19 @@ mod tests {
         assert!(state.is_acquired(p[5]).unwrap());
     }
 
-    #[test]
-    fn idempotent_acquire() {
+    #[tokio::test]
+    async fn idempotent_acquire() {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), 1);
         let state = State::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         let first = state.new_peer(one_sec);
-        assert!(state.acquire(first, "A", 1, one_sec).unwrap());
-        assert!(state.acquire(first, "A", 1, one_sec).unwrap());
+        assert!(state.acquire(first, "A", 1, None, one_sec).await.unwrap());
+        assert!(state.acquire(first, "A", 1, None, one_sec).await.unwrap());
 
         let second = state.new_peer(one_sec);
-        assert!(!state.acquire(second, "A", 1, one_sec).unwrap());
-        assert!(!state.acquire(second, "A", 1, one_sec).unwrap());
+        assert!(!state.acquire(second, "A", 1, None, one_sec).await.unwrap());
+        assert!(!state.acquire(second, "A", 1, None, one_sec).await.unwrap());
     }
 }
