@@ -81,7 +81,13 @@ A = 42
 name = "MyThrottleServer"
 host = "my_graylog_instance.cloud"
 port = 12201
-## Set this to either ERROR, WARN, INFO, DEBUG or TRACE.
+# Set this to either ERROR, WARN, INFO, DEBUG or TRACE.
+level = "INFO"
+
+
+# Optional logging config, to log to stderr
+[logging.stderr]
+# Set this to either ERROR, WARN, INFO, DEBUG or TRACE.
 level = "INFO"
 ```
 

@@ -111,4 +111,13 @@ mod tests {
         let actual: ApplicationCfg = toml::from_str(cfg).unwrap();
         assert!(actual.logging.gelf.is_some());
     }
+
+    #[test]
+    fn parse_console_logging_config() {
+        let cfg = "[logging.stderr]\n\
+                    level = \"DEBUG\"\n\
+                ";
+        let actual: ApplicationCfg = toml::from_str(cfg).unwrap();
+        assert_eq!(actual.logging.stderr.level, "DEBUG");
+    }
 }
