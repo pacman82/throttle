@@ -100,7 +100,6 @@ pub struct Restore {
     #[serde(with = "humantime_serde")]
     expires_in: Duration,
     peer_id: PeerId,
-    pending: Leases,
     acquired: Leases,
 }
 
@@ -109,15 +108,16 @@ pub struct Restore {
 /// count of the semaphore. Pending locks may be resolved, if this is possible without going over
 /// the semaphores full count, or violating fairness.
 #[post("/restore")]
-pub async fn restore(body: Json<Restore>, state: Data<State>) -> Result<Json<bool>, ThrottleError> {
-    // Take the firs elements of pending and acquired. Ignore the rest, as of now peers can only
-    // one lock at a time.
-    let pending = body.pending.iter().next().map(|(s, &c)| (s.as_str(), c));
+pub async fn restore(
+    body: Json<Restore>,
+    state: Data<State>,
+) -> Result<&'static str, ThrottleError> {
+    // Take the firs elements of acquired. Ignore the rest, as of now peers can only one lock at a
+    // time.
     let acquired = body.acquired.iter().next().map(|(s, &c)| (s.as_str(), c));
 
-    state
-        .restore(body.peer_id, body.expires_in, pending, acquired)
-        .map(Json)
+    state.restore(body.peer_id, body.expires_in, acquired)?;
+    Ok("Ok")
 }
 
 /// Query parameters for getting remaining semaphore count

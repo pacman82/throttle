@@ -89,10 +89,7 @@ impl State {
             debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
             Ok(true)
         } else {
-            debug!(
-                "Peer {} waiting for lock to '{}'",
-                peer_id, semaphore
-            );
+            debug!("Peer {} waiting for lock to '{}'", peer_id, semaphore);
 
             // We could not acquire the lock immediatly. Are we going to wait for it?
             if let Some(wait_for) = wait_for {
@@ -155,46 +152,41 @@ impl State {
         &self,
         peer_id: PeerId,
         expires_in: Duration,
-        pending: Option<(&str, u32)>,
         acquired: Option<(&str, u32)>,
-    ) -> Result<bool, ThrottleError> {
-        let pending = pending;
-        let acquired = acquired;
+    ) -> Result<(), ThrottleError> {
+        warn!(
+            "Revenant Peer {}. Has locks: {}",
+            peer_id,
+            acquired.is_some()
+        );
 
-        if let Some((semaphore, count)) = pending.or(acquired) {
-
+        if let Some((semaphore, count)) = acquired {
             // Assert semaphore exists. We want to give the client an error and also do not want to
-            // allow any Unknown Semaphore into `leases`.
-            let max = *self
+            // allow any Unknown Semaphore into `leases`. Also we want to fail fast, before
+            // acquiring the lock to `leases`.
+            let _max = *self
                 .semaphores
                 .get(semaphore)
                 .ok_or(ThrottleError::UnknownSemaphore)?;
-                
             let mut leases = self.leases.lock().unwrap();
             let valid_until = Instant::now() + expires_in;
             leases.new_peer_at(peer_id, valid_until);
-            let max = if acquired.is_some() {
-                // If the restored lease has the lock already acquired, there is no point in checking it
-                // against the full semaphore count. The resource the semaphore is protecting is already
-                // being accessed by it. Better to count it as acquired anyway, even if we increment our
-                // active semaphore count beyond the full count.
-                //
-                // By passing None as max rather than the value obtained above, we opt out checking the
-                // semaphore full count and allow exceeding it.
-                None
-            } else {
-                Some(max)
-            };
-            let acquired = leases.acquire(peer_id, semaphore, count, max)?;
-            warn!("Revenant Peer {}.", peer_id);
-
-            Ok(acquired)
+            // If the restored lease has the lock already acquired, there is no point in checking it
+            // against the full semaphore count. The resource the semaphore is protecting is already
+            // being accessed by it. Better to count it as acquired anyway, even if we increment our
+            // active semaphore count beyond the full count.
+            //
+            // By passing None as max rather than the value obtained above, we opt out checking the
+            // semaphore full count and allow exceeding it.
+            let max = None;
+            leases.acquire(peer_id, semaphore, count, max)?;
         } else {
             let mut leases = self.leases.lock().unwrap();
             let valid_until = Instant::now() + expires_in;
+            // Peer id might theoretically clash, but for now, I don't believe this is realistic.
             leases.new_peer_at(peer_id, valid_until);
-            Ok(true)
-        }
+        };
+        Ok(())
     }
 
     pub fn heartbeat(&self, peer_id: PeerId, expires_in: Duration) -> Result<(), ThrottleError> {

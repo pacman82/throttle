@@ -19,11 +19,12 @@ def test_pending_lock():
     Verify the results of a non-blocking request to block_until_acquired
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
+        first = client.new_peer()
+        second = client.new_peer()
         # Acquire first lease
-        first = client.acquire_with_new_peer("A")
-        second = client.acquire_with_new_peer("A")
+        client.acquire(first, "A")
         # Second lease is pending, because we still hold first
-        assert second.has_pending()
+        assert not client.acquire(second, "A")
         # A request to the server is also telling us so
         assert not client.is_acquired(second)
         client.release(first)
@@ -58,7 +59,7 @@ def test_lock_blocks():
         client.release(first)
         t.join()
         # Second lock is no longer pending, because we released first and t is finished
-        assert not second.has_pending()
+        assert second.has_acquired()
 
 
 def test_pending_leases_dont_expire():
@@ -83,7 +84,7 @@ def test_restore_peer_with_unknown_semaphore():
     # Restart Server without "A"
     with throttle_client(b"[semaphores]") as client:
         with pytest.raises(Exception, match="Unknown semaphore"):
-            peer = Peer(id=1, pending={"A": 1})
+            peer = Peer(id=1, acquired={"A": 1})
             client.restore(peer)
 
 
@@ -111,11 +112,12 @@ def test_acquire_three_leases():
     is three.
     """
     with throttle_client(b"[semaphores]\nA=3") as client:
-        assert client.acquire_with_new_peer("A").has_acquired()
-        assert client.acquire_with_new_peer("A").has_acquired()
-        assert client.acquire_with_new_peer("A").has_acquired()
+        p = [client.new_peer() for _ in range(0, 4)]
+        assert client.acquire(p[0], "A")
+        assert client.acquire(p[1], "A")
+        assert client.acquire(p[2], "A")
         assert client.remainder("A") == 0
-        assert client.acquire_with_new_peer("A").has_pending()
+        assert not client.acquire(p[3], "A")
 
 
 def test_unblock_immediatly_after_release():
