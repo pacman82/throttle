@@ -10,9 +10,6 @@ use std::{
 struct Lock {
     /// Name of the resource the semaphore protects
     semaphore: String,
-    /// `true` if the lease is active (i.e. decrementing the semaphore count), or `false` if the
-    /// lease is pending.
-    acquired: bool,
     /// The semapohre count is decreased by `amount` if the lease is active.
     amount: i64,
     /// Instant of lock creation. Used to implement fairness of semaphores.
@@ -20,14 +17,6 @@ struct Lock {
 }
 
 impl Lock {
-    fn count_acquired(&self, semaphore: &str) -> i64 {
-        if self.acquired && self.semaphore == semaphore {
-            self.amount
-        } else {
-            0
-        }
-    }
-
     /// Semaphore count of this peer regardless of wether the lock is acquired or pending.
     fn count_demand(&self, semaphore: &str) -> i64 {
         if self.semaphore == semaphore {
@@ -38,25 +27,29 @@ impl Lock {
     }
 
     /// Increments the suitable entries in `counts`.
-    fn update_counts(&self, counts: &mut HashMap<String, Counts>) {
+    fn update_counts_pending(&self, counts: &mut HashMap<String, Counts>) {
         let mut counts = counts
             .get_mut(&self.semaphore)
             .expect("All available Semaphores must be prefilled in counts.");
-        if self.acquired {
-            counts.acquired += self.amount;
-        } else {
-            counts.pending += self.amount;
-            // If there already has been a minimum, compare. Otherwise just use `self.since`.
-            counts.longest_pending_since = counts
-                .longest_pending_since
-                .map(|min_so_far| std::cmp::min(min_so_far, self.since))
-                .or(Some(self.since));
-        }
+        counts.pending += self.amount;
+        // If there already has been a minimum, compare. Otherwise just use `self.since`.
+        counts.longest_pending_since = counts
+            .longest_pending_since
+            .map(|min_so_far| std::cmp::min(min_so_far, self.since))
+            .or(Some(self.since));
     }
 
-    /// Since then is the lock pending.
-    fn inv_priority(&self, semaphore: &str) -> Option<Instant> {
-        if !self.acquired && self.semaphore == semaphore {
+    /// Increments the suitable entries in `counts`.
+    fn update_counts_acquired(&self, counts: &mut HashMap<String, Counts>) {
+        let mut counts = counts
+            .get_mut(&self.semaphore)
+            .expect("All available Semaphores must be prefilled in counts.");
+        counts.acquired += self.amount;
+    }
+
+    /// Creation timestamp of the lock
+    fn since(&self, semaphore: &str) -> Option<Instant> {
+        if self.semaphore == semaphore {
             Some(self.since)
         } else {
             None
@@ -85,36 +78,57 @@ impl Counts {
 }
 
 /// A peer holds leases to semaphores, which may either be active or pending and share a common
-/// timeout.
+/// expiration time.
 struct Peer {
-    lock: Option<Lock>,
+    acquired: Option<Lock>,
+    pending: Option<Lock>,
     /// Instant upon which the lease may be removed by litter collection.
     valid_until: Instant,
 }
 
 impl Peer {
     fn count_acquired(&self, semaphore: &str) -> i64 {
-        if let Some(lock) = &self.lock {
-            lock.count_acquired(semaphore)
-        } else {
-            0
-        }
+        self.acquired
+            .as_ref()
+            .map(|l| l.count_demand(semaphore))
+            .unwrap_or(0)
     }
 
     /// Semaphore count of this peer regardless of wether the lock is acquired or pending.
     fn count_demand(&self, semaphore: &str) -> i64 {
-        if let Some(lock) = &self.lock {
-            lock.count_demand(semaphore)
+        // Look in pending
+        let pending = self
+            .pending
+            .as_ref()
+            .map(|l| l.count_demand(semaphore))
+            .unwrap_or(0);
+        if pending != 0 {
+            pending
         } else {
-            0
+            // Not found in pending, look in acquired
+            self.acquired
+                .as_ref()
+                .map(|l| l.count_demand(semaphore))
+                .unwrap_or(0)
         }
     }
 
     /// Increments the suitable entries in `counts`.
     fn update_counts(&self, counts: &mut HashMap<String, Counts>) {
-        if let Some(lock) = &self.lock {
-            lock.update_counts(counts)
+        if let Some(lock) = &self.acquired {
+            lock.update_counts_acquired(counts);
         }
+        if let Some(lock) = &self.pending {
+            lock.update_counts_pending(counts);
+        }
+    }
+
+    /// Empties the peer. Returns name of associated semaphore, if available.
+    fn clear(&mut self) -> Option<String> {
+        self.pending
+            .take()
+            .or(self.acquired.take())
+            .map(|l| l.semaphore)
     }
 
     // Check wether the peer is expired. If so its `lock` will be released.
@@ -126,13 +140,7 @@ impl Peer {
     fn remove_expired(&mut self, now: Instant) -> Option<Option<String>> {
         if self.valid_until < now {
             // Peer is expired
-            Some(
-                self.lock
-                    // A little optimization: Let's steal the String, since we won't retain this
-                    // instance anyway.
-                    .take()
-                    .map(|l| l.semaphore),
-            )
+            Some(self.clear())
         } else {
             // Peer is still valid
             None
@@ -141,10 +149,49 @@ impl Peer {
 
     /// True if the locks associated with this peer are acquired
     fn all_acquired(&self) -> bool {
-        if let Some(lock) = &self.lock {
-            lock.acquired
+        self.pending.is_none()
+    }
+
+    // Adds a lock to the semaphore
+    fn add_lock(&mut self, semaphore: String, amount: i64, acquired: bool) {
+        let since = Instant::now();
+        if acquired {
+            debug_assert!(self.acquired.is_none());
+            self.acquired = Some(Lock {
+                semaphore,
+                amount,
+                since,
+            });
         } else {
+            debug_assert!(self.pending.is_none());
+            self.pending = Some(Lock {
+                semaphore,
+                amount,
+                since,
+            });
+        }
+    }
+
+    /// Instance since when the peer is waiting for the semaphore.
+    fn pending_since(&self, semaphore: &str) -> Option<Instant> {
+        self.pending.as_ref().and_then(|lock| lock.since(semaphore))
+    }
+
+    /// If the count of remainder is sufficient the pending lock is going to be promoted to
+    /// acquired. The remainder is decremented independent of wether the lease could be acquired or
+    /// not.
+    ///
+    /// # Return
+    ///
+    /// `true` if the lock has been acquired.
+    fn try_resolve(&mut self, remainder: &mut i64) -> bool {
+        debug_assert!(self.acquired.is_none());
+        *remainder -= self.pending.as_ref().unwrap().amount;
+        if *remainder >= 0 {
+            std::mem::swap(&mut self.acquired, &mut self.pending);
             true
+        } else {
+            false
         }
     }
 }
@@ -178,7 +225,8 @@ impl Leases {
         let old = self.ledger.insert(
             id,
             Peer {
-                lock: None,
+                acquired: None,
+                pending: None,
                 valid_until,
             },
         );
@@ -199,7 +247,8 @@ impl Leases {
         let old = self.ledger.insert(
             id,
             Peer {
-                lock: None,
+                acquired: None,
+                pending: None,
                 valid_until,
             },
         );
@@ -259,12 +308,10 @@ impl Leases {
             .map(|max| self.demand_smaller_or_equal(semaphore, max - amount))
             .unwrap_or(true);
 
-        self.ledger.get_mut(&peer_id).unwrap().lock = Some(Lock {
-            semaphore: semaphore.to_owned(),
-            acquired,
-            amount,
-            since: Instant::now(),
-        });
+        self.ledger
+            .get_mut(&peer_id)
+            .unwrap()
+            .add_lock(semaphore.to_owned(), amount, acquired);
 
         Ok(acquired)
     }
@@ -282,7 +329,7 @@ impl Leases {
     pub fn remove(&mut self, peer_id: PeerId) -> Option<String> {
         self.ledger
             .remove(&peer_id)
-            .map(|p| p.lock.map(|l| l.semaphore))
+            .map(|mut p| p.clear())
             .flatten()
     }
 
@@ -293,19 +340,8 @@ impl Leases {
         // requests.
         let mut resolved_peers = Vec::new();
         let mut remainder = max - self.count(semaphore);
-        while remainder > 0 {
-            if let Some((id, lock)) = self.highest_priority_pending(semaphore) {
-                // Decrement the remainder of the amount, regardless of wether we acquire it or not
-                // doing so prevents us from starving locks requesting big amounts.
-                remainder -= lock.amount;
-                if remainder >= 0 {
-                    lock.acquired = true;
-                    resolved_peers.push(id)
-                }
-            } else {
-                // No more pending locks to consider.
-                break;
-            }
+        while let Some(peer_id) = self.resolve_highest_priority_pending(semaphore, &mut remainder) {
+            resolved_peers.push(peer_id);
         }
         resolved_peers
     }
@@ -410,20 +446,29 @@ impl Leases {
     }
 
     /// Return the pending lock with the highest priority for this semaphore. Since we have fair
-    /// semaphores, this is the lock waiting the longest. Returs `None` in case there are not any
+    /// semaphores, this is the peer waiting the longest. Returns `None` in case there are not any
     /// pending locks.
-    fn highest_priority_pending<'a>(
+    fn resolve_highest_priority_pending<'a>(
         &'a mut self,
         semaphore: &str,
-    ) -> Option<(PeerId, &'a mut Lock)> {
-        self.ledger
+        remainder: &mut i64,
+    ) -> Option<PeerId> {
+        let min = self
+            .ledger
             .iter_mut()
-            .filter_map(|(id, peer)| {
-                peer.lock
-                    .as_mut()
-                    .and_then(|l| l.inv_priority(semaphore).map(|since| (id, l, since)))
-            })
-            .min_by_key(|(_id, _lock, since)| *since)
-            .map(|(id, lock, _)| (*id, lock))
+            .filter_map(|(id, peer)| peer.pending_since(semaphore).map(|since| (id, peer, since)))
+            .min_by_key(|(_id, _peer, since)| *since);
+
+        if let Some((&id, peer, _since)) = min {
+            // Decrements the remainder of the amount, regardless of wether we acquire it or not
+            // doing so prevents us from starving locks requesting big amounts.
+            if peer.try_resolve(remainder) {
+                Some(id)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 }
