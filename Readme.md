@@ -86,7 +86,7 @@ level = "INFO"
 
 
 # Optional logging config, to log to stderr
-[logging.console]
+[logging.stderr]
 # Set this to either ERROR, WARN, INFO, DEBUG or TRACE.
 level = "INFO"
 ```

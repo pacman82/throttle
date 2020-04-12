@@ -114,10 +114,10 @@ mod tests {
 
     #[test]
     fn parse_console_logging_config() {
-        let cfg = "[logging.console]\n\
+        let cfg = "[logging.stderr]\n\
                     level = \"DEBUG\"\n\
                 ";
         let actual: ApplicationCfg = toml::from_str(cfg).unwrap();
-        assert!(actual.logging.console.is_some());
+        assert!(actual.logging.stderr.is_some());
     }
 }

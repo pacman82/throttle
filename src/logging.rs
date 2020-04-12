@@ -9,7 +9,7 @@ use serde::Deserialize;
 pub struct LoggingConfig {
     /// Configures a Gelf Logger
     pub gelf: Option<GelfConfig>,
-    pub console: Option<ConsoleConfig>
+    pub stderr: Option<StdErrConfig>
 }
 
 #[derive(Deserialize, PartialEq, Eq, Clone, Debug)]
@@ -25,7 +25,7 @@ pub struct GelfConfig {
 }
 
 #[derive(Deserialize, PartialEq, Eq, Clone, Debug)]
-pub struct ConsoleConfig {
+pub struct StdErrConfig {
     /// E.g. "INFO" or "DEBUG"
     level: String
 }
@@ -45,7 +45,7 @@ pub fn init(config: &LoggingConfig) -> Result<(), Error> {
         eprintln!(
             "Gelf logger config not found => Using environment logger writing to stderr instead."
         );
-        if let Some(ref config) = config.console {
+        if let Some(ref config) = config.stderr {
             env_logger::from_env(env_logger::Env::default().filter_or("THROTTLE_LOG", config.level.as_str())).init();
         } else {
             env_logger::from_env("THROTTLE_LOG").init();
