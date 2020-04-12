@@ -130,9 +130,11 @@ impl State {
             let (expired_peers, affected_semaphores) = leases.remove_expired(Instant::now());
             let mut resolved_peers = Vec::new();
             for semaphore in affected_semaphores {
-                resolved_peers.extend(
-                    leases.resolve_pending(&semaphore, *self.semaphores.get(&semaphore).unwrap()),
-                );
+                leases.resolve_pending(
+                    &semaphore,
+                    *self.semaphores.get(&semaphore).unwrap(),
+                    &mut resolved_peers,
+                )
             }
             (expired_peers, resolved_peers)
         };
@@ -215,20 +217,26 @@ impl State {
     pub fn release(&self, peer_id: PeerId) -> bool {
         let mut leases = self.leases.lock().unwrap();
         match leases.remove(peer_id) {
-            Some(semaphore) => {
-                let full_count = self
-                    .semaphores
-                    .get(&semaphore)
-                    .expect("An active semaphore must always be configured");
-                let resolved_peers = leases.resolve_pending(&semaphore, *full_count);
+            Ok(semaphores) => {
+                // Keep book about all peers, those locks have been acquired, so we can notify their pending
+                // requests.
+                let mut resolved_peers = Vec::new();
+                for semaphore in semaphores {
+                    let full_count = self
+                        .semaphores
+                        .get(&semaphore)
+                        .expect("An active semaphore must always be configured");
+                    leases.resolve_pending(&semaphore, *full_count, &mut resolved_peers);
+                }
                 drop(leases); // Don't hold this longer than we need to.
                 self.wakers.resolve_with(&resolved_peers, Ok(()));
                 true
             }
-            None => {
+            Err(ThrottleError::UnknownPeer) => {
                 warn!("Deletion of unknown peer.");
                 false
             }
+            Err(_) => panic!("Remove can only fail with 'UnknownPeer'."),
         }
     }
 
