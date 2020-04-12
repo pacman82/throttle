@@ -118,6 +118,6 @@ mod tests {
                     level = \"DEBUG\"\n\
                 ";
         let actual: ApplicationCfg = toml::from_str(cfg).unwrap();
-        assert!(actual.logging.stderr.is_some());
+        assert_eq!(actual.logging.stderr.level, "DEBUG");
     }
 }
