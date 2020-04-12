@@ -281,22 +281,6 @@ class Client:
         response = self._try_request(send_request)
         return json.loads(response.text)
 
-    def freeze(self, time: timedelta):
-        """
-        Freezes the server state for specified amount of time.
-
-        Yes, it propably is a bad idea to call this in production code. Yet it is useful for
-        testing.
-        """
-
-        def send_request():
-            response = requests.post(
-                self.base_url + f"/freeze?for={_format_timedelta(time)}"
-            )
-            return response
-
-        self._try_request(send_request)
-
     def release(self, peer: Peer):
         """
         Deletes the peer on the throttle server.
