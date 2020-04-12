@@ -95,6 +95,17 @@ async fn acquire(
     }
 }
 
+#[delete("/peer/{id}/{semaphore}")]
+async fn release_lock(
+    path: Path<(PeerId, String)>,
+    state: Data<State>,
+) -> Result<&'static str, ThrottleError> {
+    let peer_id = path.0;
+    let semaphore = path.1.as_str();
+    state.release_lock(peer_id, semaphore)?;
+    Ok("Ok")
+}
+
 #[derive(Deserialize)]
 pub struct Restore {
     #[serde(with = "humantime_serde")]
