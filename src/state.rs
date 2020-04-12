@@ -408,4 +408,26 @@ mod tests {
         assert!(!state.acquire(second, "A", 1, None, one_sec).await.unwrap());
         assert!(!state.acquire(second, "A", 1, None, one_sec).await.unwrap());
     }
+
+    #[tokio::test]
+    async fn multiple_locks_per_peer() {
+        let mut semaphores = Semaphores::new();
+        semaphores.insert(String::from("A"), 2);
+        semaphores.insert(String::from("B"), 1);
+        let state = State::new(semaphores);
+        let one_sec = Duration::from_secs(1);
+
+        let first = state.new_peer(one_sec);
+        // Acquire one of 'A' and 'B' each.
+        assert!(state.acquire(first, "A", 1, None, one_sec).await.unwrap());
+        assert!(state.acquire(first, "B", 1, None, one_sec).await.unwrap());
+
+        let second = state.new_peer(one_sec);
+        // Second can still acquire lock to 'A' since its full count is 2, but 'B' must pend.
+        assert!(state.acquire(second, "A", 1, None, one_sec).await.unwrap());
+        assert!(!state.acquire(second, "B", 1, None, one_sec).await.unwrap());
+
+        state.release(first);
+        assert!(state.is_acquired(second).unwrap());
+    }
 }
