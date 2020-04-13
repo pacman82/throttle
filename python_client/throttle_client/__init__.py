@@ -114,17 +114,19 @@ def lock(
         except UnknownPeer:
             client.restore(peer)
 
-    if heartbeat_interval is not None:
-        # Yield and have the heartbeat in an extra thread, during it being active.
-        with heartbeat(client, peer, heartbeat_interval):
-            yield peer
-    else:
-        # Yield without heartbeat
-        yield peer
-
     try:
-        client.release(peer)
-    except requests.ConnectionError:
-        # Ignore recoverable errors. `release` retried alread. The litter collection on
-        # server side, takes care of freeing the lease.
-        pass
+        if heartbeat_interval is not None:
+            # Yield and have the heartbeat in an extra thread, during it being active.
+            with heartbeat(client, peer, heartbeat_interval):
+                yield peer
+        else:
+            # Yield without heartbeat
+            yield peer
+    finally:
+        # if any exception is raised during yield, do not forget to release the peer
+        try:
+            client.release(peer)
+        except requests.ConnectionError:
+            # Ignore recoverable errors. `release` retried alread. The litter collection on
+            # server side, takes care of freeing the lease.
+            pass
