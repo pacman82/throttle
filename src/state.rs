@@ -154,15 +154,15 @@ impl State {
         &self,
         peer_id: PeerId,
         expires_in: Duration,
-        acquired: Option<(&str, u32)>,
+        acquired: &HashMap<String, u32>,
     ) -> Result<(), ThrottleError> {
         warn!(
             "Revenant Peer {}. Has locks: {}",
             peer_id,
-            acquired.is_some()
+            !acquired.is_empty()
         );
 
-        if let Some((semaphore, count)) = acquired {
+        for (semaphore, _count) in acquired {
             // Assert semaphore exists. We want to give the client an error and also do not want to
             // allow any Unknown Semaphore into `leases`. Also we want to fail fast, before
             // acquiring the lock to `leases`.
@@ -170,9 +170,14 @@ impl State {
                 .semaphores
                 .get(semaphore)
                 .ok_or(ThrottleError::UnknownSemaphore)?;
-            let mut leases = self.leases.lock().unwrap();
-            let valid_until = Instant::now() + expires_in;
-            leases.new_peer_at(peer_id, valid_until);
+        }
+
+        let mut leases = self.leases.lock().unwrap();
+        let valid_until = Instant::now() + expires_in;
+        // Peer id might theoretically clash, but for now, I don't believe this is realistic.
+        leases.new_peer_at(peer_id, valid_until);
+
+        for (semaphore, &count) in acquired {
             // If the restored lease has the lock already acquired, there is no point in checking it
             // against the full semaphore count. The resource the semaphore is protecting is already
             // being accessed by it. Better to count it as acquired anyway, even if we increment our
@@ -182,12 +187,7 @@ impl State {
             // semaphore full count and allow exceeding it.
             let max = None;
             leases.acquire(peer_id, semaphore, count, max)?;
-        } else {
-            let mut leases = self.leases.lock().unwrap();
-            let valid_until = Instant::now() + expires_in;
-            // Peer id might theoretically clash, but for now, I don't believe this is realistic.
-            leases.new_peer_at(peer_id, valid_until);
-        };
+        }
         Ok(())
     }
 
@@ -273,7 +273,10 @@ impl State {
     /// Releases a lock associated with the peer. Due to the relased lock, other locks may be
     /// acquired, futures may need to be woken.
     pub fn release_lock(&self, peer_id: PeerId, semaphore: &str) -> Result<(), ThrottleError> {
-        let &max = self.semaphores.get(semaphore).ok_or(ThrottleError::UnknownSemaphore)?;
+        let &max = self
+            .semaphores
+            .get(semaphore)
+            .ok_or(ThrottleError::UnknownSemaphore)?;
         let mut leases = self.leases.lock().unwrap();
         leases.release_lock(peer_id, semaphore)?;
         let mut resolved_peers = Vec::new();
