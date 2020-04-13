@@ -73,7 +73,7 @@ struct AcquireQuery {
 /// It also updates the expiration timeout to prevent the litter collection from removing the peer
 /// while it is pending. Having repeated short lived requests is preferable over one long running,
 /// as many proxies, firewalls, and Gateways might kill them.
-#[put("/peer/{id}/{semaphore}")]
+#[put("/peers/{id}/{semaphore}")]
 async fn acquire(
     path: Path<(PeerId, String)>,
     query: Query<AcquireQuery>,
@@ -95,7 +95,7 @@ async fn acquire(
     }
 }
 
-#[delete("/peer/{id}/{semaphore}")]
+#[delete("/peers/{id}/{semaphore}")]
 async fn release_lock(
     path: Path<(PeerId, String)>,
     state: Data<State>,

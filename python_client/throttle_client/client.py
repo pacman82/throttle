@@ -119,7 +119,7 @@ class Client:
             body = {
                 "expires_in": expires_in_str,
             }
-            return requests.post(self.base_url + "/new_peer", json=body, timeout=30)
+            return requests.post(f"{self.base_url}/new_peer", json=body, timeout=30)
 
         response = self._try_request(send_new_peer)
         # Return peer id
@@ -162,7 +162,7 @@ class Client:
 
         def send_acquire():
             return requests.put(
-                f"{self.base_url}/peer/{peer_id}/{semaphore}?{blockstr}expires_in={expires_in_str}",
+                f"{self.base_url}/peers/{peer_id}/{semaphore}?{blockstr}expires_in={expires_in_str}",
                 json=count,
                 timeout=30,
             )
@@ -200,7 +200,7 @@ class Client:
         """
 
         def send_request():
-            response = requests.get(self.base_url + f"/remainder?semaphore={semaphore}")
+            response = requests.get(f"{self.base_url}/remainder?semaphore={semaphore}")
             return response
 
         response = self._try_request(send_request)
@@ -212,7 +212,7 @@ class Client:
         """
 
         def send_request():
-            response = requests.get(self.base_url + f"/peers/{peer_id}/is_acquired")
+            response = requests.get(f"{self.base_url}/peers/{peer_id}/is_acquired")
             return response
 
         response = self._try_request(send_request)
@@ -225,9 +225,18 @@ class Client:
         This is important to unblock other clients which may be waiting for the
         semaphore remainder to increase.
         """
-
         def send_request():
-            response = requests.delete(self.base_url + f"/peers/{peer_id}")
+            response = requests.delete(f"{self.base_url}/peers/{peer_id}")
+            return response
+
+        self._try_request(send_request)
+
+    def release_lock(self, peer_id: int, semaphore: str):
+        """
+        Release a lock to a semaphore for a specific peer
+        """
+        def send_request():
+            response = requests.delete(f"{self.base_url}/peers/{peer_id}/{semaphore}")
             return response
 
         self._try_request(send_request)

@@ -225,3 +225,26 @@ def test_acquire():
         # Release one, so second is acquired
         client.release(one)
         assert client.acquire(two, "A")
+
+
+def test_acquire_two_locks_with_one_peer():
+    """
+    Releasing a lock, while keeping its peer, must still enable other locks to be
+    acquired.
+    """
+    with throttle_client(b"[semaphores]\nA=1\nB=1") as client:
+        one = client.new_peer()
+        two = client.new_peer()
+
+        # Acquire two leases with same peer
+        assert client.acquire(one, "A")
+        assert client.acquire(one, "B")
+
+        assert not client.acquire(two, "B")
+
+        # Release one "B", so two is acquired
+        client.release_lock(one, "B")
+
+        assert client.is_acquired(two)
+        # First peer is still active and holds a lock
+        assert client.is_acquired(one)
