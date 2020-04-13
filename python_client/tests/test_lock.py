@@ -66,8 +66,9 @@ def test_server_recovers_pending_lock_after_state_loss():
         cfg.close()
         client = Client(BASE_URL)
         with cargo_main(cfg=cfg.name) as proc:
+            first = client.new_peer()
             # Acquire first peer
-            _ = client.acquire_with_new_peer("A")
+            client.acquire(first, "A")
             # Acquire second lease
             t = Thread(target=acquire_lease_concurrent, args=[client])
             t.start()
@@ -162,7 +163,8 @@ def test_lock_count_larger_than_full_count():
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         with pytest.raises(ValueError, match="block forever"):
-            client.acquire_with_new_peer("A", count=2)
+            peer = client.new_peer()
+            client.acquire(peer, "A", count=2)
 
 
 def test_try_lock():
@@ -171,7 +173,8 @@ def test_try_lock():
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         # We hold the lease, all following calls are going to block
-        _ = client.acquire_with_new_peer("A")
+        first = client.new_peer()
+        client.acquire(first, "A")
         with pytest.raises(Timeout):
             with lock(client, "A", timeout=timedelta(seconds=1)):
                 pass
@@ -210,10 +213,11 @@ def test_recover_from_unknown_peer_during_acquisition_lock():
 
 def test_peer_recovery_after_server_reboot():
     """
-    Verify that a newly booted server, recovers peers based on heartbeats
+    Heartbeat must restore peers, after server reboot.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
-        peer = client.acquire_with_new_peer("A")
+        peer = client.new_peer()
+        client.acquire(peer, "A")
 
     # Server is shutdown. Boot a new one wich does not know about this peer
     with throttle_client(b"[semaphores]\nA=1") as client:

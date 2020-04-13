@@ -205,25 +205,6 @@ class Client:
             # This should never be reached
             raise RuntimeError("Unexpected response from Server")
 
-    def acquire_with_new_peer(
-        self, semaphore: str, count: int = 1, expires_in: timedelta = None
-    ) -> Peer:
-        """
-        Creates a new peer and acquires a lock from the server for it.
-
-        Every call to `acquire` should be matched by a call to `release`. Check out `lock` which as
-        contextmanager does this for you.
-
-        * `semaphore`: Name of the semaphore to be acquired.
-        * `count`: The count of the lock. A larger count represents a larger 'piece' of the
-        resource under procection.
-        * `expires_in`: The amount of time the remains valid. Can be prolonged by calling heartbeat.
-        After the time has passed the lock is considered released on the server side.
-        """
-        peer = self.new_peer(expires_in=expires_in)
-        self.acquire(peer, semaphore, count, expires_in)
-        return peer
-
     def restore(self, peer: Peer):
         def send_request():
             response = requests.post(
