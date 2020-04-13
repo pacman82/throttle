@@ -120,7 +120,6 @@ def test_lock_count_larger_pends_if_count_is_not_high_enough():
     Assert that we do not overspend an semaphore using lock counts > 1. Even if the
     semaphore count is > 0.
     """
-
     with throttle_client(b"[semaphores]\nA=5") as client:
         one = client.new_peer()
         two = client.new_peer()
@@ -210,3 +209,25 @@ def test_peer_recovery_after_server_reboot():
         heartbeat.stop()
         # Which implies the remainder of A being 0
         assert client.remainder("A") == 0
+
+
+def test_nested_locks():
+    """
+    Nested locks should be well behaved
+    """
+    with throttle_client(b"[semaphores]\nA=1\nB=1") as client:
+        with lock(client, "A") as peer:
+
+            assert client.remainder("A") == 0
+            assert client.remainder("B") == 1
+
+            with lock(client, "B", peer=peer):
+
+                assert client.remainder("A") == 0
+                assert client.remainder("B") == 0
+
+            assert client.remainder("A") == 0
+            assert client.remainder("B") == 1
+
+        assert client.remainder("A") == 1
+        assert client.remainder("B") == 1

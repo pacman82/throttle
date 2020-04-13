@@ -20,7 +20,7 @@ class Peer:
     """
 
     def __init__(
-        self, id: int, acquired: Dict[str, int] = {},
+        self, id: int, acquired: Dict[str, int],
     ):
         self.id = id
         # The server does also keep this state, but we also keep it on the client side,
@@ -84,6 +84,7 @@ def lock(
     client: Client,
     semaphore: str,
     count: int = 1,
+    peer: Optional[Peer] = None,
     heartbeat_interval: Optional[timedelta] = timedelta(minutes=5),
     timeout: Optional[timedelta] = None,
 ) -> Iterator[Peer]:
@@ -96,11 +97,13 @@ def lock(
     * `timeout`: Leaving this at None, let's the lock block until the lock can be acquired. Should a
     timeout be specified the call is going to raise a `Timeout` exception should it exceed before
     the lock is acquired.
+    * `peer`: Peer to use than acquiring a lock. The default `None` is to create a new one.
     * `heartbeat_interval`: Default interval for reneval of peer. Setting it to `None` will
     deactivate the heartbeat.
     """
-    peer_id = client.new_peer()
-    peer = Peer(peer_id)
+    if peer is None:
+        peer_id = client.new_peer()
+        peer = Peer(peer_id, acquired={})
     # Remember this moment in order to figure out later how much time has passed since
     # we started to acquire the lock
     start = time()
@@ -126,10 +129,8 @@ def lock(
         try:
             if client.acquire(peer.id, semaphore, count=count, block_for=block_for):
                 # Remember that we acquired that lock, so heartbeat can restore it, if need be.
-                peer.acquired = {semaphore: count}
+                peer.acquired[semaphore] = count
                 break
-            else:
-                peer.acquired = {}
 
         except UnknownPeer:
             client.restore(peer.id, peer.acquired)
@@ -138,13 +139,22 @@ def lock(
     if heartbeat_interval is not None:
         heartbeat = Heartbeat(client, peer, heartbeat_interval)
         heartbeat.start()
-    yield peer
-    if heartbeat_interval is not None:
-        heartbeat.stop()
-
     try:
-        client.release(peer.id)
-    except requests.ConnectionError:
-        # Ignore recoverable errors. `release` retried alread. The litter collection on
-        # server side, takes care of freeing the lease.
-        pass
+        yield peer
+    finally:
+        if heartbeat_interval is not None:
+            heartbeat.stop()
+
+        try:
+            assert peer.acquired.pop(semaphore) == count
+            if peer.acquired:
+                # Acquired dict still holds locks, remove only this one
+                client.release_lock(peer.id, semaphore)
+            else:
+                # No more locks associated with this peer. Let's remove it entirely
+                client.release(peer.id)
+
+        except requests.ConnectionError:
+            # Ignore recoverable errors. `release` retried alread. The litter collection on
+            # server side, takes care of freeing the lease.
+            pass

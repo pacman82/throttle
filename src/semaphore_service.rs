@@ -123,11 +123,7 @@ pub async fn restore(
     body: Json<Restore>,
     state: Data<State>,
 ) -> Result<&'static str, ThrottleError> {
-    // Take the firs elements of acquired. Ignore the rest, as of now peers can only one lock at a
-    // time.
-    let acquired = body.acquired.iter().next().map(|(s, &c)| (s.as_str(), c));
-
-    state.restore(body.peer_id, body.expires_in, acquired)?;
+    state.restore(body.peer_id, body.expires_in, &body.acquired)?;
     Ok("Ok")
 }
 
