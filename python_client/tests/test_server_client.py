@@ -9,8 +9,6 @@ from time import sleep
 
 import pytest  # type: ignore
 
-from throttle_client import Peer
-
 from . import throttle_client
 
 
@@ -53,15 +51,18 @@ def test_lock_blocks():
         # Acquire first lock
         client.acquire(first, "A")
 
+        acquired = False
+
         def wait_for_second_lock():
-            client.acquire(second, semaphore="A", block_for=timedelta(seconds=2))
+            nonlocal acquired
+            acquired = client.acquire(second, semaphore="A", block_for=timedelta(seconds=2))
 
         t = Thread(target=wait_for_second_lock)
         t.start()
         client.release(first)
         t.join()
         # Second lock is no longer pending, because we released first and t is finished
-        assert second.has_acquired()
+        assert acquired
 
 
 def test_pending_leases_dont_expire():
@@ -88,8 +89,8 @@ def test_restore_peer_with_unknown_semaphore():
     # Restart Server without "A"
     with throttle_client(b"[semaphores]") as client:
         with pytest.raises(Exception, match="Unknown semaphore"):
-            peer = Peer(id=1, acquired={"A": 1})
-            client.restore(peer)
+            # Bogus peer id, presumably from a previous run, before lock losts its state
+            client.restore(peer_id=5, acquired={"A": 1})
 
 
 def test_does_not_starve_large_locks():
@@ -224,16 +225,3 @@ def test_acquire():
         # Release one, so second is acquired
         client.release(one)
         assert client.acquire(two, "A")
-
-
-def test_put_unknown_semaphore():
-    """
-    An active revenant of an unknown semaphore should throw an exception.
-    """
-    with throttle_client(b"[semaphores]\nA=1") as client:
-        peer = client.new_peer()
-        client.acquire(peer, "A")
-    # Restart Server without "A"
-    with throttle_client(b"[semaphores]") as client:
-        with pytest.raises(Exception, match="Unknown semaphore"):
-            client.restore(peer)

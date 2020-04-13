@@ -7,7 +7,7 @@ from time import sleep
 
 import pytest  # type: ignore
 
-from throttle_client import Client, Heartbeat, Timeout, lock
+from throttle_client import Client, Heartbeat, Peer, Timeout, lock
 
 from . import BASE_URL, cargo_main, throttle_client
 
@@ -200,13 +200,10 @@ def test_peer_recovery_after_server_reboot():
     """
     Heartbeat must restore peers, after server reboot.
     """
-    with throttle_client(b"[semaphores]\nA=1") as client:
-        peer = client.new_peer()
-        client.acquire(peer, "A")
-
-    heartbeat = Heartbeat(client, peer, interval=timedelta(milliseconds=10))
+    peer = Peer(id=5, acquired={"A": 1})
     # Server is shutdown. Boot a new one wich does not know about this peer
     with throttle_client(b"[semaphores]\nA=1") as client:
+        heartbeat = Heartbeat(client, peer, interval=timedelta(milliseconds=10))
         heartbeat.start()
         # Wait for heartbeat and restore, to go through
         sleep(2)
