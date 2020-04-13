@@ -34,6 +34,22 @@ def test_remainder():
         assert 1 == client.remainder("A")
 
 
+def test_multiple_semaphores_remainder():
+    """
+    Verify that we can acquire and release locks to different semaphores
+    """
+    with throttle_client(b"[semaphores]\nA=1\nB=1\nC=1") as client:
+        with lock(client, "A"):
+            assert 0 == client.remainder("A")
+            with lock(client, "B"):
+                assert 0 == client.remainder("B")
+                with lock(client, "C"):
+                    assert 0 == client.remainder("C")
+        assert 1 == client.remainder("A")
+        assert 1 == client.remainder("B")
+        assert 1 == client.remainder("C")
+
+
 def test_server_recovers_pending_lock_after_state_loss():
     """
     Verify pending leases recover from server state loss and are acquired after reboot.
@@ -231,3 +247,23 @@ def test_nested_locks():
 
         assert client.remainder("A") == 1
         assert client.remainder("B") == 1
+
+
+def test_multiple_peer_recovery_after_server_reboot():
+    """
+    Heartbeat must restore all locks for a peer, after server reboot.
+    """
+    # Bogus peer id. Presumably from a peer created before the server reboot.
+    peer = Peer(id=42, acquired={"A": 1, "B": 1, "C": 1})
+
+    # Server is shutdown. Boot a new one wich does not know about the peers
+    with throttle_client(b"[semaphores]\nA=1\nB=1\nC=1") as client:
+        heartbeat = Heartbeat(client, peer, interval=timedelta(milliseconds=10))
+        heartbeat.start()
+        # Wait for heartbeat and restore, to go through
+        sleep(2)
+        heartbeat.stop()
+        # Which implies the remainder of A, B, C being 0
+        assert client.remainder("A") == 0
+        assert client.remainder("B") == 0
+        assert client.remainder("C") == 0
