@@ -34,22 +34,6 @@ def test_remainder():
         assert 1 == client.remainder("A")
 
 
-def test_multiple_semaphores_remainder():
-    """
-    Verify that we can acquire and release locks to different semaphores
-    """
-    with throttle_client(b"[semaphores]\nA=1\nB=1\nC=1") as client:
-        with lock(client, "A"):
-            assert 0 == client.remainder("A")
-            with lock(client, "B"):
-                assert 0 == client.remainder("B")
-                with lock(client, "C"):
-                    assert 0 == client.remainder("C")
-        assert 1 == client.remainder("A")
-        assert 1 == client.remainder("B")
-        assert 1 == client.remainder("C")
-
-
 def test_server_recovers_pending_lock_after_state_loss():
     """
     Verify pending leases recover from server state loss and are acquired after reboot.
