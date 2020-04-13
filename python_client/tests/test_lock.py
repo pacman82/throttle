@@ -34,6 +34,22 @@ def test_remainder():
         assert 1 == client.remainder("A")
 
 
+def test_multiple_semaphores_remainder():
+    """
+    Verify that we can acquire and release locks to different semaphores
+    """
+    with throttle_client(b"[semaphores]\nA=1\nB=1\nC=1") as client:
+        with lock(client, "A"):
+            assert 0 == client.remainder("A")
+            with lock(client, "B"):
+                assert 0 == client.remainder("B")
+                with lock(client, "C"):
+                    assert 0 == client.remainder("C")
+        assert 1 == client.remainder("A")
+        assert 1 == client.remainder("B")
+        assert 1 == client.remainder("C")
+
+
 def test_server_recovers_pending_lock_after_state_loss():
     """
     Verify pending leases recover from server state loss and are acquired after reboot.
@@ -209,3 +225,33 @@ def test_peer_recovery_after_server_reboot():
         heartbeat.stop()
         # Which implies the remainder of A being 0
         assert client.remainder("A") == 0
+
+
+def test_multiple_peer_recovery_after_server_reboot():
+    """
+    Verify that a newly booted server, recovers multiple peers based on heartbeats.
+    """
+    with throttle_client(b"[semaphores]\nA=1\nB=1\nC=1") as client:
+        peerA = client.acquire_with_new_peer("A")
+        peerB = client.acquire_with_new_peer("B")
+        peerC = client.acquire_with_new_peer("C")
+
+    heartbeatA = Heartbeat(client, peerA, interval=timedelta(milliseconds=10))
+    heartbeatB = Heartbeat(client, peerB, interval=timedelta(milliseconds=10))
+    heartbeatC = Heartbeat(client, peerC, interval=timedelta(milliseconds=10))
+    # Server is shutdown. Boot a new one wich does not know about the peers
+    with throttle_client(b"[semaphores]\nA=1\nB=1\nC=1") as client:
+        heartbeatA.start()
+        heartbeatB.start()
+        heartbeatC.start()
+        # Wait for heartbeat and restore, to go through
+        sleep(2)
+        heartbeatC.stop()
+        heartbeatB.stop()
+        heartbeatA.stop()
+        # Which implies the remainder of A, B, C being 0
+        assert client.remainder("A") == 0
+        assert client.remainder("B") == 0
+        assert client.remainder("C") == 0
+
+
