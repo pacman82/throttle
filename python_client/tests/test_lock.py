@@ -233,9 +233,12 @@ def test_multiple_peer_recovery_after_server_reboot():
     Verify that a newly booted server, recovers multiple peers based on heartbeats.
     """
     with throttle_client(b"[semaphores]\nA=1\nB=1\nC=1") as client:
-        peerA = client.acquire_with_new_peer("A")
-        peerB = client.acquire_with_new_peer("B")
-        peerC = client.acquire_with_new_peer("C")
+        peerA = client.new_peer()
+        peerB = client.new_peer()
+        peerC = client.new_peer()
+        client.acquire(peerA, "A")
+        client.acquire(peerB, "B")
+        client.acquire(peerC, "C")
 
     # Server is shutdown. Boot a new one wich does not know about the peers
     with throttle_client(b"[semaphores]\nA=1\nB=1\nC=1") as client:
