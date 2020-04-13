@@ -41,6 +41,19 @@ class Heartbeat:
             self.cancel.wait(self.interval_sec)
 
 
+@contextmanager
+def heartbeat(client: Client, peer: Peer, interval: timedelta) -> Iterator[Heartbeat]:
+    """
+        Heartbeat context manager, manages starting/stopping of heartbeat.
+    """
+    _heartbeat = Heartbeat(client, peer, interval)
+    _heartbeat.start()
+    try:
+        yield _heartbeat
+    finally:
+        _heartbeat.stop()
+
+
 class Timeout(Exception):
     """
     Thrown by lock in order to indicate that the specified amount time has passed and
@@ -101,13 +114,13 @@ def lock(
         except UnknownPeer:
             client.restore(peer)
 
-    # Yield and have the heartbeat in an extra thread, during it being active.
     if heartbeat_interval is not None:
-        heartbeat = Heartbeat(client, peer, heartbeat_interval)
-        heartbeat.start()
-    yield peer
-    if heartbeat_interval is not None:
-        heartbeat.stop()
+        # Yield and have the heartbeat in an extra thread, during it being active.
+        with heartbeat(client, peer, heartbeat_interval):
+            yield peer
+    else:
+        # Yield without heartbeat
+        yield peer
 
     try:
         client.release(peer)

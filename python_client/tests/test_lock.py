@@ -7,7 +7,7 @@ from time import sleep
 
 import pytest  # type: ignore
 
-from throttle_client import Client, Heartbeat, Timeout, lock
+from throttle_client import Client, heartbeat, Timeout, lock
 
 from . import BASE_URL, cargo_main, throttle_client
 
@@ -147,7 +147,6 @@ def test_exception():
     """
     Assert that lock is freed in the presence of exceptions in the client code
     """
-
     with throttle_client(b"[semaphores]\nA=1") as client:
         try:
             with lock("A"):
@@ -216,15 +215,13 @@ def test_peer_recovery_after_server_reboot():
     with throttle_client(b"[semaphores]\nA=1") as client:
         peer = client.acquire_with_new_peer("A")
 
-    heartbeat = Heartbeat(client, peer, interval=timedelta(milliseconds=10))
     # Server is shutdown. Boot a new one wich does not know about this peer
     with throttle_client(b"[semaphores]\nA=1") as client:
-        heartbeat.start()
-        # Wait for heartbeat and restore, to go through
-        sleep(2)
-        heartbeat.stop()
-        # Which implies the remainder of A being 0
-        assert client.remainder("A") == 0
+        with heartbeat(client, peer, interval=timedelta(milliseconds=10)):
+            # Wait for heartbeat and restore, to go through
+            sleep(2)
+            # Which implies the remainder of A being 0
+            assert client.remainder("A") == 0
 
 
 def test_multiple_peer_recovery_after_server_reboot():
@@ -236,22 +233,17 @@ def test_multiple_peer_recovery_after_server_reboot():
         peerB = client.acquire_with_new_peer("B")
         peerC = client.acquire_with_new_peer("C")
 
-    heartbeatA = Heartbeat(client, peerA, interval=timedelta(milliseconds=10))
-    heartbeatB = Heartbeat(client, peerB, interval=timedelta(milliseconds=10))
-    heartbeatC = Heartbeat(client, peerC, interval=timedelta(milliseconds=10))
     # Server is shutdown. Boot a new one wich does not know about the peers
     with throttle_client(b"[semaphores]\nA=1\nB=1\nC=1") as client:
-        heartbeatA.start()
-        heartbeatB.start()
-        heartbeatC.start()
-        # Wait for heartbeat and restore, to go through
-        sleep(2)
-        heartbeatC.stop()
-        heartbeatB.stop()
-        heartbeatA.stop()
-        # Which implies the remainder of A, B, C being 0
-        assert client.remainder("A") == 0
-        assert client.remainder("B") == 0
-        assert client.remainder("C") == 0
+        with heartbeat(client, peerA, interval=timedelta(milliseconds=10)),\
+            heartbeat(client, peerB, interval=timedelta(milliseconds=10)),\
+            heartbeat(client, peerC, interval=timedelta(milliseconds=10)):
+           
+            # Wait for heartbeat and restore, to go through
+            sleep(2)
+            # Which implies the remainder of A, B, C being 0
+            assert client.remainder("A") == 0
+            assert client.remainder("B") == 0
+            assert client.remainder("C") == 0
 
 
