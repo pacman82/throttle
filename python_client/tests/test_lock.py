@@ -150,7 +150,7 @@ def test_exception():
 
     with throttle_client(b"[semaphores]\nA=1") as client:
         try:
-            with lock("A"):
+            with lock(client, "A"):
                 raise Exception()
         except Exception:
             assert client.remainder("A") == 1
