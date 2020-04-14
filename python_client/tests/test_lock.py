@@ -7,7 +7,7 @@ from time import sleep
 
 import pytest  # type: ignore
 
-from throttle_client import Client, heartbeat, Timeout, lock
+from throttle_client import Client, heartbeat, Peer, Timeout, lock
 
 from . import BASE_URL, cargo_main, throttle_client
 
@@ -136,7 +136,6 @@ def test_lock_count_larger_pends_if_count_is_not_high_enough():
     Assert that we do not overspend an semaphore using lock counts > 1. Even if the
     semaphore count is > 0.
     """
-
     with throttle_client(b"[semaphores]\nA=5") as client:
         one = client.new_peer()
         two = client.new_peer()
@@ -215,42 +214,52 @@ def test_peer_recovery_after_server_reboot():
     """
     Heartbeat must restore peers, after server reboot.
     """
-    with throttle_client(b"[semaphores]\nA=1") as client:
-        peer = client.new_peer()
-        client.acquire(peer, "A")
-
+    
     # Server is shutdown. Boot a new one wich does not know about this peer
     with throttle_client(b"[semaphores]\nA=1") as client:
-        with heartbeat(client, peer, interval=timedelta(milliseconds=10)):
+         # Bogus peer id. Presumably from a peer created before the server reboot.     
+        peer = Peer(42, client, {"A": 1})
+        with heartbeat(peer, interval=timedelta(milliseconds=10)):
             # Wait for heartbeat and restore, to go through
-            sleep(2)
-            # Which implies the remainder of A being 0
+            sleep(2)        
+        # Which implies the remainder of A being 0
+        assert client.remainder("A") == 0
+
+
+def test_nested_locks():
+    """
+    Nested locks should be well behaved
+    """
+    with throttle_client(b"[semaphores]\nA=1\nB=1") as client:
+        with lock(client, "A") as peer:
+
             assert client.remainder("A") == 0
+            assert client.remainder("B") == 1
+
+            with lock(client, "B", peer=peer):
+
+                assert client.remainder("A") == 0
+                assert client.remainder("B") == 0
+
+            assert client.remainder("A") == 0
+            assert client.remainder("B") == 1
+
+        assert client.remainder("A") == 1
+        assert client.remainder("B") == 1
 
 
 def test_multiple_peer_recovery_after_server_reboot():
     """
-    Verify that a newly booted server, recovers multiple peers based on heartbeats.
-    """
-    with throttle_client(b"[semaphores]\nA=1\nB=1\nC=1") as client:
-        peerA = client.new_peer()
-        peerB = client.new_peer()
-        peerC = client.new_peer()
-        client.acquire(peerA, "A")
-        client.acquire(peerB, "B")
-        client.acquire(peerC, "C")
-
+    Heartbeat must restore all locks for a peer, after server reboot.
+    """   
     # Server is shutdown. Boot a new one wich does not know about the peers
     with throttle_client(b"[semaphores]\nA=1\nB=1\nC=1") as client:
-        with heartbeat(client, peerA, interval=timedelta(milliseconds=10)),\
-            heartbeat(client, peerB, interval=timedelta(milliseconds=10)),\
-            heartbeat(client, peerC, interval=timedelta(milliseconds=10)):
-           
+        # Bogus peer id. Presumably from a peer created before the server reboot.
+        peer = Peer(42, client, {"A": 1, "B": 1, "C": 1})
+        with heartbeat(peer, interval=timedelta(milliseconds=10)):            
             # Wait for heartbeat and restore, to go through
-            sleep(2)
-            # Which implies the remainder of A, B, C being 0
-            assert client.remainder("A") == 0
-            assert client.remainder("B") == 0
-            assert client.remainder("C") == 0
-
-
+            sleep(2)        
+        # Which implies the remainder of A, B, C being 0
+        assert client.remainder("A") == 0
+        assert client.remainder("B") == 0
+        assert client.remainder("C") == 0

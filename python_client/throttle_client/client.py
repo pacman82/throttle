@@ -3,38 +3,10 @@ from datetime import timedelta
 from typing import Any, Dict
 
 import requests
-from tenacity import (  # type: ignore
-    Retrying,
-    stop_after_attempt,
-    wait_exponential,
-)
+from tenacity import (Retrying, stop_after_attempt,  # type: ignore
+                      wait_exponential)
 
 from .status_code import is_recoverable_error as _is_recoverable_error
-
-
-class Peer:
-    """
-    A peer of a throttle service. Lists active and pending leases for one thread of
-    execution.
-    """
-
-    def __init__(
-        self, id: int, acquired: Dict[str, int] = {},
-    ):
-        self.id = id
-        # The server does also keep this state, but we also keep it on the client side,
-        # so we can recover it in case the server looses the state.
-        self.acquired = acquired
-
-    def has_acquired(self) -> bool:
-        """`True` if this peer has acquired locks."""
-        return len(self.acquired) != 0
-
-    def _acquired(self, semaphore: str, count: int):
-        """
-        Remember that the pending lock is now acquired.
-        """
-        self.acquired.update({semaphore: count})
 
 
 def _translate_domain_errors(response: requests.Response):
@@ -125,7 +97,7 @@ class Client:
         _translate_domain_errors(response)
         return response
 
-    def new_peer(self, expires_in: timedelta = None) -> Peer:
+    def new_peer(self, expires_in: timedelta = None) -> int:
         """
         Register a new peer with the server.
 
@@ -147,14 +119,15 @@ class Client:
             body = {
                 "expires_in": expires_in_str,
             }
-            return requests.post(self.base_url + "/new_peer", json=body, timeout=30)
+            return requests.post(f"{self.base_url}/new_peer", json=body, timeout=30)
 
         response = self._try_request(send_new_peer)
-        return Peer(id=int(response.text), acquired={})
+        # Return peer id
+        return int(response.text)
 
     def acquire(
         self,
-        peer: Peer,
+        peer_id: int,
         semaphore: str,
         count: int = 1,
         expires_in: timedelta = None,
@@ -189,30 +162,28 @@ class Client:
 
         def send_acquire():
             return requests.put(
-                f"{self.base_url}/peer/{peer.id}/{semaphore}?{blockstr}expires_in={expires_in_str}",
+                f"{self.base_url}/peers/{peer_id}/{semaphore}?{blockstr}expires_in={expires_in_str}",
                 json=count,
                 timeout=30,
             )
 
         response = self._try_request(send_acquire)
         if response.status_code == 200:  # Ok. Acquired lock to semaphore.
-            peer.acquired = {semaphore: count}
             return True
-        elif response.status_code == 202:  # Accepted. Ticket pending.
-            peer.acquired = {}
+        elif response.status_code == 202:  # Accepted. Lock pending.
             return False
         else:
             # This should never be reached
             raise RuntimeError("Unexpected response from Server")
 
-    def restore(self, peer: Peer):
+    def restore(self, peer_id: int, acquired: Dict[str, int]):
         def send_request():
             response = requests.post(
                 f"{self.base_url}/restore",
                 json={
                     "expires_in": _format_timedelta(self.expiration_time),
-                    "peer_id": peer.id,
-                    "acquired": peer.acquired,
+                    "peer_id": peer_id,
+                    "acquired": acquired,
                 },
             )
             return response
@@ -229,34 +200,43 @@ class Client:
         """
 
         def send_request():
-            response = requests.get(self.base_url + f"/remainder?semaphore={semaphore}")
+            response = requests.get(f"{self.base_url}/remainder?semaphore={semaphore}")
             return response
 
         response = self._try_request(send_request)
         return int(response.text)
 
-    def is_acquired(self, peer: Peer) -> bool:
+    def is_acquired(self, peer_id: int) -> bool:
         """
         Ask the server wether all the locks associated with the peer are all acquired.
         """
 
         def send_request():
-            response = requests.get(self.base_url + f"/peers/{peer.id}/is_acquired")
+            response = requests.get(f"{self.base_url}/peers/{peer_id}/is_acquired")
             return response
 
         response = self._try_request(send_request)
         return json.loads(response.text)
 
-    def release(self, peer: Peer):
+    def release(self, peer_id: int):
         """
         Deletes the peer on the throttle server.
 
         This is important to unblock other clients which may be waiting for the
         semaphore remainder to increase.
         """
-
         def send_request():
-            response = requests.delete(self.base_url + f"/peers/{peer.id}")
+            response = requests.delete(f"{self.base_url}/peers/{peer_id}")
+            return response
+
+        self._try_request(send_request)
+
+    def release_lock(self, peer_id: int, semaphore: str):
+        """
+        Release a lock to a semaphore for a specific peer
+        """
+        def send_request():
+            response = requests.delete(f"{self.base_url}/peers/{peer_id}/{semaphore}")
             return response
 
         self._try_request(send_request)
@@ -276,13 +256,13 @@ class Client:
         # Number of expired peers
         return json.loads(response.text)
 
-    def heartbeat(self, peer: Peer):
+    def heartbeat(self, peer_id: int):
         """
         Sends a PUT request to the server, updating the expiration timestamp.
         """
         def send_request():
             response = requests.put(
-                f"{self.base_url}/peers/{peer.id}",
+                f"{self.base_url}/peers/{peer_id}",
                 json={"expires_in": _format_timedelta(self.expiration_time)},
                 timeout=30,
             )

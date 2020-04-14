@@ -73,7 +73,7 @@ struct AcquireQuery {
 /// It also updates the expiration timeout to prevent the litter collection from removing the peer
 /// while it is pending. Having repeated short lived requests is preferable over one long running,
 /// as many proxies, firewalls, and Gateways might kill them.
-#[put("/peer/{id}/{semaphore}")]
+#[put("/peers/{id}/{semaphore}")]
 async fn acquire(
     path: Path<(PeerId, String)>,
     query: Query<AcquireQuery>,
@@ -95,6 +95,17 @@ async fn acquire(
     }
 }
 
+#[delete("/peers/{id}/{semaphore}")]
+async fn release_lock(
+    path: Path<(PeerId, String)>,
+    state: Data<State>,
+) -> Result<&'static str, ThrottleError> {
+    let peer_id = path.0;
+    let semaphore = path.1.as_str();
+    state.release_lock(peer_id, semaphore)?;
+    Ok("Ok")
+}
+
 #[derive(Deserialize)]
 pub struct Restore {
     #[serde(with = "humantime_serde")]
@@ -112,11 +123,7 @@ pub async fn restore(
     body: Json<Restore>,
     state: Data<State>,
 ) -> Result<&'static str, ThrottleError> {
-    // Take the firs elements of acquired. Ignore the rest, as of now peers can only one lock at a
-    // time.
-    let acquired = body.acquired.iter().next().map(|(s, &c)| (s.as_str(), c));
-
-    state.restore(body.peer_id, body.expires_in, acquired)?;
+    state.restore(body.peer_id, body.expires_in, &body.acquired)?;
     Ok("Ok")
 }
 

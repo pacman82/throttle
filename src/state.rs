@@ -128,18 +128,20 @@ impl State {
         let (expired_peers, resolved_peers) = {
             let mut leases = self.leases.lock().unwrap();
             let (expired_peers, affected_semaphores) = leases.remove_expired(Instant::now());
+            // It is not enough to notify only the requests for the removed peers, as other peers
+            // might be able to acquire their locks due to the removal of these.
             let mut resolved_peers = Vec::new();
             for semaphore in affected_semaphores {
-                resolved_peers.extend(
-                    leases.resolve_pending(&semaphore, *self.semaphores.get(&semaphore).unwrap()),
-                );
+                leases.resolve_pending(
+                    &semaphore,
+                    *self.semaphores.get(&semaphore).unwrap(),
+                    &mut resolved_peers,
+                )
             }
             (expired_peers, resolved_peers)
         };
         if !expired_peers.is_empty() {
             warn!("Removed {} peers due to expiration.", expired_peers.len());
-            // It is not enough to notify only the requests for the removed peers, as other peers
-            // might be able to acquire their locks due to the removal of these.
             self.wakers.resolve_with(&resolved_peers, Ok(()));
             self.wakers
                 .resolve_with(&expired_peers, Err(ThrottleError::UnknownPeer));
@@ -152,15 +154,15 @@ impl State {
         &self,
         peer_id: PeerId,
         expires_in: Duration,
-        acquired: Option<(&str, u32)>,
+        acquired: &HashMap<String, u32>,
     ) -> Result<(), ThrottleError> {
         warn!(
             "Revenant Peer {}. Has locks: {}",
             peer_id,
-            acquired.is_some()
+            !acquired.is_empty()
         );
 
-        if let Some((semaphore, count)) = acquired {
+        for (semaphore, _count) in acquired {
             // Assert semaphore exists. We want to give the client an error and also do not want to
             // allow any Unknown Semaphore into `leases`. Also we want to fail fast, before
             // acquiring the lock to `leases`.
@@ -168,9 +170,14 @@ impl State {
                 .semaphores
                 .get(semaphore)
                 .ok_or(ThrottleError::UnknownSemaphore)?;
-            let mut leases = self.leases.lock().unwrap();
-            let valid_until = Instant::now() + expires_in;
-            leases.new_peer_at(peer_id, valid_until);
+        }
+
+        let mut leases = self.leases.lock().unwrap();
+        let valid_until = Instant::now() + expires_in;
+        // Peer id might theoretically clash, but for now, I don't believe this is realistic.
+        leases.new_peer_at(peer_id, valid_until);
+
+        for (semaphore, &count) in acquired {
             // If the restored lease has the lock already acquired, there is no point in checking it
             // against the full semaphore count. The resource the semaphore is protecting is already
             // being accessed by it. Better to count it as acquired anyway, even if we increment our
@@ -180,12 +187,7 @@ impl State {
             // semaphore full count and allow exceeding it.
             let max = None;
             leases.acquire(peer_id, semaphore, count, max)?;
-        } else {
-            let mut leases = self.leases.lock().unwrap();
-            let valid_until = Instant::now() + expires_in;
-            // Peer id might theoretically clash, but for now, I don't believe this is realistic.
-            leases.new_peer_at(peer_id, valid_until);
-        };
+        }
         Ok(())
     }
 
@@ -214,21 +216,27 @@ impl State {
     /// to e.g. the peer already being removed by litter collection.
     pub fn release(&self, peer_id: PeerId) -> bool {
         let mut leases = self.leases.lock().unwrap();
-        match leases.remove(peer_id) {
-            Some(semaphore) => {
-                let full_count = self
-                    .semaphores
-                    .get(&semaphore)
-                    .expect("An active semaphore must always be configured");
-                let resolved_peers = leases.resolve_pending(&semaphore, *full_count);
+        match leases.remove_peer(peer_id) {
+            Ok(semaphores) => {
+                // Keep book about all peers, those locks have been acquired, so we can notify their pending
+                // requests.
+                let mut resolved_peers = Vec::new();
+                for semaphore in semaphores {
+                    let full_count = self
+                        .semaphores
+                        .get(&semaphore)
+                        .expect("An active semaphore must always be configured");
+                    leases.resolve_pending(&semaphore, *full_count, &mut resolved_peers);
+                }
                 drop(leases); // Don't hold this longer than we need to.
                 self.wakers.resolve_with(&resolved_peers, Ok(()));
                 true
             }
-            None => {
+            Err(ThrottleError::UnknownPeer) => {
                 warn!("Deletion of unknown peer.");
                 false
             }
+            Err(_) => panic!("Remove can only fail with 'UnknownPeer'."),
         }
     }
 
@@ -260,6 +268,21 @@ impl State {
     pub fn is_acquired(&self, peer_id: PeerId) -> Result<bool, ThrottleError> {
         let leases = self.leases.lock().unwrap();
         leases.has_pending(peer_id).map(|pending| !pending)
+    }
+
+    /// Releases a lock associated with the peer. Due to the relased lock, other locks may be
+    /// acquired, futures may need to be woken.
+    pub fn release_lock(&self, peer_id: PeerId, semaphore: &str) -> Result<(), ThrottleError> {
+        let &max = self
+            .semaphores
+            .get(semaphore)
+            .ok_or(ThrottleError::UnknownSemaphore)?;
+        let mut leases = self.leases.lock().unwrap();
+        leases.release_lock(peer_id, semaphore)?;
+        let mut resolved_peers = Vec::new();
+        leases.resolve_pending(semaphore, max, &mut resolved_peers);
+        self.wakers.resolve_with(&resolved_peers, Ok(()));
+        Ok(())
     }
 }
 
@@ -399,5 +422,27 @@ mod tests {
         let second = state.new_peer(one_sec);
         assert!(!state.acquire(second, "A", 1, None, one_sec).await.unwrap());
         assert!(!state.acquire(second, "A", 1, None, one_sec).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn multiple_locks_per_peer() {
+        let mut semaphores = Semaphores::new();
+        semaphores.insert(String::from("A"), 2);
+        semaphores.insert(String::from("B"), 1);
+        let state = State::new(semaphores);
+        let one_sec = Duration::from_secs(1);
+
+        let first = state.new_peer(one_sec);
+        // Acquire one of 'A' and 'B' each.
+        assert!(state.acquire(first, "A", 1, None, one_sec).await.unwrap());
+        assert!(state.acquire(first, "B", 1, None, one_sec).await.unwrap());
+
+        let second = state.new_peer(one_sec);
+        // Second can still acquire lock to 'A' since its full count is 2, but 'B' must pend.
+        assert!(state.acquire(second, "A", 1, None, one_sec).await.unwrap());
+        assert!(!state.acquire(second, "B", 1, None, one_sec).await.unwrap());
+
+        state.release(first);
+        assert!(state.is_acquired(second).unwrap());
     }
 }
