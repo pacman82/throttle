@@ -1,5 +1,5 @@
 use crate::logging::LoggingConfig;
-use serde::Deserialize;
+use serde::{de, Deserialize};
 use std::{
     collections::HashMap,
     fs::File,
@@ -8,10 +8,80 @@ use std::{
     time::Duration,
 };
 
-pub type Semaphores = HashMap<String, i64>;
+/// Configuration for one Semaphore
+///
+/// The `Deserialize` trait is not derived, but manually implemented. This is so to make it possible
+/// to have a simple and a verbose representations in Toml for semaphores.
+///
+/// *Simple*:
+///
+/// ```toml
+/// [semaphores]
+/// A = 42
+/// ```
+///
+/// *Verbose*
+///
+/// ```toml
+/// [semaphores]
+/// A = { count : 42 }
+/// ```
+///
+/// ```toml
+/// [semaphores.A]
+/// count = 42
+/// ```
+///
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Semaphore {
+    pub count: i64,
+}
 
-/// Representation of the configuration file (usually `throttle.toml`) passed to ther server at
-/// startup.
+impl<'de> de::Deserialize<'de> for Semaphore {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        struct SemaphoreVisitor;
+
+        /// Repetition of Semaphore, but with derived `Deserialize` Trait.
+        #[derive(Deserialize)]
+        pub struct Verbose {
+            pub count: i64,
+        }
+
+        impl<'de> de::Visitor<'de> for SemaphoreVisitor {
+            type Value = Semaphore;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str(
+                    "a semaphore count like 42 or a verbose semaphore configuration like \
+                    { count = 42 }",
+                )
+            }
+
+            fn visit_i64<E>(self, i: i64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(Semaphore { count: i })
+            }
+
+            fn visit_map<V>(self, map: V) -> Result<Self::Value, V::Error>
+            where
+                V: de::MapAccess<'de>,
+            {
+                let mvd = de::value::MapAccessDeserializer::new(map);
+                Verbose::deserialize(mvd).map(|Verbose { count }| Semaphore { count })
+            }
+        }
+
+        deserializer.deserialize_any(SemaphoreVisitor)
+    }
+}
+
+pub type Semaphores = HashMap<String, Semaphore>;
+
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ApplicationCfg {
     #[serde(
@@ -87,7 +157,26 @@ mod tests {
             actual.litter_collection_interval,
             Duration::from_millis(100)
         );
-        assert_eq!(actual.semaphores.get("A").unwrap(), &1);
+        assert_eq!(actual.semaphores.get("A").unwrap().count, 1);
+    }
+
+    #[test]
+    fn simple_and_verbose_configuration() {
+        let simple = "
+                     [semaphores]\n\
+                     A=42\n\
+                     \n\
+                    ";
+        let simple: ApplicationCfg = toml::from_str(simple).unwrap();
+
+        let verbose = "
+                      [semaphores]\n\
+                      A = { count=42 }\n\
+                      \n\
+                    ";
+        let verbose: ApplicationCfg = toml::from_str(verbose).unwrap();
+
+        assert_eq!(simple, verbose);
     }
 
     /// Verify that the default configuration used in case of a missing file is identical to the

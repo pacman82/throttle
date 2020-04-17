@@ -69,10 +69,11 @@ impl State {
         wait_for: Option<Duration>,
         expires_in: Option<Duration>,
     ) -> Result<bool, ThrottleError> {
-        let max = *self
+        let max = self
             .semaphores
             .get(semaphore)
-            .ok_or(ThrottleError::UnknownSemaphore)?;
+            .ok_or(ThrottleError::UnknownSemaphore)?
+            .count;
         // Return early if lease can never be acquired
         if max < amount as i64 {
             return Err(ThrottleError::ForeverPending {
@@ -136,7 +137,7 @@ impl State {
             for semaphore in affected_semaphores {
                 leases.resolve_pending(
                     &semaphore,
-                    *self.semaphores.get(&semaphore).unwrap(),
+                    self.semaphores.get(&semaphore).unwrap().count,
                     &mut resolved_peers,
                 )
             }
@@ -202,10 +203,10 @@ impl State {
     }
 
     pub fn remainder(&self, semaphore: &str) -> Result<i64, ThrottleError> {
-        if let Some(full_count) = self.semaphores.get(semaphore) {
+        if let Some(sem) = self.semaphores.get(semaphore) {
             let leases = self.leases.lock().unwrap();
             let count = leases.count(&semaphore);
-            Ok(full_count - count)
+            Ok(sem.count - count)
         } else {
             warn!("Unknown semaphore requested");
             Err(ThrottleError::UnknownSemaphore)
@@ -224,11 +225,11 @@ impl State {
                 // requests.
                 let mut resolved_peers = Vec::new();
                 for semaphore in semaphores {
-                    let full_count = self
+                    let sem = self
                         .semaphores
                         .get(&semaphore)
                         .expect("An active semaphore must always be configured");
-                    leases.resolve_pending(&semaphore, *full_count, &mut resolved_peers);
+                    leases.resolve_pending(&semaphore, sem.count, &mut resolved_peers);
                 }
                 drop(leases); // Don't hold this longer than we need to.
                 self.wakers.resolve_with(&resolved_peers, Ok(()));
@@ -247,12 +248,12 @@ impl State {
     /// This method updates the global default prometheus regestry.
     pub fn update_metrics(&self) {
         let mut counts = HashMap::new();
-        for (semaphore, &full_count) in &self.semaphores {
+        for (name, &sem) in &self.semaphores {
             // Ok, currently we don't support changing the full_count at runtime, but let's keep it
             // here for later use.
-            FULL_COUNT.with_label_values(&[semaphore]).set(full_count);
+            FULL_COUNT.with_label_values(&[name]).set(sem.count);
             // Doing all these nasty allocations before acquiring the lock to leases
-            counts.insert(semaphore.clone(), Counts::default());
+            counts.insert(name.clone(), Counts::default());
         }
         // Most of the work happens in here. Now counts contains the active and pending counts
         self.leases.lock().unwrap().fill_counts(&mut counts);
@@ -275,10 +276,11 @@ impl State {
     /// Releases a lock associated with the peer. Due to the relased lock, other locks may be
     /// acquired, futures may need to be woken.
     pub fn release_lock(&self, peer_id: PeerId, semaphore: &str) -> Result<(), ThrottleError> {
-        let &max = self
+        let max = self
             .semaphores
             .get(semaphore)
-            .ok_or(ThrottleError::UnknownSemaphore)?;
+            .ok_or(ThrottleError::UnknownSemaphore)?
+            .count;
         let mut leases = self.leases.lock().unwrap();
         leases.release_lock(peer_id, semaphore)?;
         let mut resolved_peers = Vec::new();
@@ -319,13 +321,14 @@ lazy_static! {
 mod tests {
 
     use super::*;
+    use crate::application_cfg::Semaphore;
     use tokio;
 
     #[tokio::test]
     async fn acquire_three_leases() {
         // Semaphore with count of 3
         let mut semaphores = Semaphores::new();
-        semaphores.insert(String::from("A"), 3);
+        semaphores.insert(String::from("A"), Semaphore { count: 3 });
         let state = State::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
@@ -345,7 +348,7 @@ mod tests {
     async fn resolve_pending() {
         // Semaphore with count of 3
         let mut semaphores = Semaphores::new();
-        semaphores.insert(String::from("A"), 3);
+        semaphores.insert(String::from("A"), Semaphore { count: 3 });
         let state = State::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
@@ -380,7 +383,7 @@ mod tests {
     async fn fairness() {
         // Semaphore with count of 3
         let mut semaphores = Semaphores::new();
-        semaphores.insert(String::from("A"), 3);
+        semaphores.insert(String::from("A"), Semaphore { count: 3 });
         let state = State::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
@@ -413,7 +416,7 @@ mod tests {
     #[tokio::test]
     async fn idempotent_acquire() {
         let mut semaphores = Semaphores::new();
-        semaphores.insert(String::from("A"), 1);
+        semaphores.insert(String::from("A"), Semaphore { count: 1 });
         let state = State::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
@@ -429,8 +432,8 @@ mod tests {
     #[tokio::test]
     async fn multiple_locks_per_peer() {
         let mut semaphores = Semaphores::new();
-        semaphores.insert(String::from("A"), 2);
-        semaphores.insert(String::from("B"), 1);
+        semaphores.insert(String::from("A"), Semaphore { count: 2 });
+        semaphores.insert(String::from("B"), Semaphore { count: 1 });
         let state = State::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
