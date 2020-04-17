@@ -67,3 +67,5 @@ delayed if the peer holding the lock previously did expire, rather than release 
   * Uses new route `/restore`.
 * Removed `Peer.has_pending()`.
 * Acquiring locks is now idempotent
+* One peer can now hold multiple locks
+* Log level to stderr can now be configured in `throttle.toml`.
