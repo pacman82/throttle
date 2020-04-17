@@ -1,6 +1,6 @@
 import pickle
 
-from throttle_client import Client, Peer
+from throttle_client import Client
 
 
 def test_client():

@@ -5,9 +5,9 @@ from typing import Any, Dict
 import requests
 from tenacity import (
     Retrying,
-    stop_after_attempt,  # type: ignore
+    stop_after_attempt,
     wait_exponential,
-)
+)  # type: ignore
 
 from .status_code import is_recoverable_error as _is_recoverable_error
 
