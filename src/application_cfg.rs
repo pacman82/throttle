@@ -1,3 +1,5 @@
+//! Application configuration, and how it is read from a TOML file.
+
 use crate::logging::LoggingConfig;
 use serde::{de, Deserialize};
 use std::{
@@ -33,11 +35,13 @@ use std::{
 /// ```
 ///
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Semaphore {
-    pub count: i64,
+pub struct SemaphoreCfg {
+    pub max: i64,
+    /// While holding a mutex at level N one may only acquire mutices at lower levels.
+    pub level: i32,
 }
 
-impl<'de> de::Deserialize<'de> for Semaphore {
+impl<'de> de::Deserialize<'de> for SemaphoreCfg {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: de::Deserializer<'de>,
@@ -47,16 +51,18 @@ impl<'de> de::Deserialize<'de> for Semaphore {
         /// Repetition of Semaphore, but with derived `Deserialize` Trait.
         #[derive(Deserialize)]
         pub struct Verbose {
-            pub count: i64,
+            max: i64,
+            #[serde(default)]
+            level: i32,
         }
 
         impl<'de> de::Visitor<'de> for SemaphoreVisitor {
-            type Value = Semaphore;
+            type Value = SemaphoreCfg;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 formatter.write_str(
                     "a semaphore count like 42 or a verbose semaphore configuration like \
-                    { count = 42 }",
+                    { max = 42 }",
                 )
             }
 
@@ -64,7 +70,7 @@ impl<'de> de::Deserialize<'de> for Semaphore {
             where
                 E: de::Error,
             {
-                Ok(Semaphore { count: i })
+                Ok(SemaphoreCfg { max: i, level: 0 })
             }
 
             fn visit_map<V>(self, map: V) -> Result<Self::Value, V::Error>
@@ -72,7 +78,7 @@ impl<'de> de::Deserialize<'de> for Semaphore {
                 V: de::MapAccess<'de>,
             {
                 let mvd = de::value::MapAccessDeserializer::new(map);
-                Verbose::deserialize(mvd).map(|Verbose { count }| Semaphore { count })
+                Verbose::deserialize(mvd).map(|Verbose { max, level }| SemaphoreCfg { max, level })
             }
         }
 
@@ -80,7 +86,7 @@ impl<'de> de::Deserialize<'de> for Semaphore {
     }
 }
 
-pub type Semaphores = HashMap<String, Semaphore>;
+pub type Semaphores = HashMap<String, SemaphoreCfg>;
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ApplicationCfg {
@@ -157,7 +163,7 @@ mod tests {
             actual.litter_collection_interval,
             Duration::from_millis(100)
         );
-        assert_eq!(actual.semaphores.get("A").unwrap().count, 1);
+        assert_eq!(actual.semaphores.get("A").unwrap().max, 1);
     }
 
     #[test]
@@ -171,7 +177,7 @@ mod tests {
 
         let verbose = "
                       [semaphores]\n\
-                      A = { count=42 }\n\
+                      A = { max=42 }\n\
                       \n\
                     ";
         let verbose: ApplicationCfg = toml::from_str(verbose).unwrap();
