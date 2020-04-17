@@ -17,8 +17,8 @@ def test_non_blocking_acquire():
     Verify the results of a non-blocking request to acquire.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
-        first = client.new_peer()
-        second = client.new_peer()
+        first = client.new_peer(expires_in=timedelta(minutes=1))
+        second = client.new_peer(expires_in=timedelta(minutes=1))
         # Acquire first lease
         client.acquire(first, "A")
         # Second lease is pending, because we still hold first
@@ -31,23 +31,22 @@ def test_non_blocking_acquire():
         assert client.is_acquired(second)
 
 
-def test_removal_of_expired_leases():
-    """Verify the removal of expired leases."""
+def test_expiring_releases_locks():
+    """If a peer is removed due to expiration, it's locks must be released."""
     with throttle_client(b"[semaphores]\nA=1") as client:
-        peer = client.new_peer()
-        client.acquire(peer, "A", expires_in=timedelta(seconds=1))
-        sleep(2)
+        peer = client.new_peer(expires_in=timedelta(seconds=0))
+        client.acquire(peer, "A")
         client.remove_expired()
         assert client.remainder("A") == 1  # Semaphore should be free again
 
 
 def test_lock_blocks():
     """
-    acquire must blocks until the semaphore count allows for the lock to be acquired.
+    Acquire must blocks until the semaphore count allows for the lock to be acquired.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
-        first = client.new_peer()
-        second = client.new_peer()
+        first = client.new_peer(expires_in=timedelta(minutes=1))
+        second = client.new_peer(expires_in=timedelta(minutes=1))
         # Acquire first lock
         client.acquire(first, "A")
 
@@ -55,7 +54,9 @@ def test_lock_blocks():
 
         def wait_for_second_lock():
             nonlocal acquired
-            acquired = client.acquire(second, semaphore="A", block_for=timedelta(seconds=2))
+            acquired = client.acquire(
+                second, semaphore="A", block_for=timedelta(seconds=2)
+            )
 
         t = Thread(target=wait_for_second_lock)
         t.start()
@@ -65,20 +66,27 @@ def test_lock_blocks():
         assert acquired
 
 
-def test_pending_leases_dont_expire():
+def test_acquire_can_prolong_lifetime_of_peer():
     """
-    Test that leases do not expire, while they wait for pending admissions.
+    Test that peers do not expire, while they wait for pending locks.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
-        blocker = client.new_peer()
+        blocker = client.new_peer(expires_in=timedelta(minutes=1))
         # Acquire "A", so subsequent locks are pending
         client.acquire(blocker, "A")
 
         peer = client.new_peer(expires_in=timedelta(seconds=1))
-        # This lease should be pending
-        client.acquire(peer, semaphore="A", block_for=timedelta(seconds=1.5))
-        # The initial timeout of one second should have been expired by now,
-        # yet nothing is removed
+        # This lock can not be acquired due to `blocker` holding the lock. This request
+        # is going to block for one second. After which the peer should have been
+        # expired. Yet acquire can prolong the lifetime of the peer.
+        client.acquire(
+            peer,
+            semaphore="A",
+            block_for=timedelta(seconds=1),
+            expires_in=timedelta(seconds=5),
+        )
+        # The initial timeout of one second should have been expired by now, yet nothing
+        # is removed.
         assert client.remove_expired() == 0
 
 
@@ -90,15 +98,17 @@ def test_restore_peer_with_unknown_semaphore():
     with throttle_client(b"[semaphores]") as client:
         with pytest.raises(Exception, match="Unknown semaphore"):
             # Bogus peer id, presumably from a previous run, before lock losts its state
-            client.restore(peer_id=5, acquired={"A": 1})
+            client.restore(
+                peer_id=5, acquired={"A": 1}, expires_in=timedelta(minutes=1)
+            )
 
 
 def test_does_not_starve_large_locks():
     """This tests verifies that large locks do not get starved by many smaller ones"""
     with throttle_client(b"[semaphores]\nA=5") as client:
-        small = client.new_peer()
-        big = client.new_peer()
-        other_small = client.new_peer()
+        small = client.new_peer(expires_in=timedelta(minutes=1))
+        big = client.new_peer(expires_in=timedelta(minutes=1))
+        other_small = client.new_peer(expires_in=timedelta(minutes=1))
         # This lock is acquired immediatly decrementing the semaphore count to 4
         assert client.acquire(small, "A", count=1)
         # Now try a large one. Of course we can not acquire it yet
@@ -120,7 +130,7 @@ def test_acquire_three_leases():
     is three.
     """
     with throttle_client(b"[semaphores]\nA=3") as client:
-        p = [client.new_peer() for _ in range(0, 4)]
+        p = [client.new_peer(expires_in=timedelta(minutes=1)) for _ in range(0, 4)]
         assert client.acquire(p[0], "A")
         assert client.acquire(p[1], "A")
         assert client.acquire(p[2], "A")
@@ -130,12 +140,12 @@ def test_acquire_three_leases():
 
 def test_unblock_immediatly_after_release():
     """
-    `acquire` must return immediatly after the pending lock can be acquired and not wait for the
-    next request to go through.
+    `acquire` must return immediatly after the pending lock can be acquired and not wait
+    for the next request to go through.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
-        one = client.new_peer()
-        two = client.new_peer()
+        one = client.new_peer(expires_in=timedelta(minutes=1))
+        two = client.new_peer(expires_in=timedelta(minutes=1))
         # Acquire first lease
         client.acquire(one, "A")
 
@@ -160,8 +170,8 @@ def test_server_timeout():
     Server should answer request to `acquire` if the timeout has elapsed.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
-        one = client.new_peer()
-        two = client.new_peer()
+        one = client.new_peer(expires_in=timedelta(minutes=1))
+        two = client.new_peer(expires_in=timedelta(minutes=1))
         # Acquire first lease
         _ = client.acquire(one, "A")
 
@@ -179,7 +189,7 @@ def test_server_timeout():
         assert not t.is_alive()
 
 
-def test_resolve_leases_immediatly_after_expiration():
+def test_acquire_locks_immediatly_after_expiration():
     """
     `acquire` must return immediatly after the pending lock can be acquired and not wait for the
     next request to go through. In this test the peer previously holding the lock expires rather
@@ -188,8 +198,8 @@ def test_resolve_leases_immediatly_after_expiration():
     with throttle_client(
         b'litter_collection_interval = "10ms"\n' b"[semaphores]\nA=1"
     ) as client:
-        one = client.new_peer()
-        two = client.new_peer()
+        one = client.new_peer(expires_in=timedelta(minutes=1))
+        two = client.new_peer(expires_in=timedelta(minutes=1))
 
         # Acquire first lease
         client.acquire(one, "A")
@@ -202,8 +212,7 @@ def test_resolve_leases_immediatly_after_expiration():
         t.start()
 
         # Unblock `t`. With expiration
-        client.expiration_time = timedelta(milliseconds=500)
-        client.heartbeat(one)
+        client.heartbeat(one, expires_in=timedelta(seconds=0))
 
         # Three seconds should be ample time for `t` to return
         t.join(4)
@@ -216,8 +225,8 @@ def test_acquire():
     `acquire` must return `False` while pending and `True` once lock is acquired.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
-        one = client.new_peer()
-        two = client.new_peer()
+        one = client.new_peer(expires_in=timedelta(minutes=1))
+        two = client.new_peer(expires_in=timedelta(minutes=1))
         # Acquire first lease
         client.acquire(one, "A")
         # Second is pending
@@ -233,8 +242,8 @@ def test_acquire_two_locks_with_one_peer():
     acquired.
     """
     with throttle_client(b"[semaphores]\nA=1\nB=1") as client:
-        one = client.new_peer()
-        two = client.new_peer()
+        one = client.new_peer(expires_in=timedelta(minutes=1))
+        two = client.new_peer(expires_in=timedelta(minutes=1))
 
         # Acquire two leases with same peer
         assert client.acquire(one, "A")
@@ -248,3 +257,19 @@ def test_acquire_two_locks_with_one_peer():
         assert client.is_acquired(two)
         # First peer is still active and holds a lock
         assert client.is_acquired(one)
+
+
+def test_litter_collection():
+    """
+    Verify that leases don't leak thanks to litter collection
+    """
+    with throttle_client(
+        (b'litter_collection_interval="10ms"\n' b"[semaphores]\n" b"A=1\n")
+    ) as client:
+        # Acquire lease, but since we don't use the context manager we never release
+        # it.
+        peer = client.new_peer(expires_in=timedelta(minutes=1))
+        _ = client.acquire(peer, "A", expires_in=timedelta(seconds=0.1))
+        # No, worry time will take care of this.
+        sleep(0.2)
+        assert client.remainder("A") == 1

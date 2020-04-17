@@ -53,7 +53,7 @@ def test_server_recovers_pending_lock_after_state_loss():
         cfg.close()
         client = Client(BASE_URL)
         with cargo_main(cfg=cfg.name) as proc:
-            first = client.new_peer()
+            first = client.new_peer(expires_in=timedelta(minutes=1))
             # Acquire first peer
             client.acquire(first, "A")
             # Acquire second lease
@@ -91,23 +91,6 @@ def test_keep_lease_alive_beyond_expiration():
             assert client.remove_expired() == 0
 
 
-def test_litter_collection():
-    """
-    Verify that leases don't leak thanks to litter collection
-    """
-    with throttle_client(
-        (b'litter_collection_interval="10ms"\n' b"[semaphores]\n" b"A=1\n")
-    ) as client:
-        # Acquire lease, but since we don't use the context manager we never release
-        # it.
-        peer = client.new_peer()
-        client.expiration_time = timedelta(seconds=0.1)
-        _ = client.acquire(peer, "A")
-        # No, worry time will take care of this.
-        sleep(0.2)
-        assert client.remainder("A") == 1
-
-
 def test_lock_count_larger_one():
     """
     Assert that locks with a count > 1, decrement the semaphore count accordingly
@@ -126,10 +109,10 @@ def test_lock_count_larger_pends_if_count_is_not_high_enough():
     semaphore count is > 0.
     """
     with throttle_client(b"[semaphores]\nA=5") as client:
-        one = client.new_peer()
-        two = client.new_peer()
-        _ = client.acquire(one, "A", count=3)
-        assert not client.acquire(two, "A", count=3)
+        one = Peer(client=client)
+        two = Peer(client=client)
+        one.acquire("A", count=3)
+        assert not two.acquire("A", count=3)
 
 
 def test_exception():
@@ -147,13 +130,13 @@ def test_exception():
 
 def test_lock_count_larger_than_full_count():
     """
-    Assert that exception is raised, rather than accepting a lock which would pend
-    forever.
+    Should the lock count be larger than the maximum allowed semaphore count an
+    exception is raised.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         with pytest.raises(ValueError, match="block forever"):
-            peer = client.new_peer()
-            client.acquire(peer, "A", count=2)
+            peer = Peer(client=client)
+            peer.acquire("A", count=2)
 
 
 def test_try_lock():

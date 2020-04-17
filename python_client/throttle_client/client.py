@@ -3,8 +3,11 @@ from datetime import timedelta
 from typing import Any, Dict
 
 import requests
-from tenacity import (Retrying, stop_after_attempt,  # type: ignore
-                      wait_exponential)
+from tenacity import (
+    Retrying,
+    stop_after_attempt,  # type: ignore
+    wait_exponential,
+)
 
 from .status_code import is_recoverable_error as _is_recoverable_error
 
@@ -61,17 +64,13 @@ class Client:
     level interface look at the `lock` context manager.
     """
 
-    def __init__(
-        self, base_url: str, expiration_time: timedelta = timedelta(minutes=15),
-    ):
+    def __init__(self, base_url: str):
         """
         * `base_url`: Url to the throttle server. E.g. https://my_throttle_instance:8000
         * `expiration_time`: If the heartbeat does not prolong the lifetime of this peer
         its locks are going to be released, after this timeout.
         """
 
-        # TODO: move expiration time to peer
-        self.expiration_time = expiration_time
         self.base_url = base_url
 
     def _retrying(self) -> Any:
@@ -99,13 +98,15 @@ class Client:
         _translate_domain_errors(response)
         return response
 
-    def new_peer(self, expires_in: timedelta = None) -> int:
+    def new_peer(self, expires_in: timedelta) -> int:
         """
         Register a new peer with the server.
 
-        A is used to acquire locks and keep the leases to them alive. A Peer owns the
-        locks which it acquires and releasing it is going to release the owned locks as
-        well.
+        * `expires_in`: Retention time of the peer on the server.
+
+        A peer is used to acquire locks and keep the leases to them alive. A Peer owns
+        thelocks which it acquires and releasing it is going to release the owned locks
+        as well.
 
         Every call to `new_peer` should be matched by a call to `release`.
 
@@ -113,8 +114,6 @@ class Client:
         mostly to make `acquire` idempotent. This prevents a call to acquire from
         acquiring more than one semaphore in case it is repeated due to a timeout.
         """
-        if not expires_in:
-            expires_in = self.expiration_time
         expires_in_str = _format_timedelta(expires_in)
 
         def send_new_peer():
@@ -153,18 +152,22 @@ class Client:
 
         Return `True` if the lock is active.
         """
-        if not expires_in:
-            expires_in = self.expiration_time
-        expires_in_str = _format_timedelta(expires_in)
+        query = []
+
+        if expires_in is not None:
+            query.append(f"expires_in={_format_timedelta(expires_in)}")
 
         if block_for is not None:
-            blockstr = f"block_for={_format_timedelta(block_for)}&"
+            query.append(f"block_for={_format_timedelta(block_for)}")
+
+        if len(query) == 0:
+            querystr = ""
         else:
-            blockstr = ""
+            querystr = "&".join(query)
 
         def send_acquire():
             return requests.put(
-                f"{self.base_url}/peers/{peer_id}/{semaphore}?{blockstr}expires_in={expires_in_str}",
+                f"{self.base_url}/peers/{peer_id}/{semaphore}?{querystr}",
                 json=count,
                 timeout=30,
             )
@@ -178,12 +181,12 @@ class Client:
             # This should never be reached
             raise RuntimeError("Unexpected response from Server")
 
-    def restore(self, peer_id: int, acquired: Dict[str, int]):
+    def restore(self, peer_id: int, acquired: Dict[str, int], expires_in: timedelta):
         def send_request():
             response = requests.post(
                 f"{self.base_url}/restore",
                 json={
-                    "expires_in": _format_timedelta(self.expiration_time),
+                    "expires_in": _format_timedelta(expires_in),
                     "peer_id": peer_id,
                     "acquired": acquired,
                 },
@@ -227,6 +230,7 @@ class Client:
         This is important to unblock other clients which may be waiting for the
         semaphore remainder to increase.
         """
+
         def send_request():
             response = requests.delete(f"{self.base_url}/peers/{peer_id}")
             return response
@@ -237,6 +241,7 @@ class Client:
         """
         Release a lock to a semaphore for a specific peer
         """
+
         def send_request():
             response = requests.delete(f"{self.base_url}/peers/{peer_id}/{semaphore}")
             return response
@@ -258,14 +263,15 @@ class Client:
         # Number of expired peers
         return json.loads(response.text)
 
-    def heartbeat(self, peer_id: int):
+    def heartbeat(self, peer_id: int, expires_in: timedelta):
         """
         Sends a PUT request to the server, updating the expiration timestamp.
         """
+
         def send_request():
             response = requests.put(
                 f"{self.base_url}/peers/{peer_id}",
-                json={"expires_in": _format_timedelta(self.expiration_time)},
+                json={"expires_in": _format_timedelta(expires_in)},
                 timeout=30,
             )
             return response

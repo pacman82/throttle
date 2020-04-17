@@ -1,9 +1,9 @@
 import pickle
 
-from throttle_client import Client
+from throttle_client import Client, Peer
 
 
-def test_pickle():
+def test_client():
     """Ensure we can pickle client."""
 
     a = Client(f"https://dummy-endpoint")
@@ -11,4 +11,3 @@ def test_pickle():
     b = pickle.loads(serialized)
 
     assert a.base_url == b.base_url
-    assert a.expiration_time == b.expiration_time

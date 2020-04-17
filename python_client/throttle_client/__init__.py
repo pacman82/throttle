@@ -24,11 +24,17 @@ class Peer:
         client: Client,
         id: Optional[int] = None,
         acquired: Optional[Dict[str, int]] = None,
+        expiration_time: Optional[timedelta] = None,
     ):
+        if expiration_time:
+            self.expiration_time = expiration_time
+        else:
+            self.expiration_time = timedelta(minutes=5)
+
         self.client = client
 
         if id is None:
-            self.id = client.new_peer()
+            self.id = client.new_peer(expires_in=self.expiration_time)
         else:
             self.id = id
 
@@ -59,7 +65,13 @@ class Peer:
 
         Return `True` if the lock is active.
         """
-        if self.client.acquire(self.id, semaphore, count=count, block_for=block_for):
+        if self.client.acquire(
+            self.id,
+            semaphore,
+            count=count,
+            block_for=block_for,
+            expires_in=self.expiration_time,
+        ):
             # Remember that we acquired that lock, so heartbeat can restore it, if need
             # be.
             self.acquired[semaphore] = count
@@ -73,7 +85,7 @@ class Peer:
         the communication had been interrupted and the peer expired. Usually called as a reaction
         to a 'Unkown Peer' error.
         """
-        self.client.restore(self.id, self.acquired)
+        self.client.restore(self.id, self.acquired, expires_in=self.expiration_time)
 
     def release(self, semaphore: str):
         """
@@ -83,7 +95,7 @@ class Peer:
 
     def heartbeat(self):
         """Send heartbeat to server, so the peer does not expire"""
-        self.client.heartbeat(self.id)
+        self.client.heartbeat(self.id, expires_in=self.expiration_time)
 
     def has_acquired(self) -> bool:
         """`True` if this peer has acquired locks."""
@@ -92,12 +104,6 @@ class Peer:
     def remove_from_server(self):
         """Delete the peer from the server"""
         self.client.release(self.id)
-
-    def _acquired(self, semaphore: str, count: int):
-        """
-        Remember that the pending lock is now acquired.
-        """
-        self.acquired.update({semaphore: count})
 
 
 # Heartbeat is implemented via an event, rather than a thread with a sleep, so we can

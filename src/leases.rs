@@ -198,9 +198,9 @@ impl Peer {
     }
 
     /// Relase a pending or acquired lock, to a semaphore.
-    /// 
+    ///
     /// # Return
-    /// 
+    ///
     /// `true` if a pending lock has been released.
     fn release_lock(&mut self, semaphore: &str) -> bool {
         let prev = self.acquired.remove(semaphore);
@@ -417,12 +417,17 @@ impl Leases {
     }
 
     /// Release a lock associated with a peer.
-    /// 
+    ///
     /// # Return
-    /// 
+    ///
     /// `true` if the lock had been pending.
-    pub fn release_lock(&mut self, peer_id: PeerId, semaphore: &str) -> Result<bool, ThrottleError> {
-        let was_pending = self.ledger
+    pub fn release_lock(
+        &mut self,
+        peer_id: PeerId,
+        semaphore: &str,
+    ) -> Result<bool, ThrottleError> {
+        let was_pending = self
+            .ledger
             .get_mut(&peer_id)
             .ok_or(ThrottleError::UnknownPeer)?
             .release_lock(semaphore);

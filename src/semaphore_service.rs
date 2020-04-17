@@ -61,8 +61,7 @@ async fn release(path: Path<PeerId>, state: Data<State>) -> HttpResponse {
 /// Used as a query parameter in requests. E.g. `?expires_in=5m`.
 #[derive(Deserialize)]
 struct AcquireQuery {
-    #[serde(with = "humantime_serde")]
-    expires_in: Duration,
+    expires_in: Option<HumanDuration>,
     // Don't know how to use `humantime_serde` without wrapper inside an `Option`.
     block_for: Option<HumanDuration>,
 }
@@ -85,8 +84,9 @@ async fn acquire(
     let semaphore = &path.1;
     // Turn `Option<HumantimeDuratino>` into `Option<Duration>`.
     let wait_for = query.block_for.map(|hd| hd.0);
+    let expires_in = query.expires_in.map(|hd| hd.0);
     match state
-        .acquire(peer_id, semaphore, amount, wait_for, query.expires_in)
+        .acquire(peer_id, semaphore, amount, wait_for, expires_in)
         .await
     {
         Ok(true) => HttpResponse::Ok().json(peer_id),

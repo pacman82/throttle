@@ -10,7 +10,7 @@ pub struct LoggingConfig {
     /// Configures a Gelf Logger
     pub gelf: Option<GelfConfig>,
     #[serde(default)]
-    pub stderr: StdErrConfig
+    pub stderr: StdErrConfig,
 }
 
 #[derive(Deserialize, PartialEq, Eq, Clone, Debug)]
@@ -28,12 +28,14 @@ pub struct GelfConfig {
 #[derive(Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct StdErrConfig {
     /// E.g. "INFO" or "DEBUG"
-    pub level: String
+    pub level: String,
 }
 
 impl Default for StdErrConfig {
     fn default() -> Self {
-        StdErrConfig{ level: "WARN".to_string() }
+        StdErrConfig {
+            level: "WARN".to_string(),
+        }
     }
 }
 
@@ -52,7 +54,8 @@ pub fn init(config: &LoggingConfig) -> Result<(), Error> {
         eprintln!(
             "Gelf logger config not found => Using environment logger writing to stderr instead."
         );
-        let environment = env_logger::Env::default().filter_or("THROTTLE_LOG", config.stderr.level.as_str());
+        let environment =
+            env_logger::Env::default().filter_or("THROTTLE_LOG", config.stderr.level.as_str());
         env_logger::from_env(environment).init();
     }
     Ok(())

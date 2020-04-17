@@ -67,7 +67,7 @@ impl State {
         semaphore: &str,
         amount: u32,
         wait_for: Option<Duration>,
-        expires_in: Duration,
+        expires_in: Option<Duration>,
     ) -> Result<bool, ThrottleError> {
         let max = *self
             .semaphores
@@ -81,8 +81,10 @@ impl State {
             });
         }
         let mut leases = self.leases.lock().unwrap();
-        let valid_until = Instant::now() + expires_in;
-        leases.update_valid_until(peer_id, valid_until)?;
+        if let Some(expires_in) = expires_in {
+            let valid_until = Instant::now() + expires_in;
+            leases.update_valid_until(peer_id, valid_until)?;
+        }
         let acquired = leases.acquire(peer_id, semaphore, amount, Some(max))?;
         if acquired {
             // Resolve this immediatly, if we can
@@ -329,14 +331,14 @@ mod tests {
 
         // First three locks can be acquired immediatly
         let one = state.new_peer(one_sec);
-        assert!(state.acquire(one, "A", 1, None, one_sec).await.unwrap());
+        assert!(state.acquire(one, "A", 1, None, None).await.unwrap());
         let two = state.new_peer(one_sec);
-        assert!(state.acquire(two, "A", 1, None, one_sec).await.unwrap());
+        assert!(state.acquire(two, "A", 1, None, None).await.unwrap());
         let three = state.new_peer(one_sec);
-        assert!(state.acquire(three, "A", 1, None, one_sec).await.unwrap());
+        assert!(state.acquire(three, "A", 1, None, None).await.unwrap());
         // The fourth must wait
         let four = state.new_peer(one_sec);
-        assert!(!state.acquire(four, "A", 1, None, one_sec).await.unwrap());
+        assert!(!state.acquire(four, "A", 1, None, None).await.unwrap());
     }
 
     #[tokio::test]
@@ -351,13 +353,13 @@ mod tests {
         let p: Vec<_> = (0..6).map(|_| state.new_peer(one_sec)).collect();
 
         // First three locks can be acquired immediatly
-        state.acquire(p[0], "A", 1, None, one_sec).await.unwrap();
-        state.acquire(p[1], "A", 1, None, one_sec).await.unwrap();
-        state.acquire(p[2], "A", 1, None, one_sec).await.unwrap();
+        state.acquire(p[0], "A", 1, None, None).await.unwrap();
+        state.acquire(p[1], "A", 1, None, None).await.unwrap();
+        state.acquire(p[2], "A", 1, None, None).await.unwrap();
         // The four, five and six must wait
-        state.acquire(p[3], "A", 1, None, one_sec).await.unwrap();
-        state.acquire(p[4], "A", 1, None, one_sec).await.unwrap();
-        state.acquire(p[5], "A", 1, None, one_sec).await.unwrap();
+        state.acquire(p[3], "A", 1, None, None).await.unwrap();
+        state.acquire(p[4], "A", 1, None, None).await.unwrap();
+        state.acquire(p[5], "A", 1, None, None).await.unwrap();
         // Remainder is zero due to the three leases intially acquired
         assert_eq!(state.remainder("A").unwrap(), 0);
         // Release one of the first three. Four should now be acquired.
@@ -386,13 +388,13 @@ mod tests {
         let p: Vec<_> = (0..6).map(|_| state.new_peer(one_sec)).collect();
 
         // First three locks can be acquired immediatly
-        state.acquire(p[0], "A", 1, None, one_sec).await.unwrap();
-        state.acquire(p[1], "A", 1, None, one_sec).await.unwrap();
-        state.acquire(p[2], "A", 1, None, one_sec).await.unwrap();
+        state.acquire(p[0], "A", 1, None, None).await.unwrap();
+        state.acquire(p[1], "A", 1, None, None).await.unwrap();
+        state.acquire(p[2], "A", 1, None, None).await.unwrap();
         // The four, five and six must wait
-        state.acquire(p[3], "A", 1, None, one_sec).await.unwrap();
-        state.acquire(p[4], "A", 1, None, one_sec).await.unwrap();
-        state.acquire(p[5], "A", 1, None, one_sec).await.unwrap();
+        state.acquire(p[3], "A", 1, None, None).await.unwrap();
+        state.acquire(p[4], "A", 1, None, None).await.unwrap();
+        state.acquire(p[5], "A", 1, None, None).await.unwrap();
         // Remainder is zero due to the three leases intially acquired
         assert_eq!(state.remainder("A").unwrap(), 0);
         // Release one of the first three. Four should now be acquired.
@@ -416,12 +418,12 @@ mod tests {
         let one_sec = Duration::from_secs(1);
 
         let first = state.new_peer(one_sec);
-        assert!(state.acquire(first, "A", 1, None, one_sec).await.unwrap());
-        assert!(state.acquire(first, "A", 1, None, one_sec).await.unwrap());
+        assert!(state.acquire(first, "A", 1, None, None).await.unwrap());
+        assert!(state.acquire(first, "A", 1, None, None).await.unwrap());
 
         let second = state.new_peer(one_sec);
-        assert!(!state.acquire(second, "A", 1, None, one_sec).await.unwrap());
-        assert!(!state.acquire(second, "A", 1, None, one_sec).await.unwrap());
+        assert!(!state.acquire(second, "A", 1, None, None).await.unwrap());
+        assert!(!state.acquire(second, "A", 1, None, None).await.unwrap());
     }
 
     #[tokio::test]
@@ -434,13 +436,13 @@ mod tests {
 
         let first = state.new_peer(one_sec);
         // Acquire one of 'A' and 'B' each.
-        assert!(state.acquire(first, "A", 1, None, one_sec).await.unwrap());
-        assert!(state.acquire(first, "B", 1, None, one_sec).await.unwrap());
+        assert!(state.acquire(first, "A", 1, None, None).await.unwrap());
+        assert!(state.acquire(first, "B", 1, None, None).await.unwrap());
 
         let second = state.new_peer(one_sec);
         // Second can still acquire lock to 'A' since its full count is 2, but 'B' must pend.
-        assert!(state.acquire(second, "A", 1, None, one_sec).await.unwrap());
-        assert!(!state.acquire(second, "B", 1, None, one_sec).await.unwrap());
+        assert!(state.acquire(second, "A", 1, None, None).await.unwrap());
+        assert!(!state.acquire(second, "B", 1, None, None).await.unwrap());
 
         state.release(first);
         assert!(state.is_acquired(second).unwrap());
