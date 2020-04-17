@@ -18,8 +18,9 @@ def test_error_on_leasing_unknown_semaphore():
     unknown to the server.
     """
     with throttle_client(b"[semaphores]") as client:
+        peer = Peer(client=client)
         with pytest.raises(Exception, match=r"Unknown semaphore"):
-            with lock(client, "Unknown"):
+            with lock(peer, "Unknown"):
                 pass
 
 
@@ -29,7 +30,8 @@ def test_remainder():
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         assert 1 == client.remainder("A")
-        with lock(client, "A"):
+        peer = Peer(client=client)
+        with lock(peer, "A"):
             assert 0 == client.remainder("A")
         assert 1 == client.remainder("A")
 
@@ -41,7 +43,8 @@ def test_server_recovers_pending_lock_after_state_loss():
     acquired_lease = False
 
     def acquire_lease_concurrent(client):
-        with lock(client, "A", timeout=timedelta(seconds=10)):
+        peer = Peer(client=client)
+        with lock(peer, "A", timeout=timedelta(seconds=10)):
             nonlocal acquired_lease
             acquired_lease = True
 
@@ -80,7 +83,8 @@ def test_keep_lease_alive_beyond_expiration():
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         client.expiration_time = timedelta(seconds=1)
-        with lock(client, "A", heartbeat_interval=timedelta(seconds=0)) as _:
+        peer = Peer(client=client)
+        with lock(peer, "A", heartbeat_interval=timedelta(seconds=0)) as _:
             sleep(1.5)
             # Evens though enough time has passed, our lease should not be
             # expired, thanks to the heartbeat.
@@ -110,7 +114,8 @@ def test_lock_count_larger_one():
     """
 
     with throttle_client(b"[semaphores]\nA=5") as client:
-        with lock(client, "A", count=3):
+        peer = Peer(client=client)
+        with lock(peer, "A", count=3):
             assert client.remainder("A") == 2
         assert client.remainder("A") == 5
 
@@ -157,10 +162,11 @@ def test_try_lock():
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         # We hold the lease, all following calls are going to block
-        first = client.new_peer()
-        client.acquire(first, "A")
+        first = Peer(client=client)
+        first.acquire("A")
+        second = Peer(client=client)
         with pytest.raises(Timeout):
-            with lock(client, "A", timeout=timedelta(seconds=1)):
+            with lock(second, "A", timeout=timedelta(seconds=1)):
                 pass
 
 
@@ -172,7 +178,8 @@ def test_recover_from_unknown_peer_during_acquisition_lock():
     acquired_lease = False
 
     def acquire_lease_concurrent(client):
-        with lock(client, "A", timeout=timedelta(seconds=10)):
+        peer = Peer(client=client)
+        with lock(peer, "A", timeout=timedelta(seconds=10)):
             nonlocal acquired_lease
             acquired_lease = True
 
@@ -199,10 +206,10 @@ def test_peer_recovery_after_server_reboot():
     """
     Heartbeat must restore peers, after server reboot.
     """
-    peer = Peer(id=5, acquired={"A": 1})
     # Server is shutdown. Boot a new one wich does not know about this peer
     with throttle_client(b"[semaphores]\nA=1") as client:
-        heartbeat = Heartbeat(client, peer, interval=timedelta(milliseconds=10))
+        peer = Peer(client=client, id=5, acquired={"A": 1})
+        heartbeat = Heartbeat(peer, interval=timedelta(milliseconds=10))
         heartbeat.start()
         # Wait for heartbeat and restore, to go through
         sleep(2)
@@ -216,12 +223,13 @@ def test_nested_locks():
     Nested locks should be well behaved
     """
     with throttle_client(b"[semaphores]\nA=1\nB=1") as client:
-        with lock(client, "A") as peer:
+        peer = Peer(client=client)
+        with lock(peer, "A"):
 
             assert client.remainder("A") == 0
             assert client.remainder("B") == 1
 
-            with lock(client, "B", peer=peer):
+            with lock(peer, "B"):
 
                 assert client.remainder("A") == 0
                 assert client.remainder("B") == 0
@@ -237,12 +245,11 @@ def test_multiple_peer_recovery_after_server_reboot():
     """
     Heartbeat must restore all locks for a peer, after server reboot.
     """
-    # Bogus peer id. Presumably from a peer created before the server reboot.
-    peer = Peer(id=42, acquired={"A": 1, "B": 1, "C": 1})
-
     # Server is shutdown. Boot a new one wich does not know about the peers
     with throttle_client(b"[semaphores]\nA=1\nB=1\nC=1") as client:
-        heartbeat = Heartbeat(client, peer, interval=timedelta(milliseconds=10))
+        # Bogus peer id. Presumably from a peer created before the server reboot.
+        peer = Peer(client=client, id=42, acquired={"A": 1, "B": 1, "C": 1})
+        heartbeat = Heartbeat(peer, interval=timedelta(milliseconds=10))
         heartbeat.start()
         # Wait for heartbeat and restore, to go through
         sleep(2)

@@ -69,6 +69,8 @@ class Client:
         * `expiration_time`: If the heartbeat does not prolong the lifetime of this peer
         its locks are going to be released, after this timeout.
         """
+
+        # TODO: move expiration time to peer
         self.expiration_time = expiration_time
         self.base_url = base_url
 
@@ -155,7 +157,7 @@ class Client:
             expires_in = self.expiration_time
         expires_in_str = _format_timedelta(expires_in)
 
-        if block_for:
+        if block_for is not None:
             blockstr = f"block_for={_format_timedelta(block_for)}&"
         else:
             blockstr = ""

@@ -123,13 +123,13 @@ throttle_pending{semaphore="A"} 0
 Throttle ships with a Python client. Here is how to use it in a nutshell.
 
 ```python
-from throttle_client import Client, lock
+from throttle_client import Peer, lock
 
 # Configure endpoint to throttle server
-c = Client("http://localhost:8000")
+p = Peer.from_server_url("http://localhost:8000")
 
 # Use client configuraton to acquire a lock (amount 1) to semaphore A
-with lock(c, "A"):
+with lock(p, "A"):
     # Do stuff while holding lock to "A"
     # ...
 

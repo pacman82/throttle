@@ -61,6 +61,7 @@ delayed if the peer holding the lock previously did expire, rather than release 
 0.2.0 Next
 ----------
 
+* High level python interface entry points are now `Peer` and `Lock` rather than `Client` and `Lock`.
 * Removed HTTP route `/freeze`.
 * Recover from unknown peer is now handled on the client side.
   * Uses new route `/restore`.
