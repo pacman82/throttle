@@ -205,7 +205,9 @@ def test_nested_locks():
     """
     Nested locks should be well behaved
     """
-    with throttle_client(b"[semaphores]\nA=1\nB=1") as client:
+    with throttle_client(
+        b"[semaphores]\nA={ max=1, level=1 }\nB={ max=1, level=0 }"
+    ) as client:
         peer = Peer(client=client)
         with lock(peer, "A"):
 

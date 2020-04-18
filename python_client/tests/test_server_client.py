@@ -241,7 +241,9 @@ def test_acquire_two_locks_with_one_peer():
     Releasing a lock, while keeping its peer, must still enable other locks to be
     acquired.
     """
-    with throttle_client(b"[semaphores]\nA=1\nB=1") as client:
+    with throttle_client(
+        b"[semaphores.A]\nmax=1\nlevel=1\n" b"[semaphores.B]\nmax=1\nlevel=0\n"
+    ) as client:
         one = client.new_peer(expires_in=timedelta(minutes=1))
         two = client.new_peer(expires_in=timedelta(minutes=1))
 

@@ -69,11 +69,12 @@ impl State {
         wait_for: Option<Duration>,
         expires_in: Option<Duration>,
     ) -> Result<bool, ThrottleError> {
-        let max = self
+        let sem = self
             .semaphores
             .get(semaphore)
-            .ok_or(ThrottleError::UnknownSemaphore)?
-            .max;
+            .ok_or(ThrottleError::UnknownSemaphore)?;
+        let max = sem.max;
+        let level = sem.level;
         // Return early if lease can never be acquired
         if max < amount {
             return Err(ThrottleError::ForeverPending { asked: amount, max });
@@ -83,7 +84,9 @@ impl State {
             let valid_until = Instant::now() + expires_in;
             leases.update_valid_until(peer_id, valid_until)?;
         }
-        let acquired = leases.acquire(peer_id, semaphore, amount, max)?;
+        let acquired = leases.acquire(peer_id, semaphore, amount, max, level, |s| {
+            self.semaphores.get(s).unwrap().level
+        })?;
         if acquired {
             // Resolve this immediatly, if we can
             debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
@@ -162,7 +165,7 @@ impl State {
             !acquired.is_empty()
         );
 
-        for (semaphore, _count) in acquired {
+        for semaphore in acquired.keys() {
             // Assert semaphore exists. We want to give the client an error and also do not want to
             // allow any Unknown Semaphore into `leases`. Also we want to fail fast, before
             // acquiring the lock to `leases`.
@@ -442,7 +445,7 @@ mod tests {
     #[tokio::test]
     async fn two_pending_locks() {
         let mut semaphores = Semaphores::new();
-        semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 0 });
+        semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 1 });
         semaphores.insert(String::from("B"), SemaphoreCfg { max: 1, level: 0 });
         let state = State::new(semaphores);
         let one_sec = Duration::from_secs(1);
@@ -522,7 +525,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[should_panic] // Lock hierarchies not yet implemented.
     async fn enforce_lock_hierachies() {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 1 });
@@ -536,7 +538,10 @@ mod tests {
         // This should result in a lock hierachie violation
         assert!(matches!(
             state.acquire(first, "A", 1, None, None).await,
-            Err(ThrottleError::Deadlock)
+            Err(ThrottleError::Deadlock {
+                current: 0,
+                requested: 1
+            })
         ));
     }
 }

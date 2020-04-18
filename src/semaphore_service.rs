@@ -22,7 +22,7 @@ impl ResponseError for ThrottleError {
             | ThrottleError::UnknownSemaphore
             | ThrottleError::InvalidLockCount { .. } => StatusCode::BAD_REQUEST,
             ThrottleError::ForeverPending { .. }
-            | ThrottleError::Deadlock
+            | ThrottleError::Deadlock { .. }
             | ThrottleError::ChangeThroughRestore
             | ThrottleError::AlreadyPending => StatusCode::CONFLICT,
             ThrottleError::ShrinkingLockCount => StatusCode::NOT_IMPLEMENTED,
