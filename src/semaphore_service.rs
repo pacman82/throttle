@@ -22,6 +22,7 @@ impl ResponseError for ThrottleError {
             ThrottleError::UnknownSemaphore => StatusCode::BAD_REQUEST,
             ThrottleError::ForeverPending { .. } => StatusCode::CONFLICT,
             ThrottleError::Deadlock => StatusCode::CONFLICT,
+            ThrottleError::AlreadyPending => StatusCode::CONFLICT,
             ThrottleError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
         }
     }

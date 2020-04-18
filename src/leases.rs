@@ -155,19 +155,22 @@ impl Peer {
     }
 
     /// Adds a lock for the semaphore to the peer
-    fn add_lock(&mut self, semaphore: String, count: i64, acquired: bool) {
+    fn add_lock(&mut self, semaphore: String, count: i64, acquired: bool) -> Result<(), ThrottleError>{
+        if self.pending.is_some() {
+            return Err(ThrottleError::AlreadyPending);
+        };
         if acquired {
             let prev = self.acquired.insert(semaphore, count);
             debug_assert!(prev.is_none());
         } else {
             let since = Instant::now();
-            debug_assert!(self.pending.is_none());
             self.pending = Some(Lock {
                 semaphore,
                 count,
                 since,
             });
         }
+        Ok(())
     }
 
     /// Instance since when the peer is waiting for the semaphore.
@@ -265,10 +268,10 @@ impl Leases {
     ///
     /// * `peer_id`: Should this be None, a new peer_id is going to be generated,
     ///              otherwise the provided one is used.
-    /// * `max`: If set to `None` the new leasel are always going to be active. This is
-    ///          useful to handle revenat peers with active leaves. If a value is set a
-    ///          check is performed and the lease are only going to be active, if it
-    ///          would not exceed the full counts of the involved semaphores.
+    /// * `semaphore`: Name of the semaphore to which a lock is requested.
+    /// * `amount`: Requested amount of the semaphore.
+    /// * `max`: A check is performed and the lock is only going to be acquired, if the total demand
+    /// for the requested semaphore would not exceed the `max`.
     ///
     /// # Return
     ///
@@ -278,7 +281,7 @@ impl Leases {
         peer_id: PeerId,
         semaphore: &str,
         amount: u32,
-        max: Option<i64>,
+        max: i64,
     ) -> Result<bool, ThrottleError> {
         let amount = amount as i64;
 
@@ -298,7 +301,7 @@ impl Leases {
             }
         }
 
-        // Since this creates a new peer, we know it has the most recent timestamp. This implies
+        // Since this creates a new lock, we know it has the most recent timestamp. This implies
         // that due to fairness every other peer has priority over this one taking the lock.
         // Therfore we only take the lock (if a check on max is performed at all), if the total
         // demand is smaller than max.semaphore_service
@@ -306,16 +309,63 @@ impl Leases {
         // Note: This is different than taking the lock from a semaphore for which the count is
         // smaller than max in situations there e.g. a lock with a count of 5 is pending with while
         // the remainder is 3.
-        let acquired = max
-            .map(|max| self.demand_smaller_or_equal(semaphore, max - amount))
-            .unwrap_or(true);
+        let acquired = self.demand_smaller_or_equal(semaphore, max - amount);
 
         self.ledger
             .get_mut(&peer_id)
             .unwrap()
-            .add_lock(semaphore.to_owned(), amount, acquired);
+            .add_lock(semaphore.to_owned(), amount, acquired)?;
 
         Ok(acquired)
+    }
+
+    /// Restore all the acquired locks for a forgotten peer. This will always succeed indpedent of
+    /// current counts.
+    ///
+    /// # Parameters
+    ///
+    /// * `peer_id`: Peer for which the locks are restored.
+    /// * `acquired`: Semaphore names and counts, acquired by this peer.
+    ///
+    /// # Return
+    ///
+    /// Returns `true` if, and only if, all locks of the peer are acquired.
+    /// 
+    /// The peer to restore has the lock already acquired, so there is no point in checking it
+    /// against the full semaphore count. The resource the semaphore is protecting is already being
+    /// accessed by it. It's just the throttle server that seems to not know about this. Better to
+    /// count it as acquired anyway, even if we increment our active semaphore count beyond the
+    /// full count. 
+    pub fn restore(
+        &mut self,
+        peer_id: PeerId,
+        acquired: &HashMap<String, u32>
+    ) -> Result<(), ThrottleError>{
+        // Compare with previous state of the lock. If the same amount for the same semaphore has
+        // been demanded already, do nothing.
+        let peer = self
+            .ledger
+            .get_mut(&peer_id)
+            .ok_or(ThrottleError::UnknownPeer)?;
+
+        for (semaphore, &amount) in acquired {
+            let amount = amount as i64;
+
+            let previous_demand = peer.count_demand(semaphore);
+            if previous_demand != 0 {
+                match amount.cmp(&previous_demand) {
+                    // TODO: Reduce lock count and notify if not pending.
+                    Ordering::Less => return Err(ThrottleError::NotImplemented),
+                    Ordering::Equal => (),
+                    Ordering::Greater => return Err(ThrottleError::Deadlock),
+                }
+            }
+    
+            let acquired = true;
+            peer.add_lock(semaphore.to_owned(), amount, acquired)?;
+        }
+
+        Ok(())
     }
 
     /// Aggregated count of active leases for the semaphore

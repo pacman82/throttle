@@ -86,7 +86,7 @@ impl State {
             let valid_until = Instant::now() + expires_in;
             leases.update_valid_until(peer_id, valid_until)?;
         }
-        let acquired = leases.acquire(peer_id, semaphore, amount, Some(max))?;
+        let acquired = leases.acquire(peer_id, semaphore, amount, max)?;
         if acquired {
             // Resolve this immediatly, if we can
             debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
@@ -180,17 +180,9 @@ impl State {
         // Peer id might theoretically clash, but for now, I don't believe this is realistic.
         leases.new_peer_at(peer_id, valid_until);
 
-        for (semaphore, &count) in acquired {
-            // If the restored lease has the lock already acquired, there is no point in checking it
-            // against the full semaphore count. The resource the semaphore is protecting is already
-            // being accessed by it. Better to count it as acquired anyway, even if we increment our
-            // active semaphore count beyond the full count.
-            //
-            // By passing None as max rather than the value obtained above, we opt out checking the
-            // semaphore full count and allow exceeding it.
-            let max = None;
-            leases.acquire(peer_id, semaphore, count, max)?;
-        }
+        // Acquired all locks for the peer
+        leases.restore(peer_id, acquired)?;
+
         Ok(())
     }
 
@@ -451,21 +443,44 @@ mod tests {
         assert!(state.is_acquired(second).unwrap());
     }
 
-//     #[tokio::test]
-//     async fn enforce_lock_hierachies() {
-//         let mut semaphores = Semaphores::new();
-//         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 1 });
-//         semaphores.insert(String::from("B"), SemaphoreCfg { max: 1, level: 0 });
-//         let state = State::new(semaphores);
-//         let one_sec = Duration::from_secs(1);
+    /// Provoke two pending locks for the same peer.
+    #[tokio::test]
+    async fn two_pending_locks() {
+        let mut semaphores = Semaphores::new();
+        semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 0 });
+        semaphores.insert(String::from("B"), SemaphoreCfg { max: 1, level: 0 });
+        let state = State::new(semaphores);
+        let one_sec = Duration::from_secs(1);
 
-//         let first = state.new_peer(one_sec);
-//         // Try acquiring in wrong order. First B then A.
-//         state.acquire(first, "B", 1, None, None).await.unwrap();
-//         // This should result in a lock hierachie violation
-//         assert!(matches!(
-//             state.acquire(first, "A", 1, None, None).await,
-//             Err(ThrottleError::Deadlock)
-//         ));
-//     }
-// }
+        // Acquire both semaphores with blocker, so all other locks are going to be pending.
+        let blocker = state.new_peer(one_sec);
+        state.acquire(blocker, "A", 1, None, None).await.unwrap();
+        state.acquire(blocker, "B", 1, None, None).await.unwrap();
+
+        let peer = state.new_peer(one_sec);
+        assert!(!state.acquire(peer, "A", 1, None, None).await.unwrap());
+        assert!(matches!(
+            state.acquire(peer, "B", 1, None, None).await,
+            Err(ThrottleError::AlreadyPending)
+        ));
+    }
+
+    #[tokio::test]
+    #[should_panic] // Lock hierarchies not yet implemented.
+    async fn enforce_lock_hierachies() {
+        let mut semaphores = Semaphores::new();
+        semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 1 });
+        semaphores.insert(String::from("B"), SemaphoreCfg { max: 1, level: 0 });
+        let state = State::new(semaphores);
+        let one_sec = Duration::from_secs(1);
+
+        let first = state.new_peer(one_sec);
+        // Try acquiring in wrong order. First B then A.
+        state.acquire(first, "B", 1, None, None).await.unwrap();
+        // This should result in a lock hierachie violation
+        assert!(matches!(
+            state.acquire(first, "A", 1, None, None).await,
+            Err(ThrottleError::Deadlock)
+        ));
+    }
+}
