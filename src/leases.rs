@@ -228,6 +228,14 @@ impl Peer {
             Err(ThrottleError::ChangeThroughRestore)
         }
     }
+
+    /// Current lock level of the peer. Which is the minimum lock level of all acquired locks.
+    fn level(&self, lock_levels: impl Fn(&str) -> i32) -> Option<i32> {
+        self.acquired
+            .keys()
+            .map(|semaphore| lock_levels(semaphore))
+            .min()
+    }
 }
 
 /// Every peer has a unique PeerId associated with it for bookkeeping.
@@ -284,6 +292,8 @@ impl Leases {
         semaphore: &str,
         amount: i64,
         max: i64,
+        level: i32,
+        lock_levels: impl Fn(&str) -> i32,
     ) -> Result<bool, ThrottleError> {
         if amount < 1 {
             return Err(ThrottleError::InvalidLockCount { count: amount });
@@ -301,7 +311,22 @@ impl Leases {
                 // TODO: Reduce lock count and notify if not pending.
                 Ordering::Less => return Err(ThrottleError::ShrinkingLockCount),
                 Ordering::Equal => return Ok(peer.all_acquired()),
-                Ordering::Greater => return Err(ThrottleError::Deadlock),
+                Ordering::Greater => {
+                    return Err(ThrottleError::Deadlock {
+                        current: level,
+                        requested: level,
+                    })
+                }
+            }
+        }
+
+        // Check for lock hierarchy violation
+        if let Some(current) = peer.level(lock_levels) {
+            if current <= level {
+                return Err(ThrottleError::Deadlock {
+                    current,
+                    requested: level,
+                });
             }
         }
 

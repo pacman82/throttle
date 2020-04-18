@@ -177,7 +177,7 @@ mod tests {
 
         let verbose = "
                       [semaphores]\n\
-                      A = { max=42 }\n\
+                      A = { max=42, level=0 }\n\
                       \n\
                     ";
         let verbose: ApplicationCfg = toml::from_str(verbose).unwrap();
