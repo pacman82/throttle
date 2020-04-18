@@ -17,7 +17,9 @@ pub enum ThrottleError {
     #[error("Already pending. Only one pendig lock per peer is allowed.")]
     AlreadyPending,
     #[error("Lock count must be a positive number. Found: {count:?}.")]
-    InvalidLockCount { count : i64 },
+    InvalidLockCount { count: i64 },
+    #[error("Restore is not allowed to change existing peers.")]
+    ChangeThroughRestore,
     #[error("Not Implemented.")]
     NotImplemented,
 }

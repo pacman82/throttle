@@ -82,9 +82,9 @@ struct Peer {
 
 impl Peer {
     /// Creates a new Peer instance with no locks associated.
-    fn new(valid_until: Instant) -> Self {
+    fn new(valid_until: Instant, acquired: HashMap<String, i64>) -> Self {
         Self {
-            acquired: HashMap::new(),
+            acquired,
             pending: None,
             valid_until,
         }
@@ -218,6 +218,16 @@ impl Peer {
             false
         }
     }
+
+    /// Assert that restoring this peer to the specfied locks is vaild. I.e the peer must not have a
+    /// pending lock and have the same locks acquired. So apart from the timestamp nothing changes.
+    fn assert_restore_valid(&self, acquired: &HashMap<String, i64>) -> Result<(), ThrottleError> {
+        if self.pending.is_none() && acquired == &self.acquired {
+            Ok(())
+        } else {
+            Err(ThrottleError::ChangeThroughRestore)
+        }
+    }
 }
 
 /// Every peer has a unique PeerId associated with it for bookkeeping.
@@ -246,24 +256,11 @@ impl Leases {
     /// manipulate its state.
     pub fn new_peer(&mut self, valid_until: Instant) -> PeerId {
         let id = self.new_unique_peer_id();
-        let old = self.ledger.insert(id, Peer::new(valid_until));
+        let acquired = HashMap::new();
+        let old = self.ledger.insert(id, Peer::new(valid_until, acquired));
         // There should not be any preexisting entry with this id
         debug_assert!(old.is_none());
         id
-    }
-
-    /// Creates a new peer with an existing peer id.
-    ///
-    /// This is useful, to restore revenants (i.e. Peers for which we receive a heartbeat after we
-    /// removed them, due to expiration). This way we can restore them without having to change the
-    /// peer id on the client side.
-    ///
-    /// It's the responsibility of the caller to ensure this method is not called with an already
-    /// existing peer id.
-    pub fn new_peer_at(&mut self, id: PeerId, valid_until: Instant) {
-        let old = self.ledger.insert(id, Peer::new(valid_until));
-        // There should not be any preexisting entry with this id
-        assert!(old.is_none());
     }
 
     /// Acquires a lock for a peer. If the count of the semaphore is high enough, the lease is going
@@ -326,19 +323,30 @@ impl Leases {
         Ok(acquired)
     }
 
-    /// Restore all the acquired locks for a forgotten peer. This will always succeed indpedent of
-    /// current counts.
+    /// Creates a new peer with an existing peer id.
     ///
     /// # Parameters
     ///
     /// * `peer_id`: Peer for which the locks are restored.
     /// * `acquired`: Semaphore names and counts, acquired by this peer.
+    /// * `valid_until`: The instant until the new peer remains valid (i.e. does not expire).
     ///
     /// # Return
     ///
     /// Returns `true` if, and only if, all locks of the peer are acquired.
     ///
-    /// The peer to restore has the lock already acquired, so there is no point in checking it
+    /// This is useful, to restore revenants (i.e. Peers for which we receive a heartbeat after we
+    /// removed them, due to expiration). This way we can restore them without having to change the
+    /// peer id on the client side.
+    ///
+    /// It's the responsibility of the caller to ensure this method is not called with an already
+    /// existing peer id, or if the peer should exist, that it is identical to the one, that would
+    /// be created through restore. This exception is made in order to be idempotent.
+    ///
+    /// This will acquire all the locks for the forgotten peer. This will always succeed indpedent
+    /// of current demand.
+    ///
+    /// The peer to restore had the lock already acquired, so there is no point in checking it
     /// against the full semaphore count. The resource the semaphore is protecting is already being
     /// accessed by it. It's just the throttle server that seems to not know about this. Better to
     /// count it as acquired anyway, even if we increment our active semaphore count beyond the
@@ -347,21 +355,23 @@ impl Leases {
         &mut self,
         peer_id: PeerId,
         acquired: &HashMap<String, i64>,
+        valid_until: Instant,
     ) -> Result<(), ThrottleError> {
         if let Some(&count) = acquired.values().find(|&&c| c < 1) {
-            return Err(ThrottleError::InvalidLockCount{ count });
+            return Err(ThrottleError::InvalidLockCount { count });
         }
 
-        // Compare with previous state of the lock. If the same amount for the same semaphore has
-        // been demanded already, do nothing.
-        let peer = self
-            .ledger
-            .get_mut(&peer_id)
-            .ok_or(ThrottleError::UnknownPeer)?;
-
-        for (semaphore, &amount) in acquired {
-            let acquired = true;
-            peer.add_lock(semaphore.to_owned(), amount, acquired)?;
+        // We don't want to allow changing existing peers through the restore route.
+        if let Some(prev) = self.ledger.get(&peer_id) {
+            // A peer already exists. Check if it holds exactly the acquired locks, and does not
+            // have a pending one.
+            prev.assert_restore_valid(&acquired)?;
+        } else {
+            // Insert new peer
+            let peer = self
+                .ledger
+                .insert(peer_id, Peer::new(valid_until, acquired.clone()));
+            debug_assert!(peer.is_none());
         }
 
         Ok(())

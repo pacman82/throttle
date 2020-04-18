@@ -174,11 +174,9 @@ impl State {
 
         let mut leases = self.leases.lock().unwrap();
         let valid_until = Instant::now() + expires_in;
-        // Peer id might theoretically clash, but for now, I don't believe this is realistic.
-        leases.new_peer_at(peer_id, valid_until);
 
         // Acquired all locks for the peer
-        leases.restore(peer_id, acquired)?;
+        leases.restore(peer_id, &acquired, valid_until)?;
 
         Ok(())
     }
@@ -503,6 +501,23 @@ mod tests {
         assert!(matches!(
             state.restore(peer, one_sec, &acquired),
             Err(ThrottleError::UnknownSemaphore)
+        ));
+    }
+
+    #[tokio::test]
+    async fn restore_cant_change_existing_peers() {
+        let mut semaphores = Semaphores::new();
+        semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 0 });
+        let state = State::new(semaphores);
+        let one_sec = Duration::from_secs(1);
+
+        let peer = state.new_peer(one_sec);
+
+        let mut acquired = HashMap::new();
+        acquired.insert(String::from("A"), 1);
+        assert!(matches!(
+            state.restore(peer, one_sec, &acquired),
+            Err(ThrottleError::ChangeThroughRestore)
         ));
     }
 

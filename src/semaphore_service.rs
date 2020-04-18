@@ -23,6 +23,7 @@ impl ResponseError for ThrottleError {
             | ThrottleError::InvalidLockCount { .. } => StatusCode::BAD_REQUEST,
             ThrottleError::ForeverPending { .. }
             | ThrottleError::Deadlock
+            | ThrottleError::ChangeThroughRestore
             | ThrottleError::AlreadyPending => StatusCode::CONFLICT,
             ThrottleError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
         }
