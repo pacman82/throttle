@@ -25,7 +25,7 @@ impl ResponseError for ThrottleError {
             | ThrottleError::Deadlock
             | ThrottleError::ChangeThroughRestore
             | ThrottleError::AlreadyPending => StatusCode::CONFLICT,
-            ThrottleError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
+            ThrottleError::ShrinkingLockCount => StatusCode::NOT_IMPLEMENTED,
         }
     }
 }

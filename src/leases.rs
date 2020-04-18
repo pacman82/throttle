@@ -299,7 +299,7 @@ impl Leases {
         if previous_demand != 0 {
             match amount.cmp(&previous_demand) {
                 // TODO: Reduce lock count and notify if not pending.
-                Ordering::Less => return Err(ThrottleError::NotImplemented),
+                Ordering::Less => return Err(ThrottleError::ShrinkingLockCount),
                 Ordering::Equal => return Ok(peer.all_acquired()),
                 Ordering::Greater => return Err(ThrottleError::Deadlock),
             }

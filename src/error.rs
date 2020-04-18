@@ -20,6 +20,6 @@ pub enum ThrottleError {
     InvalidLockCount { count: i64 },
     #[error("Restore is not allowed to change existing peers.")]
     ChangeThroughRestore,
-    #[error("Not Implemented.")]
-    NotImplemented,
+    #[error("Shrinking the count of an existing lock is currently not implemented.")]
+    ShrinkingLockCount,
 }
