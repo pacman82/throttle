@@ -30,7 +30,7 @@ impl ResponseError for ThrottleError {
     }
 }
 
-type Leases = HashMap<String, i64>;
+type Locks = HashMap<String, i64>;
 
 /// Strict alias around `Duration`. Yet it serializes from a human readable representation.
 #[derive(Deserialize, Clone, Copy)]
@@ -114,7 +114,7 @@ pub struct Restore {
     #[serde(with = "humantime_serde")]
     expires_in: Duration,
     peer_id: PeerId,
-    acquired: Leases,
+    acquired: Locks,
 }
 
 /// Called by the client, after receiving `Unknown Peer`. Restores the state of the peer. The
