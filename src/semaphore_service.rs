@@ -29,7 +29,7 @@ impl ResponseError for ThrottleError {
     }
 }
 
-type Leases = HashMap<String, u32>;
+type Leases = HashMap<String, i64>;
 
 /// Strict alias around `Duration`. Yet it serializes from a human readable representation.
 #[derive(Deserialize, Clone, Copy)]

@@ -154,7 +154,7 @@ impl State {
         &self,
         peer_id: PeerId,
         expires_in: Duration,
-        acquired: &HashMap<String, u32>,
+        acquired: &HashMap<String, i64>,
     ) -> Result<(), ThrottleError> {
         warn!(
             "Revenant Peer {}. Has locks: {}",
@@ -473,6 +473,36 @@ mod tests {
         assert!(matches!(
             state.acquire(peer, "A", 0, None, None).await,
             Err(ThrottleError::InvalidLockCount { count: 0 })
+        ));
+    }
+
+    #[tokio::test]
+    async fn restore_with_lock_count_zero() {
+        let mut semaphores = Semaphores::new();
+        semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 0 });
+        let state = State::new(semaphores);
+        let one_sec = Duration::from_secs(1);
+
+        let peer = 5;
+        let mut acquired = HashMap::new();
+        acquired.insert(String::from("A"), 0);
+        assert!(matches!(
+            state.restore(peer, one_sec, &acquired),
+            Err(ThrottleError::InvalidLockCount { count: 0 })
+        ));
+    }
+
+    #[tokio::test]
+    async fn restore_with_unknown_semaphore() {
+        let state = State::new(Semaphores::new());
+        let one_sec = Duration::from_secs(1);
+
+        let peer = 5;
+        let mut acquired = HashMap::new();
+        acquired.insert(String::from("A"), 1);
+        assert!(matches!(
+            state.restore(peer, one_sec, &acquired),
+            Err(ThrottleError::UnknownSemaphore)
         ));
     }
 

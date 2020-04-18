@@ -155,7 +155,12 @@ impl Peer {
     }
 
     /// Adds a lock for the semaphore to the peer
-    fn add_lock(&mut self, semaphore: String, count: i64, acquired: bool) -> Result<(), ThrottleError>{
+    fn add_lock(
+        &mut self,
+        semaphore: String,
+        count: i64,
+        acquired: bool,
+    ) -> Result<(), ThrottleError> {
         if self.pending.is_some() {
             return Err(ThrottleError::AlreadyPending);
         };
@@ -284,7 +289,7 @@ impl Leases {
         max: i64,
     ) -> Result<bool, ThrottleError> {
         if amount < 1 {
-            return Err(ThrottleError::InvalidLockCount { count: amount })
+            return Err(ThrottleError::InvalidLockCount { count: amount });
         }
 
         // Compare with previous state of the lock. If the same amount for the same semaphore has
@@ -332,17 +337,21 @@ impl Leases {
     /// # Return
     ///
     /// Returns `true` if, and only if, all locks of the peer are acquired.
-    /// 
+    ///
     /// The peer to restore has the lock already acquired, so there is no point in checking it
     /// against the full semaphore count. The resource the semaphore is protecting is already being
     /// accessed by it. It's just the throttle server that seems to not know about this. Better to
     /// count it as acquired anyway, even if we increment our active semaphore count beyond the
-    /// full count. 
+    /// full count.
     pub fn restore(
         &mut self,
         peer_id: PeerId,
-        acquired: &HashMap<String, u32>
-    ) -> Result<(), ThrottleError>{
+        acquired: &HashMap<String, i64>,
+    ) -> Result<(), ThrottleError> {
+        if let Some(&count) = acquired.values().find(|&&c| c < 1) {
+            return Err(ThrottleError::InvalidLockCount{ count });
+        }
+
         // Compare with previous state of the lock. If the same amount for the same semaphore has
         // been demanded already, do nothing.
         let peer = self
@@ -351,8 +360,6 @@ impl Leases {
             .ok_or(ThrottleError::UnknownPeer)?;
 
         for (semaphore, &amount) in acquired {
-            let amount = amount as i64;
-
             let previous_demand = peer.count_demand(semaphore);
             if previous_demand != 0 {
                 match amount.cmp(&previous_demand) {
@@ -362,7 +369,6 @@ impl Leases {
                     Ordering::Greater => return Err(ThrottleError::Deadlock),
                 }
             }
-    
             let acquired = true;
             peer.add_lock(semaphore.to_owned(), amount, acquired)?;
         }
