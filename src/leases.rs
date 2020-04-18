@@ -360,15 +360,6 @@ impl Leases {
             .ok_or(ThrottleError::UnknownPeer)?;
 
         for (semaphore, &amount) in acquired {
-            let previous_demand = peer.count_demand(semaphore);
-            if previous_demand != 0 {
-                match amount.cmp(&previous_demand) {
-                    // TODO: Reduce lock count and notify if not pending.
-                    Ordering::Less => return Err(ThrottleError::NotImplemented),
-                    Ordering::Equal => (),
-                    Ordering::Greater => return Err(ThrottleError::Deadlock),
-                }
-            }
             let acquired = true;
             peer.add_lock(semaphore.to_owned(), amount, acquired)?;
         }
