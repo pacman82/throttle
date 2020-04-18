@@ -16,6 +16,8 @@ pub enum ThrottleError {
     Deadlock,
     #[error("Already pending. Only one pendig lock per peer is allowed.")]
     AlreadyPending,
+    #[error("Lock count must be a positive number. Found: {count:?}.")]
+    InvalidLockCount { count : i64 },
     #[error("Not Implemented.")]
     NotImplemented,
 }

@@ -65,7 +65,7 @@ impl State {
         &self,
         peer_id: PeerId,
         semaphore: &str,
-        amount: u32,
+        amount: i64,
         wait_for: Option<Duration>,
         expires_in: Option<Duration>,
     ) -> Result<bool, ThrottleError> {
@@ -75,11 +75,8 @@ impl State {
             .ok_or(ThrottleError::UnknownSemaphore)?
             .max;
         // Return early if lease can never be acquired
-        if max < amount as i64 {
-            return Err(ThrottleError::ForeverPending {
-                asked: amount as i64,
-                max,
-            });
+        if max < amount {
+            return Err(ThrottleError::ForeverPending { asked: amount, max });
         }
         let mut leases = self.leases.lock().unwrap();
         if let Some(expires_in) = expires_in {
@@ -462,6 +459,20 @@ mod tests {
         assert!(matches!(
             state.acquire(peer, "B", 1, None, None).await,
             Err(ThrottleError::AlreadyPending)
+        ));
+    }
+
+    #[tokio::test]
+    async fn acquire_zero() {
+        let mut semaphores = Semaphores::new();
+        semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 0 });
+        let state = State::new(semaphores);
+        let one_sec = Duration::from_secs(1);
+
+        let peer = state.new_peer(one_sec);
+        assert!(matches!(
+            state.acquire(peer, "A", 0, None, None).await,
+            Err(ThrottleError::InvalidLockCount { count: 0 })
         ));
     }
 

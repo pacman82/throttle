@@ -280,10 +280,12 @@ impl Leases {
         &mut self,
         peer_id: PeerId,
         semaphore: &str,
-        amount: u32,
+        amount: i64,
         max: i64,
     ) -> Result<bool, ThrottleError> {
-        let amount = amount as i64;
+        if amount < 1 {
+            return Err(ThrottleError::InvalidLockCount { count: amount })
+        }
 
         // Compare with previous state of the lock. If the same amount for the same semaphore has
         // been demanded already, do nothing.

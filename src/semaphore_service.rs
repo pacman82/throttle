@@ -18,11 +18,12 @@ use std::{collections::HashMap, time::Duration};
 impl ResponseError for ThrottleError {
     fn status_code(&self) -> StatusCode {
         match self {
-            ThrottleError::UnknownPeer => StatusCode::BAD_REQUEST,
-            ThrottleError::UnknownSemaphore => StatusCode::BAD_REQUEST,
-            ThrottleError::ForeverPending { .. } => StatusCode::CONFLICT,
-            ThrottleError::Deadlock => StatusCode::CONFLICT,
-            ThrottleError::AlreadyPending => StatusCode::CONFLICT,
+            ThrottleError::UnknownPeer
+            | ThrottleError::UnknownSemaphore
+            | ThrottleError::InvalidLockCount { .. } => StatusCode::BAD_REQUEST,
+            ThrottleError::ForeverPending { .. }
+            | ThrottleError::Deadlock
+            | ThrottleError::AlreadyPending => StatusCode::CONFLICT,
             ThrottleError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
         }
     }
@@ -77,7 +78,7 @@ struct AcquireQuery {
 async fn acquire(
     path: Path<(PeerId, String)>,
     query: Query<AcquireQuery>,
-    body: Json<u32>,
+    body: Json<i64>,
     state: Data<State>,
 ) -> HttpResponse {
     let amount = body.0;
