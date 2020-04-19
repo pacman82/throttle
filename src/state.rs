@@ -77,7 +77,7 @@ impl State {
         let level = sem.level;
         // Return early if lease can never be acquired
         if max < amount {
-            return Err(ThrottleError::ForeverPending { asked: amount, max });
+            return Err(ThrottleError::Never { asked: amount, max });
         }
         let mut leases = self.leases.lock().unwrap();
         if let Some(expires_in) = expires_in {

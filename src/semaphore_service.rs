@@ -21,7 +21,7 @@ impl ResponseError for ThrottleError {
             ThrottleError::UnknownPeer
             | ThrottleError::UnknownSemaphore
             | ThrottleError::InvalidLockCount { .. } => StatusCode::BAD_REQUEST,
-            ThrottleError::ForeverPending { .. }
+            ThrottleError::Never { .. }
             | ThrottleError::Deadlock { .. }
             | ThrottleError::ChangeThroughRestore
             | ThrottleError::AlreadyPending => StatusCode::CONFLICT,

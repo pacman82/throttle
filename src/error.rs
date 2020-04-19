@@ -8,13 +8,12 @@ pub enum ThrottleError {
     #[error("Unknown peer")]
     UnknownPeer,
     #[error(
-        "Acquiring lock would block forever. Lock asks for count {asked:?} yet full count is only \
-        {max:?}."
+        "Lock can never be acquired. Lock asks for count {asked:?} yet full count is only {max:?}."
     )]
-    ForeverPending { asked: i64, max: i64 },
+    Never { asked: i64, max: i64 },
     #[error(
-        "May Deadlock. Due to violation of lock hierarchy. The current lock level is \
-            {current:?} the requested lock level was {requested:?}."
+        "Lock hierachy violation. This may deadlock. The current lock level is {current:?} the
+        requested lock level was {requested:?}."
     )]
     Deadlock { current: i32, requested: i32 },
     #[error("Already pending. Only one pendig lock per peer is allowed.")]

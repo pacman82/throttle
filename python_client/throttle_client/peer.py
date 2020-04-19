@@ -47,7 +47,9 @@ class Peer:
     def from_server_url(cls, baseurl: str):
         return cls(client=Client(base_url=baseurl))
 
-    def acquire(self, semaphore, count=1, block_for: timedelta = None) -> bool:
+    def acquire(
+        self, semaphore: str, count: int = 1, block_for: timedelta = None
+    ) -> bool:
         """
         Acquire a lock from the server.
 
@@ -103,6 +105,18 @@ class Peer:
         """Delete the peer from the server"""
         self.client.release(self.id)
 
+    def start_heartbeat(self):
+        """
+        Does nothing, but allows to use common interface for Peer and PeerWithHeartbeat.
+        """
+        pass
+
+    def stop_heartbeat(self):
+        """
+        Does nothing, but allows to use common interface for Peer and PeerWithHeartbeat.
+        """
+        pass
+
 
 # Heartbeat is implemented via an event, rather than a thread with a sleep, so we can
 # interupt and it, then the Application code wants to release the semaphores without
@@ -118,7 +132,7 @@ class PeerWithHeartbeat(Peer):
         id: Optional[int] = None,
         acquired: Optional[Dict[str, int]] = None,
         expiration_time: Optional[timedelta] = None,
-        heartbeat_interval: timedelta = Optional[timedelta],
+        heartbeat_interval: Optional[timedelta] = None,
     ):
         super(PeerWithHeartbeat, self).__init__(
             client=client, id=id, acquired=acquired, expiration_time=expiration_time
@@ -129,16 +143,23 @@ class PeerWithHeartbeat(Peer):
         else:
             self.interval_sec = 300  # 5min
         self.cancel = Event()
+        self.thread = None
+
+    def start_heartbeat(self):
         name = f"throttle_heartbeat_for_{current_thread().name}"
         self.thread = Thread(name=name, target=self._run)
 
-    def start_heartbeat(self):
         self.cancel.clear()
         self.thread.start()
 
     def stop_heartbeat(self):
+        """
+        Stops the heartbeat if running.
+        """
         self.cancel.set()
-        self.thread.join()
+        if self.thread is not None:
+            self.thread.join()
+            self.thread = None
 
     def _run(self):
         self.cancel.wait(self.interval_sec)

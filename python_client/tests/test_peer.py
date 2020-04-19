@@ -26,7 +26,7 @@ def test_lock_count_larger_than_full_count():
     exception is raised.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
-        with pytest.raises(ValueError, match="block forever"):
+        with pytest.raises(ValueError, match="Lock can never be acquired."):
             peer = Peer(client=client)
             peer.acquire("A", count=2)
 
