@@ -67,12 +67,26 @@ def lock(
     # Remember this moment in order to figure out later how much time has passed since
     # we started to acquire the lock
     start = time()
+    passed = timedelta(seconds=0)
     # We pass this as a parameter to the throttle server. It will wait for this amount of time
     # before answering, that the lease is still pending. In case the lease can be acquired it is
     # still going to answer immediatly, of course.
     block_for = timedelta(seconds=5)
 
     while True:
+        if timeout:
+            # If we time out in a timespan < block_for, we want to block only for the time
+            # until the timeout.
+            block_for = min(timeout - passed, block_for)
+
+        try:
+            if peer.acquire(semaphore, count=count, block_for=block_for):
+                # Remember that we acquired that lock, so heartbeat can restore it, if need be.
+                peer.acquired[semaphore] = count
+                break
+        except UnknownPeer:
+            peer.restore()
+
         if timeout:
             # The time between now and start is the amount of time we are waiting for the
             # lock.
@@ -81,19 +95,6 @@ def lock(
             # Figure out if the lock timed out
             if timeout < passed:
                 raise Timeout
-            # If we time out in a timespan < 5 seconds, we want to block only for the time
-            # until the timeout.
-            else:
-                block_for = min(timeout - passed, block_for)
-
-        try:
-            if peer.acquire(semaphore, count=count, block_for=block_for):
-                # Remember that we acquired that lock, so heartbeat can restore it, if need be.
-                peer.acquired[semaphore] = count
-                break
-
-        except UnknownPeer:
-            peer.restore()
 
     # Yield and have the heartbeat in an extra thread, during it being active.
     if hasattr(peer, "start_heartbeat"):
