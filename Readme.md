@@ -128,15 +128,15 @@ Throttle ships with a Python client. Here is how to use it in a nutshell.
 from throttle_client import Peer, lock
 
 # Configure endpoint to throttle server
-p = Peer.from_server_url("http://localhost:8000")
+url = "http://localhost:8000"
 
 # Acquire a lock (with count 1) to semaphore A
-with lock(p, "A"):
+with lock(url, "A"):
     # Do stuff while holding lock to "A"
     # ...
 
 # For acquiring lock count != 1 the count can be explicitly specified.
-with lock(p, "A", count=4):
+with lock(url, "A", count=4):
     # Do stuff while holding lock to "A"
     # ...
 
@@ -159,13 +159,13 @@ You want to acquire locks to them in a nested fashion:
 from throttle_client import Peer, lock
 
 # Configure endpoint to throttle server
-p = Peer.from_server_url("http://localhost:8000")
+url = "http://localhost:8000"
 
 # Acquire a lock to semaphore A
-with lock(p, "A"):
+with lock(url, "A"):
     # Do stuff while holding lock to "A"
     # ...
-    with lock(p, "B") # <-- This throws an exception: "Lock Hierarchie Violation".
+    with lock(url, "B") # <-- This throws an exception: "Lock Hierarchy Violation".
       # ...
 
 ```

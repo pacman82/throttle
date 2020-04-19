@@ -5,7 +5,7 @@ from time import sleep
 
 import requests
 
-from throttle_client import Client
+from throttle_client import Client, clear_peers
 
 # Endpoint of throttle server started by cargo main
 BASE_URL = "http://localhost:8000"
@@ -43,3 +43,15 @@ def throttle_client(config: bytes):
         cfg.close()
         with cargo_main(cfg=cfg.name) as _:
             yield Client(BASE_URL)
+
+
+@contextmanager
+def throttle(config: bytes):
+    with NamedTemporaryFile(delete=False) as cfg:
+        cfg.write(config)
+        cfg.close()
+        with cargo_main(cfg=cfg.name) as _:
+            try:
+                yield BASE_URL
+            finally:
+                clear_peers()

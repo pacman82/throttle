@@ -7,9 +7,26 @@ from time import sleep
 
 import pytest  # type: ignore
 
-from throttle_client import Client, Peer, PeerWithHeartbeat, Timeout, lock
+from throttle_client import (
+    Client,
+    Peer,
+    PeerWithHeartbeat,
+    Timeout,
+    get_local_peer,
+    lock,
+    set_local_peer,
+)
 
-from . import BASE_URL, cargo_main, throttle_client
+from . import BASE_URL, cargo_main, throttle
+
+
+def test_local_peer():
+    """
+    Must create peer with heartbeat
+    """
+    with throttle(b"[semaphores]") as url:
+        peer = get_local_peer(url)
+        assert isinstance(peer, PeerWithHeartbeat)
 
 
 def test_error_on_leasing_unknown_semaphore():
@@ -17,10 +34,9 @@ def test_error_on_leasing_unknown_semaphore():
     Verify what error we receive than acquiring a semaphore for a ressource
     unknown to the server.
     """
-    with throttle_client(b"[semaphores]") as client:
-        peer = Peer(client=client)
+    with throttle(b"[semaphores]") as url:
         with pytest.raises(Exception, match=r"Unknown semaphore"):
-            with lock(peer, "Unknown"):
+            with lock(url, "Unknown"):
                 pass
 
 
@@ -28,10 +44,10 @@ def test_remainder():
     """
     Verify that we can acquire a lock to semaphore and release it
     """
-    with throttle_client(b"[semaphores]\nA=1") as client:
+    with throttle(b"[semaphores]\nA=1") as url:
+        client = Client(url)
         assert 1 == client.remainder("A")
-        peer = Peer(client=client)
-        with lock(peer, "A"):
+        with lock(url, "A"):
             assert 0 == client.remainder("A")
         assert 1 == client.remainder("A")
 
@@ -43,8 +59,7 @@ def test_server_recovers_pending_lock_after_state_loss():
     acquired_lease = False
 
     def acquire_lease_concurrent(client):
-        peer = Peer(client=client)
-        with lock(peer, "A", timeout=timedelta(seconds=10)):
+        with lock(BASE_URL, "A", timeout=timedelta(seconds=10)):
             nonlocal acquired_lease
             acquired_lease = True
 
@@ -53,9 +68,9 @@ def test_server_recovers_pending_lock_after_state_loss():
         cfg.close()
         client = Client(BASE_URL)
         with cargo_main(cfg=cfg.name) as proc:
-            first = client.new_peer(expires_in=timedelta(minutes=1))
+            first = Peer(client=client, expiration_time=timedelta(minutes=1))
             # Acquire first peer
-            client.acquire(first, "A")
+            first.acquire("A")
             # Acquire second lease
             t = Thread(target=acquire_lease_concurrent, args=[client])
             t.start()
@@ -78,13 +93,17 @@ def test_server_recovers_pending_lock_after_state_loss():
 
 def test_keep_lease_alive_beyond_expiration():
     """
-    Validates that a heartbeat keeps the lease alive beyond the initial
-    expiration time.
+    Validates that a heartbeat keeps the lease alive beyond the initial expiration time.
     """
-    with throttle_client(b"[semaphores]\nA=1") as client:
-        client.expiration_time = timedelta(seconds=1)
-        peer = PeerWithHeartbeat(client=client, heartbeat_interval=timedelta(seconds=0))
-        with lock(peer, "A") as _:
+    with throttle(b"[semaphores]\nA=1") as url:
+        client = Client(url)
+        peer = PeerWithHeartbeat(
+            client=client,
+            heartbeat_interval=timedelta(seconds=0),
+            expiration_time=timedelta(seconds=1),
+        )
+        set_local_peer(url, peer)
+        with lock(url, "A") as _:
             sleep(1.5)
             # Evens though enough time has passed, our lease should not be
             # expired, thanks to the heartbeat.
@@ -96,9 +115,9 @@ def test_lock_count_larger_one():
     Assert that locks with a count > 1, decrement the semaphore count accordingly
     """
 
-    with throttle_client(b"[semaphores]\nA=5") as client:
-        peer = Peer(client=client)
-        with lock(peer, "A", count=3):
+    with throttle(b"[semaphores]\nA=5") as url:
+        client = Client(url)
+        with lock(url, "A", count=3):
             assert client.remainder("A") == 2
         assert client.remainder("A") == 5
 
@@ -108,25 +127,34 @@ def test_exception():
     Assert that lock is freed in the presence of exceptions in the client code
     """
 
-    with throttle_client(b"[semaphores]\nA=1") as client:
+    class OutOfCheese(Exception):
+        pass
+
+    checked = False
+
+    with throttle(b"[semaphores]\nA=1") as url:
+        client = Client(url)
         try:
-            with lock(client, "A"):
-                raise Exception()
-        except Exception:
+            with lock(url, "A"):
+                raise OutOfCheese()
+        except OutOfCheese:
             assert client.remainder("A") == 1
+            checked = True
+
+    # Make sure we entered exception handling
+    assert checked
 
 
 def test_try_lock():
     """
     Assert that a call to lock raises Timout Exception if pending to long
     """
-    with throttle_client(b"[semaphores]\nA=1") as client:
+    with throttle(b"[semaphores]\nA=1") as url:
         # We hold the lease, all following calls are going to block
-        first = Peer(client=client)
+        first = Peer.from_server_url(url)
         first.acquire("A")
-        second = Peer(client=client)
         with pytest.raises(Timeout):
-            with lock(second, "A", timeout=timedelta(seconds=1)):
+            with lock(BASE_URL, "A", timeout=timedelta(seconds=1)):
                 pass
 
 
@@ -137,26 +165,21 @@ def test_recover_from_unknown_peer_during_acquisition_lock():
     """
     acquired_lease = False
 
-    def acquire_lease_concurrent(client):
-        peer = Peer(client=client)
-        with lock(peer, "A", timeout=timedelta(seconds=10)):
+    def acquire_lease_concurrent(client: Client):
+        # Simulate expired peer: Create peer with bogus id.
+        peer = PeerWithHeartbeat(client=client, id=42)
+        set_local_peer(BASE_URL, peer)
+        # Lock must now restore the peer, after hitting `Unknown Peer` and acquire the
+        # lock to A afterwards.
+        with lock(BASE_URL, "A", timeout=timedelta(seconds=10)):
             nonlocal acquired_lease
             acquired_lease = True
 
     # Trigger `UnknownPeer` using litter collection. Let the peer expire really fast
-    with throttle_client(
-        b'litter_collection_interval="10ms"\n' b"[semaphores]\nA=1"
-    ) as client:
-        # Next peer should expire immediatly
-        client.expiration_time = timedelta(seconds=0)
+    with throttle(b"[semaphores]\nA=1") as url:
+        client = Client(url)
         t = Thread(target=acquire_lease_concurrent, args=[client])
         t.start()
-
-        # Give `new_peer` some time to go through, so we hit the edge case of getting an
-        # 'Unknown peer' response from the server during `acquire`.
-        sleep(2)
-
-        client.expiration_time = timedelta(minutes=5)
         t.join(timeout=10)
 
         assert acquired_lease
@@ -166,16 +189,16 @@ def test_nested_locks():
     """
     Nested locks should be well behaved
     """
-    with throttle_client(
+    with throttle(
         b"[semaphores]\nA={ max=1, level=1 }\nB={ max=1, level=0 }"
-    ) as client:
-        peer = Peer(client=client)
-        with lock(peer, "A"):
+    ) as url:
+        client = Client(url)
+        with lock(url, "A"):
 
             assert client.remainder("A") == 0
             assert client.remainder("B") == 1
 
-            with lock(peer, "B"):
+            with lock(url, "B"):
 
                 assert client.remainder("A") == 0
                 assert client.remainder("B") == 0

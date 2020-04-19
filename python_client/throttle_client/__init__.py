@@ -13,15 +13,31 @@ from .peer import Peer, PeerWithHeartbeat
 # Silence flake8 warning about unused import
 _reexport = [Client]
 
+
 # Keep track of peers local thread. This should usually be only contain one instance
 # each, because there should be only one throttle server. Having the peer thread local is
 # a sensible default, since lock hierachies are enforced on peer level. So you want to
 # have one peer for each thread.
 threadlocal = local()
-threadlocal.peers = {}
 
 
-def local_peer(url: str) -> Peer:
+def init_peers():
+    """
+    Check if peers is initialized on the local thread. If not initalize it.
+    """
+    peers = getattr(threadlocal, 'peers', None)
+    if peers is None:
+        threadlocal.peers = {}
+
+
+def clear_peers():
+    """
+    Reset thread local state
+    """
+    threadlocal.peers = {}
+
+
+def get_local_peer(url: str) -> Peer:
     """
     Gets an existing, or creates a new thread local peer instance.
 
@@ -29,10 +45,35 @@ def local_peer(url: str) -> Peer:
 
     * `url`: Base url to the throttle server. E.g. `http://localhost:8000/`
     """
+    init_peers()
     if url not in threadlocal.peers:
         peer = PeerWithHeartbeat.from_server_url(url)
         threadlocal.peers[url] = peer
     return threadlocal.peers[url]
+
+
+def set_local_peer(url: str, peer: Peer) -> Optional[Peer]:
+    """
+    Set a peer as the new thread local instance to use. This is useful as it allows for
+    manually calling the `Peer` constructor. `get_local_peer` would otherwise just
+    invoke the constructor with default arguments.
+
+    ## Keyword arguments:
+
+    * `url`: Base url to the throttle server. E.g. `http://localhost:8000/`
+    * `peer`: Instance of Peer to use
+
+    ## Return
+
+    Previous instance if existing.
+    """
+    init_peers()
+    if url in threadlocal.peers:
+        old = threadlocal.peers[url]
+    else:
+        old = None
+    threadlocal.peers[url] = peer
+    return old
 
 
 class Timeout(Exception):
@@ -46,7 +87,7 @@ class Timeout(Exception):
 
 @contextmanager
 def lock(
-    peer: Peer,
+    server_url: str,
     semaphore: str,
     count: int = 1,
     timeout: Optional[timedelta] = None,
@@ -64,6 +105,12 @@ def lock(
     * `heartbeat_interval`: Default interval for reneval of peer. Setting it to `None` will
     deactivate the heartbeat.
     """
+    peer = get_local_peer(server_url)
+
+    # During waiting for the lock, repeated calls to acquire, fill the role of the
+    # heartbeat.
+    peer.stop_heartbeat()
+
     # Remember this moment in order to figure out later how much time has passed since
     # we started to acquire the lock
     start = time()
@@ -96,23 +143,23 @@ def lock(
             if timeout < passed:
                 raise Timeout
 
-    # Yield and have the heartbeat in an extra thread, during it being active.
-    if hasattr(peer, "start_heartbeat"):
-        peer.start_heartbeat()
+    # Start heartbeat to keep lock alive during the time we hold it.
+    peer.start_heartbeat()
     try:
         yield peer
     finally:
-        if hasattr(peer, "stop_heartbeat"):
-            peer.stop_heartbeat()
-
+        assert peer.acquired.pop(semaphore) == count
         try:
-            assert peer.acquired.pop(semaphore) == count
             if peer.acquired:
-                # Acquired dict still holds locks, remove only this one
+                # Acquired dict still holds locks, remove only this one.
                 peer.release(semaphore)
+                # We don't stop the heartbeat, since we still hold other locks.
             else:
+                if isinstance(peer, PeerWithHeartbeat):
+                    peer.stop_heartbeat()
                 # No more locks associated with this peer. Let's remove it entirely
                 peer.remove_from_server()
+                del threadlocal.peers[server_url]
 
         except requests.ConnectionError:
             # Ignore recoverable errors. `release` retried alread. The litter collection on
