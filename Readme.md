@@ -18,6 +18,9 @@ Throttle aims to be easy to operate, well-behaved in edge cases and works withou
 * Resilient against Network outages.
   * Locks expire to prevent leaking semaphore count due to Network errors or client crashes.
   * Locks can be prolonged indefinetly using heartbeats which are send to the server.
+* Observability
+  * Prometheus Metrics
+  * Logging to stderr or gelf server
 * No persistence backend is required.
   * Server keeps state in memory.
   * Clients restore state to the server, in case of server reboot.
