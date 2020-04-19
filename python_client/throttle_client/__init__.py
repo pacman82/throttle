@@ -1,16 +1,38 @@
 from contextlib import contextmanager
 from datetime import timedelta
+from threading import local
 from time import time
 from typing import Iterator, Optional
 
 import requests
 
 from .client import UnknownPeer, Client
-from .peer import Heartbeat, Peer
+from .peer import Peer, PeerWithHeartbeat
 
 
 # Silence flake8 warning about unused import
 _reexport = [Client]
+
+# Keep track of peers local thread. This should usually be only contain one instance
+# each, because there should be only one throttle server. Having the peer thread local is
+# a sensible default, since lock hierachies are enforced on peer level. So you want to
+# have one peer for each thread.
+threadlocal = local()
+threadlocal.peers = {}
+
+
+def local_peer(url: str) -> Peer:
+    """
+    Gets an existing, or creates a new thread local peer instance.
+
+    ## Keyword arguments:
+
+    * `url`: Base url to the throttle server. E.g. `http://localhost:8000/`
+    """
+    if url not in threadlocal.peers:
+        peer = PeerWithHeartbeat.from_server_url(url)
+        threadlocal.peers[url] = peer
+    return threadlocal.peers[url]
 
 
 class Timeout(Exception):
@@ -27,7 +49,6 @@ def lock(
     peer: Peer,
     semaphore: str,
     count: int = 1,
-    heartbeat_interval: Optional[timedelta] = timedelta(minutes=5),
     timeout: Optional[timedelta] = None,
 ) -> Iterator[Peer]:
     """
@@ -75,14 +96,13 @@ def lock(
             peer.restore()
 
     # Yield and have the heartbeat in an extra thread, during it being active.
-    if heartbeat_interval is not None:
-        heartbeat = Heartbeat(peer, heartbeat_interval)
-        heartbeat.start()
+    if hasattr(peer, "start_heartbeat"):
+        peer.start_heartbeat()
     try:
         yield peer
     finally:
-        if heartbeat_interval is not None:
-            heartbeat.stop()
+        if hasattr(peer, "stop_heartbeat"):
+            peer.stop_heartbeat()
 
         try:
             assert peer.acquired.pop(semaphore) == count
