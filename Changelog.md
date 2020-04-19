@@ -58,8 +58,8 @@ already been acquired.
 delayed if the peer holding the lock previously did expire, rather than release its lock.
 * New route `is_acquired` tells if all the locks of a peer could be acquired.
 
-0.2.0 Next
-----------
+0.2.0
+-----
 
 * High level python interface entry points are now `Peer` and `Lock` rather than `Client` and `Lock`.
 * Removed HTTP route `/freeze`.
@@ -69,3 +69,8 @@ delayed if the peer holding the lock previously did expire, rather than release 
 * Acquiring locks is now idempotent
 * One peer can now hold multiple locks
 * Log level to stderr can now be configured in `throttle.toml`.
+
+0.2.1
+-----
+
+* Lock hierachies are enforced.

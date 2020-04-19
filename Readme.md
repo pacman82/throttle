@@ -12,12 +12,14 @@ Throttle aims to be easy to operate, well-behaved in edge cases and works withou
 
 * Server builds and runs on Windows, Linux, and OS-X.
 * Python Client is available.
+* Prevents Deadlocks, through enforcing lock hierarchies.
 * Fairness (longer waiting peers have priority)
-  * Peers acquiring locks with a large count, won't be starved by lots of others with a small one.
+* Peers acquiring locks with a large count, won't be starved by lots of others with a small one.
 * Locks expire to prevent leaking semaphore count due to Network errors or client crashes.
-* Locks can be prolonged indefinetly by sending heartbeats of the server.
+  * Locks can be prolonged indefinetly using heartbeats which are send to the server.
 * No persistence backend is required.
-  * Server recovers state from heartbeats in case of reboot.
+  * Server keeps bookeeping in memory.
+  * Clients can restore state to the server, in case of server reboot.
 
 *Work in progress, interfaces are still unstable.*
 
@@ -128,12 +130,56 @@ from throttle_client import Peer, lock
 # Configure endpoint to throttle server
 p = Peer.from_server_url("http://localhost:8000")
 
-# Use client configuraton to acquire a lock (amount 1) to semaphore A
+# Acquire a lock (with count 1) to semaphore A
 with lock(p, "A"):
     # Do stuff while holding lock to "A"
     # ...
 
+# For acquiring lock count != 1 the count can be explicitly specified.
+with lock(p, "A", count=4):
+    # Do stuff while holding lock to "A"
+    # ...
+
 # A is released at the end of with block
+```
+
+### Preventing Deadlocks with lock hierarchies
+
+Assume two semaphores `A` and `B`.
+
+```toml
+[semaphores]
+A = 1
+B = 1
+```
+
+You want to acquire locks to them in a nested fashion:
+
+```python
+from throttle_client import Peer, lock
+
+# Configure endpoint to throttle server
+p = Peer.from_server_url("http://localhost:8000")
+
+# Acquire a lock to semaphore A
+with lock(p, "A"):
+    # Do stuff while holding lock to "A"
+    # ...
+    with lock(p, "B") # <-- This throws an exception: "Lock Hierarchie Violation".
+      # ...
+
+```
+
+The throttle server helps you preventing deadlocks. If `A` and `B` are not always locked in the same
+order, your system might deadlock at some point. Such errors can be hard to Debug, which is why
+throttle fails early at any chance of deadlock. To enable the use case above, give `A` a lock level
+higher than `B`.
+
+```toml
+[semaphores]
+A = { max=1, level=1 }
+# Level 0 is default. So the short notation is still good for B.
+B = 1
 ```
 
 ### Http routes
@@ -147,9 +193,22 @@ with lock(p, "A"):
 
 * `Post` `new_peer`: Creates a new peer. The body to this request must contain a human readable time duration with dimension in quotes. E.g.: `"expires_in": "5m"`, `"expires_in": "30s"` or `"expires_in": "12h"`. This is the time after which the peer is going to expire if not kept alive by prolonging its expiration time. Every lock acquired is always associated with a peer. If a peer expires, all locks are released. The request returns a random integer as peer id.
 * `Delete` `/peer/{id}`: Removes the peer, releasing all its locks in the process. Every call to `new_peer` should be matched by a call to this route, so other peers do not have to wait for this peer to expire in order to acquire locks to the same semaphores.
-* `Put` `/peer/{id}/{semaphore}`: Acquires lock to a semaphore for an existing peer. The body must contain the desired lock count. Throttle will answer either with `200 Ok` in case the lock could be acquired, or `202 Accepted` in case the lock can not be acquired until other peers release their lock. Specifying a lock count higher than the full count of the lock message or violating lock hierarchy will result in a `409 Conflict` error. Requesting a lock for an unknown semaphore or unknown peer is going to result in `400 Bad Request`. This request is idempotent, so acquiring locks can be repeated in case of a timeout, without risk of draining the semaphore. If waiting for a lock on the client side, busy waiting can be avoided using the optional `block_for` query parameter. E.g. `/peer/{id}/{semaphore}?block_for=10s`.
+* `Put` `/peer/{id}/{semaphore}`: Acquires lock to a semaphore for an existing peer. The body must contain the desired lock count. Throttle will answer either with `200 Ok` in case the lock could be acquired, or `202 Accepted` in case the lock can not be acquired until other peers release their lock. Specifying a lock count higher than the full count of the lock message or violating lock hierarchy will result in a `409 Conflict` error. Requesting a lock for an unknown semaphore or unknown peer is going to result in `400 Bad Request`. This request is idempotent, so acquiring locks can be repeated in case of a timeout, without risk of draining the semaphore. If waiting for a lock on the client side, busy waiting can be avoided using the optional `block_for` query parameter. E.g. `/peer/{id}/{semaphore}?block_for=10s`. The semantics for acquiring a lock with count `0` would be akward, so it's forbidden for now.
+* `Delete` `/peer/{id}/{semaphore}`: Releases one specific lock for a peer.
+* `POST` `/restore`: Can be used by the client to react to a `400 Bad Request` those body contains `Unknown Semaphore`. This error indicates that the server does not remeber the clients state (e.g. the client may have expired due to prolonged connection loss). In this situation the client may choose to restore its previous state and acquired locks to the server. The body contains a JSON like this:
 
-WIP document routes used to acquire / relaese / hold semaphores.
+```json
+{
+  "expires_in": "5m",
+  "peer_id": 42,
+  "acquired": {
+    "A": 3,
+    "B": 1
+  }
+}
+```
+
+This would restore a client with id `42` and a lifetime of 5 minutes. It has a lock with count 3 to `A` and one with count 1 to `B`.
 
 ## Installation
 
