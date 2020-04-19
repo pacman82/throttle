@@ -1,5 +1,5 @@
 from datetime import timedelta
-from threading import Event, Thread
+from threading import current_thread, Event, Thread
 from typing import Dict, Optional
 
 import requests
@@ -113,7 +113,8 @@ class Heartbeat:
         # Interval in between heartbeats for an active lease
         self.interval_sec = interval.total_seconds()
         self.cancel = Event()
-        self.thread = Thread(target=self._run)
+        name = f"throttle_heartbeat_for_{current_thread().name}"
+        self.thread = Thread(name=name, target=self._run)
 
     def start(self):
         self.cancel.clear()
