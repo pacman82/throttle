@@ -411,15 +411,9 @@ impl Leases {
     }
 
     /// Should a peer with `peer_id` be found, it is removed and the names of the semaphores it
-    /// holds is returned.
-    pub fn remove_peer(&mut self, peer_id: PeerId) -> Result<Vec<String>, ThrottleError> {
-        let semaphores = self
-            .ledger
-            .remove(&peer_id)
-            .ok_or(ThrottleError::UnknownPeer)?
-            .clear();
-
-        Ok(semaphores)
+    /// holds is returned. If the `peer_id` has not been found `None` is returned.
+    pub fn remove_peer(&mut self, peer_id: PeerId) -> Option<Vec<String>> {
+        self.ledger.remove(&peer_id).map(|mut p| p.clear())
     }
 
     /// Acquires pending leases for the semaphore until its count is >= max. It acquires the locks

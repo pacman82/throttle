@@ -210,7 +210,7 @@ impl State {
     pub fn release(&self, peer_id: PeerId) -> bool {
         let mut leases = self.leases.lock().unwrap();
         match leases.remove_peer(peer_id) {
-            Ok(semaphores) => {
+            Some(semaphores) => {
                 // Keep book about all peers, those locks have been acquired, so we can notify their pending
                 // requests.
                 let mut resolved_peers = Vec::new();
@@ -225,11 +225,10 @@ impl State {
                 self.wakers.resolve_with(&resolved_peers, Ok(()));
                 true
             }
-            Err(ThrottleError::UnknownPeer) => {
+            None => {
                 warn!("Deletion of unknown peer.");
                 false
             }
-            Err(_) => panic!("Remove can only fail with 'UnknownPeer'."),
         }
     }
 
