@@ -195,20 +195,22 @@ B = 1
 * `Delete` `/peer/{id}`: Removes the peer, releasing all its locks in the process. Every call to `new_peer` should be matched by a call to this route, so other peers do not have to wait for this peer to expire in order to acquire locks to the same semaphores.
 * `Put` `/peer/{id}/{semaphore}`: Acquires lock to a semaphore for an existing peer. The body must contain the desired lock count. Throttle will answer either with `200 Ok` in case the lock could be acquired, or `202 Accepted` in case the lock can not be acquired until other peers release their lock. Specifying a lock count higher than the full count of the lock message or violating lock hierarchy will result in a `409 Conflict` error. Requesting a lock for an unknown semaphore or unknown peer is going to result in `400 Bad Request`. This request is idempotent, so acquiring locks can be repeated in case of a timeout, without risk of draining the semaphore. If waiting for a lock on the client side, busy waiting can be avoided using the optional `block_for` query parameter. E.g. `/peer/{id}/{semaphore}?block_for=10s`. The semantics for acquiring a lock with count `0` would be akward, so it's forbidden for now.
 * `Delete` `/peer/{id}/{semaphore}`: Releases one specific lock for a peer.
-* `POST` `/restore`: Can be used by the client to react to a `400 Bad Request` those body contains `Unknown Semaphore`. This error indicates that the server does not remeber the clients state (e.g. the client may have expired due to prolonged connection loss). In this situation the client may choose to restore its previous state and acquired locks to the server. The body contains a JSON like this:
+* `Post` `/restore`: Can be used by the client to react to a `400 Bad Request` those body contains `Unknown Semaphore`. This error indicates that the server does not remeber the clients state (e.g. the client may have expired due to prolonged connection loss). In this situation the client may choose to restore its previous state and acquired locks to the server. The body contains a JSON like this:
 
-```json
-{
-  "expires_in": "5m",
-  "peer_id": 42,
-  "acquired": {
-    "A": 3,
-    "B": 1
+  ```json
+  {
+    "expires_in": "5m",
+    "peer_id": 42,
+    "acquired": {
+      "A": 3,
+      "B": 1
+    }
   }
-}
-```
+  ```
 
-This would restore a client with id `42` and a lifetime of 5 minutes. It has a lock with count 3 to `A` and one with count 1 to `B`.
+  This would restore a client with id `42` and a lifetime of 5 minutes. It has a lock with count 3 to `A` and one with count 1 to `B`.
+* `Get` `/remainder?semaphore={semaphore}`: Answers the maximum semaphore count minus the sum of all acquired locks for this semaphore. Response is a plain text integer.
+* `Get` `/peers/{id}/is_acquired`: Answers `false` if peer has a pending lock. If all the locks of the peer are acquired the answer is `true`.
 
 ## Installation
 
