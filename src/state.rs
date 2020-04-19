@@ -281,20 +281,20 @@ impl State {
 
 lazy_static! {
     static ref FULL_COUNT: IntGaugeVec = register_int_gauge_vec!(
-        "throttle_full_count",
-        "New leases which would increase the count beyond this limit are pending.",
+        "throttle_max",
+        "Maximum allowed lock count for this semaphore.",
         &["semaphore"]
     )
     .expect("Error registering throttle_full_count metric");
     static ref COUNT: IntGaugeVec = register_int_gauge_vec!(
-        "throttle_count",
-        "Accumulated count of all active leases",
+        "throttle_acquired",
+        "Sum of all acquired locks.",
         &["semaphore"]
     )
     .expect("Error registering throttle_count metric");
     static ref PENDING: IntGaugeVec = register_int_gauge_vec!(
         "throttle_pending",
-        "Accumulated count of all pending leases",
+        "Sum of all pending locks",
         &["semaphore"]
     )
     .expect("Error registering throttle_count metric");

@@ -103,19 +103,19 @@ level = "INFO"
 Throttle supports Prometheus metrics, via the `/metrics` endpoint. Depending on your configuration and state they may e.g. look like this:
 
 ```prometheus
-# HELP throttle_count Accumulated count of all active leases
-# TYPE throttle_count gauge
-throttle_count{semaphore="A"} 0
-# HELP throttle_full_count New leases which would increase the count beyond this limit are pending.
-# TYPE throttle_full_count gauge
-throttle_full_count{semaphore="A"} 42
+# HELP throttle_acquired Sum of all acquired locks.
+# TYPE throttle_acquired gauge
+throttle_acquired{semaphore="A"} 0
 # HELP throttle_longest_pending_sec Time the longest pending peer is waiting until now, to acquire a lock to a semaphore.
 # TYPE throttle_longest_pending_sec gauge
 throttle_longest_pending_sec{semaphore="A"} 0
+# HELP throttle_max Maximum allowed lock count for this semaphore.
+# TYPE throttle_max gauge
+throttle_max{semaphore="A"} 42
 # HELP throttle_num_404 Number of Get requests to unknown resource.
 # TYPE throttle_num_404 counter
 throttle_num_404 0
-# HELP throttle_pending Accumulated count of all pending leases
+# HELP throttle_pending Sum of all pending locks
 # TYPE throttle_pending gauge
 throttle_pending{semaphore="A"} 0
 ```
