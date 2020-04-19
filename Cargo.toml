@@ -40,25 +40,25 @@ path = "src/main.rs"
 
 [dependencies]
 actix-web = "2.0.0"
-structopt = "0.3.12"
-structopt-derive = "0.4.5"
+structopt = "0.3.13"
+structopt-derive = "0.4.6"
 prometheus = "0.8.0"
 lazy_static = "1.4.0"
 gelf = "0.5.0"
-serde = "1.0.105"
-serde_json = "1.0.48"
+serde = "1.0.106"
+serde_json = "1.0.51"
 failure = "0.1.7"
-actix-rt = "1.0.0"
+actix-rt = "1.1.0"
 toml = "0.5.6"
 rand = "0.7.3"
 env_logger = "0.7.1"
 humantime-serde = "1.0.0"
-thiserror = "1.0.13"
+thiserror = "1.0.15"
 version = "3.0.0"
 
 # We use it explicitly for the time::timeout feature
 [dependencies.tokio]
-version = "0.2.13"
+version = "0.2.18"
 features = ["rt-threaded", "macros"]
 
 [dependencies.log]
