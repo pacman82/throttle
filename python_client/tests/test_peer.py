@@ -3,7 +3,7 @@ from time import sleep
 
 import pytest  # type: ignore
 
-from throttle_client import Heartbeat, Peer
+from throttle_client import Peer, PeerWithHeartbeat
 
 from . import throttle_client
 
@@ -37,12 +37,16 @@ def test_peer_recovery_after_server_reboot():
     """
     # Server is shutdown. Boot a new one wich does not know about this peer
     with throttle_client(b"[semaphores]\nA=1") as client:
-        peer = Peer(client=client, id=5, acquired={"A": 1})
-        heartbeat = Heartbeat(peer, interval=timedelta(milliseconds=10))
-        heartbeat.start()
+        peer = PeerWithHeartbeat(
+            client=client,
+            id=5,
+            acquired={"A": 1},
+            heartbeat_interval=timedelta(milliseconds=10),
+        )
+        peer.start_heartbeat()
         # Wait for heartbeat and restore, to go through
         sleep(2)
-        heartbeat.stop()
+        peer.stop_heartbeat()
         # Which implies the remainder of A being 0
         assert client.remainder("A") == 0
 
@@ -54,12 +58,16 @@ def test_multiple_peer_recovery_after_server_reboot():
     # Server is shutdown. Boot a new one wich does not know about the peers
     with throttle_client(b"[semaphores]\nA=1\nB=1\nC=1") as client:
         # Bogus peer id. Presumably from a peer created before the server reboot.
-        peer = Peer(client=client, id=42, acquired={"A": 1, "B": 1, "C": 1})
-        heartbeat = Heartbeat(peer, interval=timedelta(milliseconds=10))
-        heartbeat.start()
+        peer = PeerWithHeartbeat(
+            client=client,
+            id=42,
+            acquired={"A": 1, "B": 1, "C": 1},
+            heartbeat_interval=timedelta(milliseconds=10),
+        )
+        peer.start_heartbeat()
         # Wait for heartbeat and restore, to go through
         sleep(2)
-        heartbeat.stop()
+        peer.stop_heartbeat()
         # Which implies the remainder of A, B, C being 0
         assert client.remainder("A") == 0
         assert client.remainder("B") == 0

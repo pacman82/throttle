@@ -1,5 +1,5 @@
 from datetime import timedelta
-from threading import current_thread, Event, Thread
+from threading import Event, Thread, current_thread
 from typing import Dict, Optional
 
 import requests
@@ -107,30 +107,46 @@ class Peer:
 # Heartbeat is implemented via an event, rather than a thread with a sleep, so we can
 # interupt and it, then the Application code wants to release the semaphores without
 # waiting for the current interval to finish
-class Heartbeat:
-    def __init__(self, peer: Peer, interval: timedelta):
-        self.peer = peer
+class PeerWithHeartbeat(Peer):
+    """
+    Extends peer with a cancellable heartbeat, which runs in a separate thread.
+    """
+
+    def __init__(
+        self,
+        client: Client,
+        id: Optional[int] = None,
+        acquired: Optional[Dict[str, int]] = None,
+        expiration_time: Optional[timedelta] = None,
+        heartbeat_interval: timedelta = Optional[timedelta],
+    ):
+        super(PeerWithHeartbeat, self).__init__(
+            client=client, id=id, acquired=acquired, expiration_time=expiration_time
+        )
         # Interval in between heartbeats for an active lease
-        self.interval_sec = interval.total_seconds()
+        if heartbeat_interval is not None:
+            self.interval_sec = heartbeat_interval.total_seconds()
+        else:
+            self.interval_sec = 300  # 5min
         self.cancel = Event()
         name = f"throttle_heartbeat_for_{current_thread().name}"
         self.thread = Thread(name=name, target=self._run)
 
-    def start(self):
+    def start_heartbeat(self):
         self.cancel.clear()
         self.thread.start()
 
-    def stop(self):
+    def stop_heartbeat(self):
         self.cancel.set()
         self.thread.join()
 
     def _run(self):
         self.cancel.wait(self.interval_sec)
-        while self.peer.has_acquired() and not self.cancel.is_set():
+        while self.has_acquired() and not self.cancel.is_set():
             try:
-                self.peer.heartbeat()
+                self.heartbeat()
             except UnknownPeer:
-                self.peer.restore()
+                self.restore()
             except requests.ConnectionError:
                 pass
             self.cancel.wait(self.interval_sec)

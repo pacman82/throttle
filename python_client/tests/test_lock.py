@@ -7,7 +7,7 @@ from time import sleep
 
 import pytest  # type: ignore
 
-from throttle_client import Client, Peer, Timeout, lock
+from throttle_client import Client, Peer, PeerWithHeartbeat, Timeout, lock
 
 from . import BASE_URL, cargo_main, throttle_client
 
@@ -83,8 +83,8 @@ def test_keep_lease_alive_beyond_expiration():
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         client.expiration_time = timedelta(seconds=1)
-        peer = Peer(client=client)
-        with lock(peer, "A", heartbeat_interval=timedelta(seconds=0)) as _:
+        peer = PeerWithHeartbeat(client=client, heartbeat_interval=timedelta(seconds=0))
+        with lock(peer, "A") as _:
             sleep(1.5)
             # Evens though enough time has passed, our lease should not be
             # expired, thanks to the heartbeat.
