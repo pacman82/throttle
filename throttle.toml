@@ -6,9 +6,19 @@
 
 [semaphores]
 # Specify name and full count of semaphores. Uncomment the below line to create a semaphore named A
-# with a full count of 42. Setting the count to 1 would create a Mutex.
+# with a full count of 42 and lock level 0. Setting the count to 1 would create a Mutex. If plan to
+# acquire several locks at once to different semaphores. You should give the ones you want to
+# acquire first a higher lock level. Throttle accepts a signed 32 bit integer as lock level.
+# A = { max=42, level=0 }
+
+# Lock level 0 is quite common. So there is a shortcut. This creates also a semaphore with full
+# count 42 and default lock level 0.
 # A = 42
 
+# Alternative verbose style. This is not specific to throttle, it is just how TOML works.
+# [semaphores.A]
+# max = 42
+# level = 0
 
 # Uncomment below lines and replaces values with your configuration to log into Graylog.
 # [logging.gelf]
