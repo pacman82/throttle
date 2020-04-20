@@ -1,0 +1,23 @@
+name: Python package
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build server
+      run: |
+        cargo build --release
+    - name: Set up Python
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.8
+    - name: Package as wheel
+      run: |
+        pip install wheel
+        python setup.py bdist_wheel
+        ls ./dist
