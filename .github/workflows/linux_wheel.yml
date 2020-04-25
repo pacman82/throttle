@@ -25,7 +25,8 @@ jobs:
         python-version: 3.8
     - name: Package as wheel
       run: |
-        pip install wheel
+        python -m pip install --upgrade pip
+        pip install setuptools wheel twine
         python setup.py bdist_wheel
         ls ./dist
     - name: Publish to PyPI
