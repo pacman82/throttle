@@ -1,7 +1,12 @@
 Changelog
 =========
 
-0.2.1
+0.3.1
+-----
+
+* Publish server wheels to pypi
+
+0.3.0
 -----
 
 * Lock hierachies are enforced.
