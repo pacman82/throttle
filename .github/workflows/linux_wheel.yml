@@ -6,12 +6,17 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
+    env:
+      THROTTLE_CROSS_COMPILATION_TARGET: x86_64-unknown-linux-musl
 
     steps:
+    - name: Setup cross
+      run: |
+        cargo install cross  
     - uses: actions/checkout@v2
     - name: Build server
       run: |
-        cargo build --release
+        cross build --release --target $THROTTLE_CROSS_COMPILATION_TARGET
     - name: Set up Python
       uses: actions/setup-python@v1
       with:
