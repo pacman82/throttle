@@ -1,10 +1,16 @@
 Changelog
 =========
 
+
+0.3.2
+------
+
+* Publish server wheels to pypi
+
 0.3.1
 -----
 
-* Publish server wheels to pypi
+* Botched test release
 
 0.3.0
 -----
