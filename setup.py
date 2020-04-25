@@ -60,17 +60,19 @@ class PostInstallCommand(install):
         # but the released wheels should have this option set
         cross_compile_target = os.getenv("THROTTLE_CROSS_COMPILE_TARGET")
         if cross_compile_target:
+            command = "cross"
             compile_args = " --target=%s" % cross_compile_target
             build_dir = os.path.join(
                 source_dir, "target", cross_compile_target, "release"
             )
         else:
+            command = "cargo"
             compile_args = ""
             build_dir = os.path.join(source_dir, "target", "release")
 
         # setuptools_rust doesn't seem to let me specify a musl cross compilation target
         # so instead just build ourselves here =(.
-        if os.system("cargo build --release %s" % compile_args):
+        if os.system(f"{command} build --release {compile_args}"):
             raise ValueError("Failed to compile!")
 
         # run this after trying to build with cargo (as otherwise this leaves
