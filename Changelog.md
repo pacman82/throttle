@@ -6,13 +6,8 @@ Changelog
 
 * Publish server wheels to pypi
 
-0.3.2
-------
-
-* Test release - no changes
-
-0.3.1
------
+0.3.1-3
+-------
 
 * Test release - no changes
 
