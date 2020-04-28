@@ -224,6 +224,14 @@ The server binary is published to [crates.io](https://crates.io) and thus instal
 cargo install throttle-server
 ```
 
+Alternativly there are ready to use binaries deployed to PyPI, which can be installed via pip:
+
+```bash
+pip install throttle-server
+```
+
+This has been done manly for the convinience of Python users, who want to try out the client without installing a Rust toolchain.
+
 ### Python Client
 
 Python client is publish to [PyPi](https://pypi.org) and can be installed using pip.
