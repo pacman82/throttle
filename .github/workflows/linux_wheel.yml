@@ -29,6 +29,8 @@ jobs:
         pip install setuptools wheel twine
         python setup.py bdist_wheel
         ls ./dist
+        for f in ./dist/*linux_x86_64.whl; do mv "$f" "${f%linux_x86_64.whl}manylinux1_x86_64.whl"; done;
+        ls ./dist
     - name: Publish to PyPI
       env:
         TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
