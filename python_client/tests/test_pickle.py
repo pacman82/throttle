@@ -6,7 +6,7 @@ from throttle_client import Client
 def test_client():
     """Ensure we can pickle client."""
 
-    a = Client(f"https://dummy-endpoint")
+    a = Client("https://dummy-endpoint")
     serialized = pickle.dumps(a)
     b = pickle.loads(serialized)
 
