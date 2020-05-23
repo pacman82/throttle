@@ -1,0 +1,67 @@
+[package]
+name = "throttle-server"
+version = "0.3.6"
+authors = ["Markus Klein"]
+edition = "2018"
+license = "MIT"
+
+# Link to github repository
+repository = "https://github.com/pacman82/throttle.git"
+
+# A short blurb about the package. This is not rendered in any format when
+# uploaded to crates.io (aka this is not markdown).
+description = "Provide semaphores for distributed systems via an http interface"
+
+# This is a list of up to five keywords that describe this crate. Keywords
+# are searchable on crates.io, and you may choose any words that would
+# help someone find this crate.
+keywords = ["semaphore", "http"]
+
+# This is a list of up to five categories where this crate would fit.
+# Categories are a fixed list available at crates.io/category_slugs, and
+# they must match exactly.
+categories = ["concurrency"]
+
+# This points to a file under the package root (relative to this `Cargo.toml`).
+# The contents of this file are stored and indexed in the registry.
+# crates.io will render this file and place the result on the crate's page.
+readme = "Readme.md"
+
+# A crate can have more than one binary, hence the `[[]]` double brackets to
+# indicate a toml array.
+[[bin]]
+# Name binary throttle. Crate name should have been `throttle`, alas it had
+# already been taken.
+name = "throttle"
+
+# Since there might be more than one binary, we need to specify which one we
+# are referencing
+path = "src/main.rs"
+
+[dependencies]
+actix-web = "2.0.0"
+structopt = "0.3.14"
+structopt-derive = "0.4.7"
+prometheus = "0.9.0"
+lazy_static = "1.4.0"
+gelf = "0.5.0"
+serde = "1.0.110"
+serde_json = "1.0.53"
+failure = "0.1.8"
+actix-rt = "1.1.1"
+toml = "0.5.6"
+rand = "0.7.3"
+env_logger = "0.7.1"
+humantime-serde = "1.0.0"
+thiserror = "1.0.19"
+version = "3.0.0"
+
+# We use it explicitly for the time::timeout feature
+[dependencies.tokio]
+version = "0.2.21"
+features = ["rt-threaded", "macros"]
+
+[dependencies.log]
+version = "0.4.8"
+features = ["serde"]
+
