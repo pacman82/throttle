@@ -1,7 +1,4 @@
-use env_logger;
 use failure::{Error, ResultExt};
-use gelf;
-use log;
 use serde::Deserialize;
 
 /// Controls logging behaviour of throttle. Set via the configuration file
