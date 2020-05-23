@@ -1,6 +1,12 @@
 Changelog
 =========
 
+0.3.7
+-----
+
+* Statically link C runtime for windows.
+* Updated dependencies
+
 0.3.6
 -----
 
