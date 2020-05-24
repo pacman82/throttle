@@ -31,7 +31,7 @@ def test_non_blocking_acquire():
         assert client.is_acquired(second)
 
 
-def test_expiring_releases_locks():
+def test_locks_of_expired_peers_are_released():
     """If a peer is removed due to expiration, it's locks must be released."""
     with throttle_client(b"[semaphores]\nA=1") as client:
         peer = client.new_peer(expires_in=timedelta(seconds=0))
@@ -42,7 +42,7 @@ def test_expiring_releases_locks():
 
 def test_lock_blocks():
     """
-    Acquire must blocks until the semaphore count allows for the lock to be acquired.
+    Acquire must block until the semaphore count allows for the lock to be acquired.
     """
     with throttle_client(b"[semaphores]\nA=1") as client:
         first = client.new_peer(expires_in=timedelta(minutes=1))

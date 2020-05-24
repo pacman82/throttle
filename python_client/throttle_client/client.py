@@ -1,6 +1,6 @@
 import json
 from datetime import timedelta
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import requests
 from tenacity import (  # type: ignore
@@ -105,7 +105,7 @@ class Client:
         * `expires_in`: Retention time of the peer on the server.
 
         A peer is used to acquire locks and keep the leases to them alive. A Peer owns
-        thelocks which it acquires and releasing it is going to release the owned locks
+        the locks which it acquires and releasing it is going to release the owned locks
         as well.
 
         Every call to `new_peer` should be matched by a call to `release`.
@@ -131,8 +131,8 @@ class Client:
         peer_id: int,
         semaphore: str,
         count: int = 1,
-        expires_in: timedelta = None,
-        block_for: timedelta = None,
+        expires_in: Optional[timedelta] = None,
+        block_for: Optional[timedelta] = None,
     ) -> bool:
         """
         Acquire a lock from the server.
@@ -213,7 +213,7 @@ class Client:
 
     def is_acquired(self, peer_id: int) -> bool:
         """
-        Ask the server wether all the locks associated with the peer are all acquired.
+        Ask the server wether the peer has acquired all its locks.
         """
 
         def send_request():

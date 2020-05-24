@@ -148,6 +148,8 @@ impl State {
             self.wakers.resolve_with(&resolved_peers, Ok(()));
             self.wakers
                 .resolve_with(&expired_peers, Err(ThrottleError::UnknownPeer));
+        } else {
+            debug!("Litter collection found no expired leases.");
         }
         expired_peers.len()
     }
