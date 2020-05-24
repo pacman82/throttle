@@ -1,5 +1,5 @@
 [workspace]
-members = ["server"]
+members = ["server", "rust_client"]
 
 [profile.release]
 # Panics should only be caused by logic errors and are considered bugs

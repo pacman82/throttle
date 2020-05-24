@@ -59,7 +59,7 @@ class Peer:
         * `semaphore`: Name of the semaphore to be acquired.
         * `count`: The count of the lock. A larger count represents a larger 'piece' of
         the resource under procection.
-        * `block_for`: The request returns as soon as the lock could be acquireod or
+        * `block_for`: The request returns as soon as the lock could be acquired or
         after the duration has elapsed, even if the lock could not be acquired. If set to
         `None`, the request returns immediatly.
 

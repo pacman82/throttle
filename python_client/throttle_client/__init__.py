@@ -101,9 +101,6 @@ def lock(
     * `timeout`: Leaving this at None, let's the lock block until the lock can be acquired. Should a
     timeout be specified the call is going to raise a `Timeout` exception should it exceed before
     the lock is acquired.
-    * `peer`: Peer to use than acquiring a lock. The default `None` is to create a new one.
-    * `heartbeat_interval`: Default interval for reneval of peer. Setting it to `None` will
-    deactivate the heartbeat.
     """
     peer = get_local_peer(server_url)
 

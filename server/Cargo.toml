@@ -65,3 +65,10 @@ features = ["rt-threaded", "macros"]
 version = "0.4.8"
 features = ["serde"]
 
+[dev-dependencies]
+tempfile = "3.1.0"
+# We need the client for integration tests
+throttle-client = { path = "../rust_client" }
+# Executer to call drive future executions in tests
+tokio = { version = "0.2", features = ["full"] }
+
