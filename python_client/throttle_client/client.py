@@ -1,8 +1,10 @@
 import json
 from datetime import timedelta
 from typing import Any, Dict, Optional
+from urllib import parse
 
 import requests
+
 from tenacity import (  # type: ignore
     Retrying,
     stop_after_attempt,
@@ -152,6 +154,7 @@ class Client:
 
         Return `True` if the lock is active.
         """
+        semaphore = parse.quote(semaphore, safe='')
         query = []
 
         if expires_in is not None:
@@ -203,6 +206,7 @@ class Client:
         could become negative, if the semaphores have been overcommitted (due to
         previously reoccuring leases previously considered dead).
         """
+        semaphore = parse.quote(semaphore, safe='')
 
         def send_request():
             response = requests.get(f"{self.base_url}/remainder?semaphore={semaphore}")
@@ -241,6 +245,7 @@ class Client:
         """
         Release a lock to a semaphore for a specific peer
         """
+        semaphore = parse.quote(semaphore, safe='')
 
         def send_request():
             response = requests.delete(f"{self.base_url}/peers/{peer_id}/{semaphore}")

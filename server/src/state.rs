@@ -69,10 +69,10 @@ impl State {
         wait_for: Option<Duration>,
         expires_in: Option<Duration>,
     ) -> Result<bool, ThrottleError> {
-        let sem = self
-            .semaphores
-            .get(semaphore)
-            .ok_or(ThrottleError::UnknownSemaphore)?;
+        let sem = self.semaphores.get(semaphore).ok_or_else(|| {
+            warn!("Unknown semaphore requested: {}", semaphore);
+            ThrottleError::UnknownSemaphore
+        })?;
         let max = sem.max;
         let level = sem.level;
         // Return early if lease can never be acquired
@@ -200,7 +200,7 @@ impl State {
             let count = leases.count(semaphore);
             Ok(sem.max - count)
         } else {
-            warn!("Unknown semaphore requested");
+            warn!("Unknown semaphore requested: {}", semaphore);
             Err(ThrottleError::UnknownSemaphore)
         }
     }
