@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.3.8
+-----
+
+* Add Rust client http layer
+
 0.3.7
 -----
 

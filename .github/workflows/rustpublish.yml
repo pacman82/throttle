@@ -18,4 +18,5 @@ jobs:
         CARGO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       run: |
         cargo publish --manifest-path .\server\Cargo.toml --token ${CARGO_TOKEN}
+        cargo publish --manifest-path .\rust_client\Cargo.toml --token ${CARGO_TOKEN}
 

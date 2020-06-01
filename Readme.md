@@ -11,7 +11,9 @@ Throttle aims to be easy to operate, well-behaved in edge cases and works withou
 ## Features
 
 * Server builds and runs on Windows, Linux, and OS-X.
-* Python Client is available.
+* Clients
+  * Python: A high level client with blocking API.
+  * Rust: Low level client with async API.
 * Prevents Deadlocks, through enforcing lock hierarchies.
 * Fairness (longer waiting peers have priority)
 * Locks with large count, won't be starved by lots of others with a small counts.
@@ -234,34 +236,8 @@ This has been done manly for the convinience of Python users, who want to try ou
 
 ### Python Client
 
-Python client is publish to [PyPi](https://pypi.org) and can be installed using pip.
+Python client is published to [PyPi](https://pypi.org) and can be installed using pip.
 
 ```bash
 pip install throttle-client
 ```
-
-## Local build and test setup
-
-* Install Rust compiler and Cargo. Follow the instructions on
-  [this site](https://www.rust-lang.org/en-US/install.html)
-* Checkout the sources with
-
-  ```bash
-  git clone https://github.com/pacman82/throttle.git
-  ```
-
-* You can run the build and run unit tests by executing
-
-  ```bash
-  cd throttle
-  cargo test
-  ```
-
-* Execute integration test with clients
-
-  ```bash
-  cd python_client
-  pip install -r test-requirements.txt
-  pip install -e .
-  pytest
-  ```
