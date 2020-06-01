@@ -322,3 +322,22 @@ async fn litter_collection() {
     std::thread::sleep(Duration::from_millis(15));
     assert_eq!(1, client.remainder("A").await.unwrap());
 }
+
+/// The semaphore name `/&` is a dangerous edge case, since it is often used in URLs. Ensure that
+/// percent encoding does its thing and everything works as it should.
+#[tokio::test]
+async fn semaphore_named_slash_ampersand() {
+    let config = r#"
+        [semaphores]
+        "/&" = 1
+        "#;
+    let server = Server::new(8014, config);
+    let client = server.make_client();
+
+    // Acquire lock but never release it.
+    let peer = client.new_peer(Duration::from_secs(1)).await.unwrap();
+    client
+        .acquire(peer, "/&", 1, Some(Duration::from_millis(1)), None)
+        .await
+        .unwrap();
+}

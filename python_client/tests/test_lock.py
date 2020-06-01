@@ -206,3 +206,15 @@ def test_nested_locks():
 
         assert client.remainder("A") == 1
         assert client.remainder("B") == 1
+
+
+def test_semaphore_named_slash():
+    """
+    A semaphore named '/&' should behave correctly.
+    """
+    with throttle(b"[semaphores]\n\"/&\"=1") as url:
+        client = Client(url)
+        assert 1 == client.remainder("/&")
+        with lock(url, "/&"):
+            assert 0 == client.remainder("/&")
+        # assert 1 == client.remainder("/")
