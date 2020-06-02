@@ -1662,7 +1662,7 @@ dependencies = [
 
 [[package]]
 name = "throttle-client"
-version = "0.3.9"
+version = "0.3.12"
 dependencies = [
  "humantime 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "humantime-serde 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1673,7 +1673,7 @@ dependencies = [
 
 [[package]]
 name = "throttle-server"
-version = "0.3.9"
+version = "0.3.12"
 dependencies = [
  "actix-rt 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1691,7 +1691,7 @@ dependencies = [
  "structopt-derive 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempfile 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror 1.0.19 (registry+https://github.com/rust-lang/crates.io-index)",
- "throttle-client 0.3.9",
+ "throttle-client 0.3.12",
  "tokio 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "version 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",

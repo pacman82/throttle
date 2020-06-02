@@ -95,7 +95,7 @@ class PostInstallCommand(install):
 setup(
     name="throttle-server",
     author="Markus klein",
-    version="0.3.11",
+    version="0.3.12",
     url="https://github.com/pacman82/throttle",
     description="Throttle server. Throttle is a http semaphore service, providing"
     "semaphores for distributed systems. Packaged as a wheel for the convinience of"
