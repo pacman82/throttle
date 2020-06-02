@@ -17,6 +17,6 @@ jobs:
       env:
         CARGO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       run: |
-        cargo publish --token ${CARGO_TOKEN} --manifest-path .\server\Cargo.toml
-        cargo publish --token ${CARGO_TOKEN} --manifest-path .\rust_client\Cargo.toml
+        cd server && cargo publish --token "${CARGO_TOKEN}"
+        cd rust_client && cargo publish --token "${CARGO_TOKEN}"
 
