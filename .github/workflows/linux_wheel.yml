@@ -18,7 +18,7 @@ jobs:
     - uses: actions/checkout@v2
     - name: Build server
       run: |
-        cross build --release --target $THROTTLE_CROSS_COMPILATION_TARGET
+        cross build --package --throttle-server --release --target $THROTTLE_CROSS_COMPILATION_TARGET
     - name: Set up Python
       uses: actions/setup-python@v1
       with:

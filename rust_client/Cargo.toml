@@ -3,6 +3,30 @@ name = "throttle-client"
 version = "0.3.9"
 authors = ["Markus Klein <markus-klein@live.de>"]
 edition = "2018"
+license = "MIT"
+
+# Link to github repository
+repository = "https://github.com/pacman82/throttle.git"
+
+# A short blurb about the package. This is not rendered in any format when
+# uploaded to crates.io (aka this is not markdown).
+description = "Client for Throttle. Throttle is an http semaphore service, providing semaphores for distributed systems."
+
+# This is a list of up to five keywords that describe this crate. Keywords
+# are searchable on crates.io, and you may choose any words that would
+# help someone find this crate.
+keywords = ["semaphore", "http"]
+
+# This is a list of up to five categories where this crate would fit.
+# Categories are a fixed list available at crates.io/category_slugs, and
+# they must match exactly.
+categories = ["concurrency"]
+
+# This points to a file under the package root (relative to this `Cargo.toml`).
+# The contents of this file are stored and indexed in the registry.
+# crates.io will render this file and place the result on the crate's page.
+readme = "../Readme.md"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

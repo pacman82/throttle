@@ -47,7 +47,7 @@ class PostInstallCommand(install):
     """Post-installation for installation mode."""
 
     def run(self):
-        # So ths builds the executable, and even installs it
+        # So this builds the executable, and even installs it
         # but we can't install to the bin directory:
         #     https://github.com/pypa/setuptools/issues/210#issuecomment-216657975
         # take the advice from that comment, and move over after install
@@ -72,7 +72,7 @@ class PostInstallCommand(install):
 
         # setuptools_rust doesn't seem to let me specify a musl cross compilation target
         # so instead just build ourselves here =(.
-        if os.system(f"{command} build --release {compile_args}"):
+        if os.system(f"{command} build --package throttle-server --release {compile_args}"):
             raise ValueError("Failed to compile!")
 
         # run this after trying to build with cargo (as otherwise this leaves
