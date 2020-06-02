@@ -6,9 +6,8 @@ from typing import Iterator, Optional
 
 import requests
 
-from .client import UnknownPeer, Client
+from .client import Client, UnknownPeer
 from .peer import Peer, PeerWithHeartbeat
-
 
 # Silence flake8 warning about unused import
 _reexport = [Client]
@@ -25,7 +24,7 @@ def init_peers():
     """
     Check if peers is initialized on the local thread. If not initalize it.
     """
-    peers = getattr(threadlocal, 'peers', None)
+    peers = getattr(threadlocal, "peers", None)
     if peers is None:
         threadlocal.peers = {}
 

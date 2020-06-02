@@ -189,9 +189,7 @@ def test_nested_locks():
     """
     Nested locks should be well behaved
     """
-    with throttle(
-        b"[semaphores]\nA={ max=1, level=1 }\nB={ max=1, level=0 }"
-    ) as url:
+    with throttle(b"[semaphores]\nA={ max=1, level=1 }\nB={ max=1, level=0 }") as url:
         client = Client(url)
         with lock(url, "A"):
 
