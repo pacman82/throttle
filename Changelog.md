@@ -1,8 +1,8 @@
 Changelog
 =========
 
-0.3.9
------
+0.3.9-11
+--------
 
 * Test release process, no changes.
 
