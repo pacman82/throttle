@@ -2,13 +2,9 @@ mod common;
 
 use common::Server;
 
-use std::{
-    collections::HashMap,
-    time::Duration,
-};
+use std::{collections::HashMap, time::Duration};
 
 use tokio::time::timeout;
-
 
 /// `client.acquire` if called in a non-blocking fashion, must return `true` if the lock can be
 /// acquired immediatly and `false` otherwise. This must also be in affirmed by subsequent calls

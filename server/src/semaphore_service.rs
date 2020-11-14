@@ -77,19 +77,17 @@ struct AcquireQuery {
 /// as many proxies, firewalls, and Gateways might kill them.
 #[put("/peers/{id}/{semaphore}")]
 async fn acquire(
-    path: Path<(PeerId, String)>,
+    Path((peer_id, semaphore)): Path<(PeerId, String)>,
     query: Query<AcquireQuery>,
     body: Json<i64>,
     state: Data<State>,
 ) -> HttpResponse {
     let amount = body.0;
-    let peer_id = path.0;
-    let semaphore = &path.1;
     // Turn `Option<HumantimeDuratino>` into `Option<Duration>`.
     let wait_for = query.block_for.map(|hd| hd.0);
     let expires_in = query.expires_in.map(|hd| hd.0);
     match state
-        .acquire(peer_id, semaphore, amount, wait_for, expires_in)
+        .acquire(peer_id, &semaphore, amount, wait_for, expires_in)
         .await
     {
         Ok(true) => HttpResponse::Ok().json(peer_id),
@@ -100,12 +98,10 @@ async fn acquire(
 
 #[delete("/peers/{id}/{semaphore}")]
 async fn release_lock(
-    path: Path<(PeerId, String)>,
+    Path((peer_id, semaphore)): Path<(PeerId, String)>,
     state: Data<State>,
 ) -> Result<&'static str, ThrottleError> {
-    let peer_id = path.0;
-    let semaphore = path.1.as_str();
-    state.release_lock(peer_id, semaphore)?;
+    state.release_lock(peer_id, &semaphore)?;
     Ok("Ok")
 }
 
@@ -148,8 +144,11 @@ async fn remainder(
 /// Returns wether all the locks of the peer have been acquired. This route will not block, but
 /// return immediatly.
 #[get("/peers/{id}/is_acquired")]
-async fn is_acquired(path: Path<PeerId>, state: Data<State>) -> Result<Json<bool>, ThrottleError> {
-    state.is_acquired(*path).map(Json)
+async fn is_acquired(
+    Path(peer_id): Path<PeerId>,
+    state: Data<State>,
+) -> Result<Json<bool>, ThrottleError> {
+    state.is_acquired(peer_id).map(Json)
 }
 
 /// Manually remove all expired semapahores. Usefull for testing
@@ -161,11 +160,10 @@ async fn remove_expired(state: Data<State>) -> Json<usize> {
 
 #[put("/peers/{id}")]
 async fn put_peer(
-    path: Path<PeerId>,
+    Path(peer_id): Path<PeerId>,
     body: Json<ExpiresIn>,
     state: Data<State>,
 ) -> Result<&'static str, ThrottleError> {
-    let peer_id = *path;
     state.heartbeat(peer_id, body.expires_in)?;
     Ok("Ok")
 }

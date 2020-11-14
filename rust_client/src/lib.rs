@@ -1,7 +1,7 @@
 //! Client for Throttle. Throttle is a http semaphore service, providing semaphores for distributed
 //! systems.
-mod error;
 mod client;
+mod error;
 
-pub use error::Error;
 pub use client::Client;
+pub use error::Error;

@@ -28,7 +28,6 @@ pub async fn error_for_status(response: Response) -> Result<Response, Error> {
     }
 }
 
-
 /// Send http requests to a throttle server. Only concerned with sending correct HTTP requests the
 /// Throttle server understands. Not a higher level locking library.
 #[derive(Debug, Clone)]
