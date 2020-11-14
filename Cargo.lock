@@ -2081,7 +2081,7 @@ dependencies = [
 
 [[package]]
 name = "throttle-client"
-version = "0.3.12"
+version = "0.3.13"
 dependencies = [
  "humantime",
  "humantime-serde",
@@ -2092,7 +2092,7 @@ dependencies = [
 
 [[package]]
 name = "throttle-server"
-version = "0.3.12"
+version = "0.3.13"
 dependencies = [
  "actix-rt",
  "actix-web",
