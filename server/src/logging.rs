@@ -53,7 +53,7 @@ pub fn init(config: &LoggingConfig) -> Result<(), Error> {
         );
         let environment =
             env_logger::Env::default().filter_or("THROTTLE_LOG", config.stderr.level.as_str());
-        env_logger::from_env(environment).init();
+        env_logger::Builder::from_env(environment).init();
     }
     Ok(())
 }

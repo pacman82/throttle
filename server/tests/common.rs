@@ -1,7 +1,12 @@
 //! Helper to start and stop a throttle server for each integration test.
 
+use std::{
+    io::Write,
+    process::{Child, Command},
+    thread::sleep,
+    time::Duration,
+};
 use tempfile::{NamedTempFile, TempPath};
-use std::{io::Write, process::{Child, Command}, thread::sleep, time::Duration};
 use throttle_client::Client;
 
 /// Helps us instantiate a throttle server in a child process in each test.
@@ -33,7 +38,7 @@ impl Server {
             .spawn()
             .unwrap();
 
-        // Give server process some time to boot, and be ready to take requests. 
+        // Give server process some time to boot, and be ready to take requests.
         sleep(Duration::from_millis(10));
 
         Server {
