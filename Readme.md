@@ -27,6 +27,32 @@ Throttle aims to be easy to operate, well-behaved in edge cases and works withou
   * Server keeps state in memory.
   * Clients restore state to the server, in case of server reboot.
 
+## Installation
+
+### Server
+
+The server binary is published to [crates.io](https://crates.io) and thus installable via cargo.
+
+```bash
+cargo install throttle-server
+```
+
+Alternativly there are ready to use binaries deployed to PyPI, which can be installed via pip:
+
+```bash
+pip install throttle-server
+```
+
+This has been done manly for the convinience of Python users, who want to try out the client without installing a Rust toolchain.
+
+### Python Client
+
+Python client is published to [PyPi](https://pypi.org) and can be installed using pip.
+
+```bash
+pip install throttle-client
+```
+
 ## Usage
 
 ### Operating a Throttle server
@@ -215,29 +241,3 @@ B = 1
   This would restore a client with id `42` and a lifetime of 5 minutes. It has a lock with count 3 to `A` and one with count 1 to `B`.
 * `Get` `/remainder?semaphore={semaphore}`: Answers the maximum semaphore count minus the sum of all acquired locks for this semaphore. Response is a plain text integer.
 * `Get` `/peers/{id}/is_acquired`: Answers `false` if peer has a pending lock. If all the locks of the peer are acquired the answer is `true`.
-
-## Installation
-
-### Server
-
-The server binary is published to [crates.io](https://crates.io) and thus installable via cargo.
-
-```bash
-cargo install throttle-server
-```
-
-Alternativly there are ready to use binaries deployed to PyPI, which can be installed via pip:
-
-```bash
-pip install throttle-server
-```
-
-This has been done manly for the convinience of Python users, who want to try out the client without installing a Rust toolchain.
-
-### Python Client
-
-Python client is published to [PyPi](https://pypi.org) and can be installed using pip.
-
-```bash
-pip install throttle-client
-```
