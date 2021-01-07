@@ -39,7 +39,7 @@ name = "throttle"
 path = "src/main.rs"
 
 [dependencies]
-actix-web = "3.3.2"
+actix-web = "4.0.0-beta.1"
 structopt = "0.3.21"
 structopt-derive = "0.4.14"
 prometheus = "0.11.0"
@@ -48,7 +48,7 @@ gelf = "0.5.0"
 serde = "1.0.118"
 serde_json = "1.0.61"
 failure = "0.1.8"
-actix-rt = "1.1.1"
+actix-rt = "2.0.0-beta.1"
 toml = "0.5.8"
 rand = "0.8.1"
 env_logger = "0.8.2"
@@ -61,7 +61,6 @@ version = "3.0.0"
 # Update to tokio 0.3 currently prevented by dependecy client -> reqwest -> tokio 0.2
 version = "1.0.1"
 features = ["rt-multi-thread", "macros"]
-# features = ["rt-multi-thread", "macros"]
 
 [dependencies.log]
 version = "0.4.11"
@@ -72,6 +71,5 @@ tempfile = "3.1.0"
 # We need the client for integration tests
 throttle-client = { path = "../rust_client" }
 # Executer to call drive future executions in tests
-# Update to tokio 0.3 currently prevented by dependecy client -> reqwest -> tokio 0.2
 tokio = { version = "1.0.1", features = ["full"] }
 
