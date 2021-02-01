@@ -99,11 +99,12 @@ dependencies = [
 
 [[package]]
 name = "actix-rt"
-version = "2.0.0-beta.2"
+version = "2.0.0-beta.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac24f3f660d4c394cc6d24272e526083c257d6045d3be76a9d0a76be5cb56515"
+checksum = "eafee07c9b31438583683fadb545467456efa36509523c19ba096acaf1d5878c"
 dependencies = [
  "actix-macros 0.2.0-beta.1",
+ "futures-core",
  "tokio",
 ]
 
