@@ -77,11 +77,12 @@ struct AcquireQuery {
 /// as many proxies, firewalls, and Gateways might kill them.
 #[put("/peers/{id}/{semaphore}")]
 async fn acquire(
-    Path((peer_id, semaphore)): Path<(PeerId, String)>,
+    path: Path<(PeerId, String)>,
     query: Query<AcquireQuery>,
     body: Json<i64>,
     state: Data<State>,
 ) -> HttpResponse {
+    let (peer_id, semaphore) = path.into_inner();
     let amount = body.0;
     // Turn `Option<HumantimeDuratino>` into `Option<Duration>`.
     let wait_for = query.block_for.map(|hd| hd.0);
@@ -90,17 +91,18 @@ async fn acquire(
         .acquire(peer_id, &semaphore, amount, wait_for, expires_in)
         .await
     {
-        Ok(true) => HttpResponse::Ok().json(peer_id),
-        Ok(false) => HttpResponse::Accepted().json(peer_id),
+        Ok(true) => HttpResponse::Ok().json(&peer_id),
+        Ok(false) => HttpResponse::Accepted().json(&peer_id),
         Err(error) => HttpResponse::from_error(error.into()),
     }
 }
 
 #[delete("/peers/{id}/{semaphore}")]
 async fn release_lock(
-    Path((peer_id, semaphore)): Path<(PeerId, String)>,
+    path: Path<(PeerId, String)>,
     state: Data<State>,
 ) -> Result<&'static str, ThrottleError> {
+    let (peer_id, semaphore) = path.into_inner();
     state.release_lock(peer_id, &semaphore)?;
     Ok("Ok")
 }
@@ -145,9 +147,10 @@ async fn remainder(
 /// return immediatly.
 #[get("/peers/{id}/is_acquired")]
 async fn is_acquired(
-    Path(peer_id): Path<PeerId>,
+    path: Path<PeerId>,
     state: Data<State>,
 ) -> Result<Json<bool>, ThrottleError> {
+    let peer_id = path.into_inner();
     state.is_acquired(peer_id).map(Json)
 }
 
@@ -160,10 +163,11 @@ async fn remove_expired(state: Data<State>) -> Json<usize> {
 
 #[put("/peers/{id}")]
 async fn put_peer(
-    Path(peer_id): Path<PeerId>,
+    path: Path<PeerId>,
     body: Json<ExpiresIn>,
     state: Data<State>,
 ) -> Result<&'static str, ThrottleError> {
+    let peer_id = path.into_inner();
     state.heartbeat(peer_id, body.expires_in)?;
     Ok("Ok")
 }
