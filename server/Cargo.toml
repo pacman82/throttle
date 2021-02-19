@@ -53,7 +53,7 @@ toml = "0.5.8"
 rand = "0.8.3"
 env_logger = "0.8.3"
 humantime-serde = "1.0.1"
-thiserror = "1.0.23"
+thiserror = "1.0.24"
 version = "3.0.0"
 
 # We use it explicitly for the time::timeout feature
