@@ -99,12 +99,12 @@ def test_keep_lease_alive_beyond_expiration():
         client = Client(url)
         peer = PeerWithHeartbeat(
             client=client,
-            heartbeat_interval=timedelta(seconds=0),
-            expiration_time=timedelta(seconds=1),
+            heartbeat_interval=timedelta(seconds=1),
+            expiration_time=timedelta(seconds=4),
         )
         set_local_peer(url, peer)
         with lock(url, "A") as _:
-            sleep(1.5)
+            sleep(5)
             # Evens though enough time has passed, our lease should not be
             # expired, thanks to the heartbeat.
             assert client.remove_expired() == 0
