@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.3.14
+------
+
+* Updated dependencies
+
 0.3.13
 ------
 
