@@ -245,6 +245,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-events"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b62f58e9685cbd92ba0919841f53d25b0b3429f810d0387b29352bfa5fe714e"
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1817,6 +1823,7 @@ version = "0.3.14"
 dependencies = [
  "actix-rt",
  "actix-web",
+ "async-events",
  "env_logger",
  "failure",
  "gelf",

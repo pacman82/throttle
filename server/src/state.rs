@@ -2,8 +2,8 @@ use crate::{
     application_cfg::Semaphores,
     error::ThrottleError,
     leases::{Counts, Leases, PeerId},
-    wakers::Wakers,
 };
+use async_events::AsyncEvents;
 use lazy_static::lazy_static;
 use log::{debug, warn};
 use prometheus::IntGaugeVec;
@@ -26,7 +26,7 @@ pub struct State {
     /// it. Must not contain any leases not configured in semaphores.
     leases: Mutex<Leases>,
     /// Peer id and weak references to mutex for each pending request.
-    wakers: Wakers,
+    wakers: AsyncEvents<u64, Result<(), ThrottleError>>,
 }
 
 impl State {
@@ -35,7 +35,7 @@ impl State {
         State {
             leases: Mutex::new(Leases::new()),
             semaphores,
-            wakers: Wakers::new(),
+            wakers: AsyncEvents::new(),
         }
     }
 
@@ -100,7 +100,7 @@ impl State {
                 // the call to `resolve_with`.
 
                 let acquire_or_timeout =
-                    time::timeout(wait_for, self.wakers.wait_for_resolving(peer_id));
+                    time::timeout(wait_for, self.wakers.wait_for_output(peer_id));
 
                 // Release lock on leases, while waiting for acquire_or_timeout! Otherwise, we might
                 // deadlock.
@@ -145,9 +145,9 @@ impl State {
         };
         if !expired_peers.is_empty() {
             warn!("Removed {} peers due to expiration.", expired_peers.len());
-            self.wakers.resolve_with(&resolved_peers, Ok(()));
+            self.wakers.resolve_all_with(&resolved_peers, Ok(()));
             self.wakers
-                .resolve_with(&expired_peers, Err(ThrottleError::UnknownPeer));
+                .resolve_all_with(&expired_peers, Err(ThrottleError::UnknownPeer));
         } else {
             debug!("Litter collection found no expired leases.");
         }
@@ -224,7 +224,7 @@ impl State {
                     leases.resolve_pending(&semaphore, sem.max, &mut resolved_peers);
                 }
                 drop(leases); // Don't hold this longer than we need to.
-                self.wakers.resolve_with(&resolved_peers, Ok(()));
+                self.wakers.resolve_all_with(&resolved_peers, Ok(()));
                 true
             }
             None => {
@@ -276,7 +276,7 @@ impl State {
         leases.release_lock(peer_id, semaphore)?;
         let mut resolved_peers = Vec::new();
         leases.resolve_pending(semaphore, max, &mut resolved_peers);
-        self.wakers.resolve_with(&resolved_peers, Ok(()));
+        self.wakers.resolve_all_with(&resolved_peers, Ok(()));
         Ok(())
     }
 }

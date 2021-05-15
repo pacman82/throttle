@@ -146,10 +146,7 @@ async fn remainder(
 /// Returns wether all the locks of the peer have been acquired. This route will not block, but
 /// return immediatly.
 #[get("/peers/{id}/is_acquired")]
-async fn is_acquired(
-    path: Path<PeerId>,
-    state: Data<State>,
-) -> Result<Json<bool>, ThrottleError> {
+async fn is_acquired(path: Path<PeerId>, state: Data<State>) -> Result<Json<bool>, ThrottleError> {
     let peer_id = path.into_inner();
     state.is_acquired(peer_id).map(Json)
 }
