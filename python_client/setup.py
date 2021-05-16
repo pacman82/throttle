@@ -5,7 +5,7 @@ with open("../Readme.md", "r") as file:
 
 setup(
     name="throttle_client",
-    version="0.3.14",
+    version="0.3.15",
     author="Markus Klein",
     description="Client for Throttle. Throttle is an http semaphore service, "
     "providing semaphores for distributed systems.",

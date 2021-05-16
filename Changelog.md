@@ -1,6 +1,12 @@
 Changelog
 =========
 
+0.3.15
+------
+
+* Updated dependencies
+* Deployed `throttle` image to dockerhub
+
 0.3.14
 ------
 
