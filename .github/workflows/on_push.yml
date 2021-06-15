@@ -33,6 +33,7 @@ jobs:
     - name: Lint with mypy
       run: |
         pip install mypy
+        pip install types-requests
         mypy python_client/throttle_client
     - name: Test Python Client
       run: |
