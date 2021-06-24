@@ -93,7 +93,7 @@ async fn acquire(
     {
         Ok(true) => HttpResponse::Ok().json(&peer_id),
         Ok(false) => HttpResponse::Accepted().json(&peer_id),
-        Err(error) => HttpResponse::from_error(error.into()),
+        Err(error) => HttpResponse::from_error(error),
     }
 }
 
