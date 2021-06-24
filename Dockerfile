@@ -1,7 +1,7 @@
 # Dockerfile for a the server app
 
 # 1: Build the exe
-FROM rust:1.52 as builder
+FROM rust:1.53 as builder
 WORKDIR /usr/src
 
 # 1a: Prepare for static linking
