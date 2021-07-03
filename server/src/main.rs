@@ -94,7 +94,7 @@ async fn main() -> io::Result<()> {
             .service(semaphore_service::release_lock)
             .default_service(
                 // 404 for GET requests
-                web::resource("").route(web::get().to(not_found::not_found)),
+                web::to(not_found::not_found)
             )
     })
     .bind(&opt.endpoint())?
