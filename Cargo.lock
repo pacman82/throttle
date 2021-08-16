@@ -1853,6 +1853,7 @@ dependencies = [
  "humantime-serde",
  "lazy_static",
  "log",
+ "percent-encoding",
  "prometheus",
  "rand 0.8.4",
  "serde",

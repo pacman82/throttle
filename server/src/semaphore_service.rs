@@ -11,6 +11,7 @@ use actix_web::{
     web::{Data, Json, Path, Query},
     HttpResponse, ResponseError,
 };
+use percent_encoding::percent_decode;
 use log::debug;
 use serde::Deserialize;
 use std::{collections::HashMap, time::Duration};
@@ -83,6 +84,9 @@ async fn acquire(
     state: Data<State>,
 ) -> HttpResponse {
     let (peer_id, semaphore) = path.into_inner();
+
+    let semaphore = percent_decode(semaphore.as_bytes()).decode_utf8_lossy();
+    
     let amount = body.0;
     // Turn `Option<HumantimeDuratino>` into `Option<Duration>`.
     let wait_for = query.block_for.map(|hd| hd.0);
@@ -103,6 +107,9 @@ async fn release_lock(
     state: Data<State>,
 ) -> Result<&'static str, ThrottleError> {
     let (peer_id, semaphore) = path.into_inner();
+
+    let semaphore = percent_decode(semaphore.as_bytes()).decode_utf8_lossy();
+
     state.release_lock(peer_id, &semaphore)?;
     Ok("Ok")
 }
