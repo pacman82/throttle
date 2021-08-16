@@ -390,7 +390,7 @@ impl Leases {
         if let Some(prev) = self.ledger.get(&peer_id) {
             // A peer already exists. Check if it holds exactly the acquired locks, and does not
             // have a pending one.
-            prev.assert_restore_valid(&acquired)?;
+            prev.assert_restore_valid(acquired)?;
         } else {
             // Insert new peer
             let peer = self

@@ -181,7 +181,7 @@ impl State {
         let valid_until = Instant::now() + expires_in;
 
         // Acquired all locks for the peer
-        leases.restore(peer_id, &acquired, valid_until)?;
+        leases.restore(peer_id, acquired, valid_until)?;
 
         Ok(())
     }
@@ -197,7 +197,7 @@ impl State {
     pub fn remainder(&self, semaphore: &str) -> Result<i64, ThrottleError> {
         if let Some(sem) = self.semaphores.get(semaphore) {
             let leases = self.leases.lock().unwrap();
-            let count = leases.count(&semaphore);
+            let count = leases.count(semaphore);
             Ok(sem.max - count)
         } else {
             warn!("Unknown semaphore requested");
@@ -313,7 +313,6 @@ mod tests {
 
     use super::*;
     use crate::application_cfg::SemaphoreCfg;
-    use tokio;
 
     #[tokio::test]
     async fn acquire_three_leases() {
