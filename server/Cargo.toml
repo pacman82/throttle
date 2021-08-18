@@ -1,6 +1,6 @@
 [package]
 name = "throttle-server"
-version = "0.3.15"
+version = "0.3.16"
 authors = ["Markus Klein"]
 edition = "2018"
 license = "MIT"
@@ -42,7 +42,7 @@ path = "src/main.rs"
 actix-web = "4.0.0-beta.8"
 async-events = "0.1.0"
 structopt = "0.3.22"
-structopt-derive = "0.4.14"
+structopt-derive = "0.4.15"
 prometheus = "0.12.0"
 percent-encoding = "2.1.0"
 lazy_static = "1.4.0"
@@ -55,7 +55,7 @@ toml = "0.5.8"
 rand = "0.8.4"
 env_logger = "0.9.0"
 humantime-serde = "1.0.1"
-thiserror = "1.0.25"
+thiserror = "1.0.26"
 version = "3.0.0"
 
 # We use it explicitly for the time::timeout feature

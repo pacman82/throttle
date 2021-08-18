@@ -1,6 +1,12 @@
 Changelog
 =========
 
+0.3.16
+------
+
+* Fix: Fixed an issue with Semaphore names containing slashes or ampersands would not always be correctly percent decoded if passed in URL paths.
+* Updated dependencies
+
 0.3.15
 ------
 
