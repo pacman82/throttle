@@ -251,9 +251,9 @@ dependencies = [
 
 [[package]]
 name = "async-events"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b62f58e9685cbd92ba0919841f53d25b0b3429f810d0387b29352bfa5fe714e"
+checksum = "1eb8444c77a890bf63986255d2caa55baa11526defd36bdf0e63fb8d89ee859b"
 
 [[package]]
 name = "atty"
