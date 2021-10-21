@@ -39,7 +39,7 @@ name = "throttle"
 path = "src/main.rs"
 
 [dependencies]
-actix-web = "4.0.0-beta.9"
+actix-web = "4.0.0-beta.10"
 async-events = "0.1.1"
 structopt = "0.3.25"
 structopt-derive = "0.4.15"
