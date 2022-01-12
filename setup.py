@@ -79,7 +79,7 @@ class PostInstallCommand(install):
         # venv in a bad state: https://github.com/benfred/py-spy/issues/69)
         install.run(self)
 
-        # we're going to install the py-spy executable into the scripts directory
+        # we're going to install the executable into the scripts directory
         # but first make sure the scripts directory exists
         if not os.path.isdir(self.install_scripts):
             os.makedirs(self.install_scripts)
@@ -95,7 +95,7 @@ class PostInstallCommand(install):
 setup(
     name="throttle-server",
     author="Markus klein",
-    version="0.3.16",
+    version="0.3.17",
     url="https://github.com/pacman82/throttle",
     description="Throttle server. Throttle is a http semaphore service, providing"
     "semaphores for distributed systems. Packaged as a wheel for the convinience of"
