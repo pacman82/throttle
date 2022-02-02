@@ -23,7 +23,7 @@ lazy_static! {
 const NOT_FOUND_PAGE: &str = include_str!("404.html");
 
 /// 404 handler
-pub fn not_found() -> HttpResponse {
+pub async fn not_found() -> HttpResponse {
     // Increment prometheous metric
     NUM_404_REQUESTS.inc();
     // Respond with static 404.html page
@@ -44,7 +44,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn status_code() {
-        let resp = not_found().await.unwrap();
+        let resp = not_found().await;
         assert_eq!(resp.status(), http::StatusCode::NOT_FOUND);
     }
 }
