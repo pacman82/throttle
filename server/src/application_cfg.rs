@@ -194,19 +194,6 @@ mod tests {
         assert_eq!(empty, default);
     }
 
-    /// Verify format of configuring gelf parser
-    #[test]
-    fn parse_gelf_logging_config() {
-        let cfg = "[logging.gelf]\n\
-                    name = \"MyThrottleServer.net\"\n\
-                    host = \"my_graylog_instance.cloud\"\n\
-                    port = 12201\n\
-                    level = \"DEBUG\"\n\
-                ";
-        let actual: ApplicationCfg = toml::from_str(cfg).unwrap();
-        assert!(actual.logging.gelf.is_some());
-    }
-
     #[test]
     fn parse_console_logging_config() {
         let cfg = "[logging.stderr]\n\

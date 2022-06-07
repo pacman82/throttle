@@ -52,9 +52,7 @@ async fn main() -> io::Result<()> {
         }
     };
 
-    logging::init(&application_cfg.logging).unwrap_or_else(|e| {
-        eprintln!("Error during initialization of logging backend:\n{}", e);
-    });
+    logging::init(&application_cfg.logging);
 
     info!("Hello From Throttle");
 

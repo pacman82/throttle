@@ -85,7 +85,7 @@ throttle
 
 This starts the server in the current process. Navigate with a browser to `localhost:8000` to see a welcoming message. You can shut Throttle down gracefully by pressing `Ctrl + C`.
 
-#### Default logging to stderr
+#### Logging to stderr
 
 Set the `THROTTLE_LOG` environment variable to see more output on standard error. Valid values are `ERROR`, `WARN`, `INFO`, `DEBUG` and `TRACE`.
 
@@ -111,8 +111,6 @@ Starting the server now yields more information.
 [2020-04-12T18:56:23Z INFO  throttle::litter_collection] Start litter collection with interval: 300s
 ```
 
-*Hint:* Enabling Gelf logging currently disables logging to standard error.
-
 #### Toml configuration file
 
 To actually serve semaphores, we need to configure their names and full count. By default Throttle is looking for a configuration in the working directories `throttle.toml` file should it exist.
@@ -128,16 +126,6 @@ litter_collection_interval = "5min"
 # Specify name and full count of semaphores. Below line creates a semaphore named A with a full
 # count of 42. Setting the count to 1 would create a Mutex.
 A = 42
-
-
-# Optional logging config, to log into graylog
-[logging.gelf]
-name = "MyThrottleServer"
-host = "my_graylog_instance.cloud"
-port = 12201
-# Set this to either ERROR, WARN, INFO, DEBUG or TRACE.
-level = "INFO"
-
 
 ## Optional logging config, to log to stderr. Can be overwritten using the `THROTTLE_LOG`
 ## environment variable.

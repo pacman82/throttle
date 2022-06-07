@@ -20,14 +20,6 @@
 # max = 42
 # level = 0
 
-# Uncomment below lines and replaces values with your configuration to log into Graylog.
-# [logging.gelf]
-# name = "MyThrottleServer"
-# host = "my_graylog_instance.cloud"
-# port = 12201
-## Set this to either ERROR, WARN, INFO, DEBUG or TRACE.
-# level = "INFO"
-
 # Uncomment below lines to log to standard error.
 # [logging.stderr]
 ## Set this to either ERROR, WARN, INFO, DEBUG or TRACE. Default is WARN.
