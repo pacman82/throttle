@@ -1,8 +1,8 @@
 Changelog
 =========
 
-0.4.00
-------
+0.4.0
+-----
 
 * Updated dependencies
 * Dropped support for logging to graylog.
