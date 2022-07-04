@@ -55,7 +55,7 @@ env_logger = "0.9.0"
 humantime-serde = "1.1.1"
 thiserror = "1.0.31"
 version = "3.0.0"
-actix-http = "3.1.0"
+actix-http = "3.2.1"
 
 # We use it explicitly for the time::timeout feature
 [dependencies.tokio]
