@@ -21,9 +21,9 @@ dependencies = [
 
 [[package]]
 name = "actix-http"
-version = "3.1.0"
+version = "3.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd2e9f6794b5826aff6df65e3a0d0127b271d1c03629c774238f3582e903d4e4"
+checksum = "6f9ffb6db08c1c3a1f4aef540f1a63193adc73c4fbd40b75a95fc8c5258f6e51"
 dependencies = [
  "actix-codec",
  "actix-rt",
