@@ -60,7 +60,7 @@ actix-http = "3.2.2"
 # We use it explicitly for the time::timeout feature
 [dependencies.tokio]
 # Update to tokio 0.3 currently prevented by dependecy client -> reqwest -> tokio 0.2
-version = "1.21.0"
+version = "1.21.1"
 features = ["rt-multi-thread", "macros"]
 
 [dependencies.log]
@@ -72,7 +72,7 @@ tempfile = "3.3.0"
 # We need the client for integration tests
 throttle-client = { path = "../rust_client" }
 # Executer to call drive future executions in tests
-tokio = { version = "1.21.0", features = ["full"] }
+tokio = { version = "1.21.1", features = ["full"] }
 
 [features]
 
