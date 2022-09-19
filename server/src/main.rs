@@ -11,9 +11,9 @@
 #[macro_use]
 extern crate prometheus;
 use actix_web::{get, web, web::Data, App, HttpServer};
+use clap::Parser;
 use log::{info, warn};
 use std::io;
-use structopt::StructOpt;
 
 use crate::cli::Cli;
 
