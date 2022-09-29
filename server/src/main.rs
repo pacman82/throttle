@@ -38,7 +38,7 @@ async fn index() -> &'static str {
 
 #[actix_rt::main]
 async fn main() -> io::Result<()> {
-    let opt = Cli::from_args();
+    let opt = Cli::parse();
 
     let application_cfg = match application_cfg::ApplicationCfg::init(&opt.configuration) {
         Ok(cfg) => cfg,
