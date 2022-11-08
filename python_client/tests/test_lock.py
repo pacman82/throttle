@@ -212,7 +212,7 @@ def test_semaphore_named_slash():
     """
     A semaphore named '/&' should behave correctly.
     """
-    with throttle(b"[semaphores]\n\"/&\"=1") as url:
+    with throttle(b'[semaphores]\n"/&"=1') as url:
         client = Client(url)
         assert 1 == client.remainder("/&")
         with lock(url, "/&"):

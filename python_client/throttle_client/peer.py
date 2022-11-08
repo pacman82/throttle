@@ -48,7 +48,7 @@ class Peer:
         return cls(client=Client(base_url=baseurl))
 
     def acquire(
-        self, semaphore: str, count: int = 1, block_for: timedelta = None
+        self, semaphore: str, count: int = 1, block_for: Optional[timedelta] = None
     ) -> bool:
         """
         Acquire a lock from the server.
