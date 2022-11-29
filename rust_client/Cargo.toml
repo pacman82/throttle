@@ -34,6 +34,6 @@ readme = "../Readme.md"
 reqwest = { version = "0.11.13", features = ["json"] }
 thiserror = "1.0.37"
 humantime-serde = "1.1.1"
-serde = "1.0.147"
+serde = "1.0.148"
 humantime = "2.1.0"
 
