@@ -2,6 +2,7 @@
 
 use crate::logging::LoggingConfig;
 use serde::{de, Deserialize};
+use thiserror::Error;
 use std::{
     collections::HashMap,
     fs::File,
@@ -9,6 +10,15 @@ use std::{
     path::Path,
     time::Duration,
 };
+
+/// Error scenarious which may occurr then reading the configuration.
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Unable to open configuration file.")]
+    ReadConfigFile(#[source] io::Error),
+    #[error("Unable to deserilize configuration")]
+    DeserilizeToml(#[source] toml::de::Error)
+}
 
 /// Configuration for one Semaphore
 ///
@@ -119,12 +129,12 @@ impl ApplicationCfg {
 
     /// Checks for a file named `application.cfg` in the working directory. It is then used to
     /// create a new configuration. If the file can not be found a default configuration is created.
-    pub fn init(path: &Path) -> Result<ApplicationCfg, io::Error> {
+    pub fn init(path: &Path) -> Result<ApplicationCfg, Error> {
         match File::open(path) {
             Ok(mut file) => {
                 let mut buffer = String::new();
-                file.read_to_string(&mut buffer)?;
-                let cfg = toml::from_str(&buffer)?;
+                file.read_to_string(&mut buffer).map_err(Error::ReadConfigFile)?;
+                let cfg = toml::from_str(&buffer).map_err(Error::DeserilizeToml)?;
                 Ok(cfg)
             }
             Err(e) => {
@@ -136,9 +146,8 @@ impl ApplicationCfg {
                     );
                     Ok(ApplicationCfg::default())
                 } else {
-                    let err = e;
-                    eprintln!("{}", err);
-                    Err(err)
+                    eprintln!("{}", e);
+                    Err(Error::ReadConfigFile(e))
                 }
             }
         }
