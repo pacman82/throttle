@@ -44,7 +44,7 @@ async fn main() -> io::Result<()> {
         Ok(cfg) => cfg,
         Err(e) => {
             eprintln!(
-                "Couldn't parse {}.cfg:\n{}",
+                "Couldn't parse {}:\n{}",
                 opt.configuration.to_string_lossy(),
                 e
             );
