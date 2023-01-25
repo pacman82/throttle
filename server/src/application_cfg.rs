@@ -14,9 +14,9 @@ use std::{
 /// Error scenarious which may occurr then reading the configuration.
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Unable to open configuration file.")]
+    #[error("Unable to read configuration file. {0}")]
     ReadConfigFile(#[source] io::Error),
-    #[error("Unable to deserilize configuration")]
+    #[error("Unable to deserilize configuration. {0}")]
     DeserilizeToml(#[source] toml::de::Error)
 }
 
