@@ -146,7 +146,7 @@ impl ApplicationCfg {
                     );
                     Ok(ApplicationCfg::default())
                 } else {
-                    eprintln!("{}", e);
+                    eprintln!("{e}");
                     Err(Error::ReadConfigFile(e))
                 }
             }

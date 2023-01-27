@@ -95,8 +95,8 @@ async fn acquire(
         .acquire(peer_id, &semaphore, amount, wait_for, expires_in)
         .await
     {
-        Ok(true) => HttpResponse::Ok().json(&peer_id),
-        Ok(false) => HttpResponse::Accepted().json(&peer_id),
+        Ok(true) => HttpResponse::Ok().json(peer_id),
+        Ok(false) => HttpResponse::Accepted().json(peer_id),
         Err(error) => HttpResponse::from_error(error),
     }
 }

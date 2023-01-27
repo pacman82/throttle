@@ -31,7 +31,7 @@ impl Server {
         let config = config_file.into_temp_path();
 
         let throttle_proc = Command::new(env!("CARGO_BIN_EXE_throttle"))
-            .args(&["--port"])
+            .args(["--port"])
             .arg(port.to_string())
             .arg("-c")
             .arg(&config)
@@ -49,7 +49,7 @@ impl Server {
     }
 
     pub fn make_client(&self) -> Client {
-        Client::new(&format!("http://localhost:{}", self.port)).unwrap()
+        Client::new(format!("http://localhost:{}", self.port)).unwrap()
     }
 }
 

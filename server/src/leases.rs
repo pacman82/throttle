@@ -545,8 +545,8 @@ impl Leases {
     /// Return the pending lock with the highest priority for this semaphore. Since we have fair
     /// semaphores, this is the peer waiting the longest. Returns `None` in case there are not any
     /// pending locks.
-    fn resolve_highest_priority_pending<'a>(
-        &'a mut self,
+    fn resolve_highest_priority_pending(
+        &mut self,
         semaphore: &str,
         remainder: &mut i64,
     ) -> Option<PeerId> {
