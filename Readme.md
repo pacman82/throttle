@@ -49,6 +49,8 @@ pip install throttle-server
 
 This has been done manly for the convinience of Python users, who want to try out the client without installing a Rust toolchain.
 
+**Attention** Version 0.4.1 is the last version to be released to PyPi as a wheel. Users are encouraged from then on to utilize either the published docker containers or binaries to run and operate the server.
+
 #### Docker
 
 The throttle sever is also released as a small container image to docker hub.
