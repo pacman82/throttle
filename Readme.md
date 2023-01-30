@@ -31,27 +31,7 @@ Throttle aims to be easy to operate, well-behaved in edge cases and works withou
 
 ### Server
 
-#### Cargo
-
-The server binary is published to [crates.io](https://crates.io) and thus installable via cargo.
-
-```bash
-cargo install throttle-server
-```
-
-#### Pip
-
-Alternativly there are ready to use binaries deployed to PyPI, which can be installed via pip:
-
-```bash
-pip install throttle-server
-```
-
-This has been done manly for the convinience of Python users, who want to try out the client without installing a Rust toolchain.
-
-**Attention** Version 0.4.1 is the last version to be released to PyPi as a wheel. Users are encouraged from then on to utilize either the published docker containers or binaries to run and operate the server.
-
-#### Docker
+#### Run with Docker
 
 The throttle sever is also released as a small container image to docker hub.
 
@@ -63,6 +43,18 @@ Assuming you have a `throttle.toml` configuration file in the current working di
 
 ```shell
 docker run --rm -v ${PWD}:/cfg -p 8000:8000 pacman82/throttle -c cfg/throttle.toml
+```
+
+#### Download binary release
+
+For Windows, OS-X and Linux there are prebuild binaries available together with the GitHub release. You can find the latest release at <https://github.com/pacman82/throttle/releases/latest>.
+
+#### Install with Cargo
+
+The server binary is published to [crates.io](https://crates.io) and thus installable via cargo.
+
+```bash
+cargo install throttle-server
 ```
 
 ### Python Client

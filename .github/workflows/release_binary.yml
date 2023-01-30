@@ -46,3 +46,20 @@ jobs:
           file: target/release/throttle
           asset_name: throttle-osx
           tag: ${{ github.ref }}
+
+  release_musl_linux:
+    name: Build and release for musl Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup cross
+        run: cargo install cross  
+      - uses: actions/checkout@v2
+      - name: Build server
+        run: cross build --package throttle-server --release --target x86_64-unknown-linux-musl
+      - name: Github Upload
+        uses: svenstaro/upload-release-action@v1-release
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/x86_64-unknown-linux-musl/release/throttle
+          asset_name: throttle-linux-musl
+          tag: ${{ github.ref }}
