@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.4.2
+-----
+
+* Release binaries for linux and OS-X
+
 0.4.1
 -----
 
