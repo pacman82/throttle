@@ -79,47 +79,51 @@ impl State {
         if max < amount {
             return Err(ThrottleError::Never { asked: amount, max });
         }
-        let mut leases = self.leases.lock().unwrap();
-        if let Some(expires_in) = expires_in {
-            let valid_until = Instant::now() + expires_in;
-            leases.update_valid_until(peer_id, valid_until)?;
-        }
-        let acquired = leases.acquire(peer_id, semaphore, amount, max, level, |s| {
-            self.semaphores.get(s).unwrap().level
-        })?;
-        if acquired {
-            // Resolve this immediatly, if we can
-            debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
-            Ok(true)
-        } else {
-            debug!("Peer {} waiting for lock to '{}'", peer_id, semaphore);
-
-            // We could not acquire the lock immediatly. Are we going to wait for it?
-            if let Some(wait_for) = wait_for {
-                // keep holding the lock to `leases` until everything is registered. So we don't miss
-                // the call to `resolve_with`.
-
-                let acquire_or_timeout =
-                    time::timeout(wait_for, self.wakers.wait_for_output(peer_id));
-
-                // Release lock on leases, while waiting for acquire_or_timeout! Otherwise, we might
-                // deadlock.
-                drop(leases);
-                // The outer `Err` indicates a timeout.
-                match acquire_or_timeout.await {
-                    // Locks could be acquired
-                    Ok(Ok(())) => {
-                        debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
-                        Ok(true)
-                    }
-                    // Failure
-                    Ok(Err(e)) => Err(e),
-                    // Lock could not be acquired in time
-                    Err(_) => Ok(false),
-                }
-            } else {
-                Ok(acquired)
+        let (acquired, acquire_or_timeout) = {
+            let mut leases = self.leases.lock().unwrap();
+            if let Some(expires_in) = expires_in {
+                let valid_until = Instant::now() + expires_in;
+                leases.update_valid_until(peer_id, valid_until)?;
             }
+            let acquired = leases.acquire(peer_id, semaphore, amount, max, level, |s| {
+                self.semaphores.get(s).unwrap().level
+            })?;
+            if acquired {
+                // Resolve this immediatly
+                debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
+                (true, None)
+            } else {
+                debug!("Peer {} waiting for lock to '{}'", peer_id, semaphore);
+                let acquire_or_timeout = wait_for.map(|wait_for| {
+                    // We could not acquire the lock immediatly. Are we going to wait for it?
+                    time::timeout(wait_for, self.wakers.output_of(peer_id))
+                });
+                (false, acquire_or_timeout)
+            }
+            // Release lock on leases, before waiting for acquire_or_timeout! Otherwise, we might
+            // deadlock.
+        };
+        
+        if let Some(acquire_or_timeout) = acquire_or_timeout {
+            // We could not acquire lock right away, and user decided to wait a bit, so this is what
+            // we do.
+
+            // The outer `Err` indicates a timeout.
+            match acquire_or_timeout.await {
+                // Locks could be acquired
+                Ok(Ok(())) => {
+                    debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
+                    Ok(true)
+                }
+                // Failure
+                Ok(Err(e)) => Err(e),
+                // Lock could not be acquired in time
+                Err(_) => Ok(false),
+            }
+        } else {
+            // We could acquire the lock immediatly, or the user did not decide to wait. Either way
+            // we can answer right away.
+            Ok(acquired)
         }
     }
 
