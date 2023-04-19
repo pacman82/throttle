@@ -54,7 +54,7 @@ humantime-serde = "1.1.1"
 thiserror = "1.0.40"
 version = "3.0.0"
 actix-http = "3.3.1"
-clap = { version = "4.2.2", features = ["derive"] }
+clap = { version = "4.2.3", features = ["derive"] }
 
 # We use it explicitly for the time::timeout feature
 [dependencies.tokio]
