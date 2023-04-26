@@ -59,7 +59,7 @@ clap = { version = "4.2.4", features = ["derive"] }
 # We use it explicitly for the time::timeout feature
 [dependencies.tokio]
 # Update to tokio 0.3 currently prevented by dependecy client -> reqwest -> tokio 0.2
-version = "1.27.0"
+version = "1.28.0"
 features = ["rt-multi-thread", "macros"]
 
 [dependencies.log]
@@ -71,7 +71,7 @@ tempfile = "3.5.0"
 # We need the client for integration tests
 throttle-client = { path = "../rust_client" }
 # Executer to call drive future executions in tests
-tokio = { version = "1.27.0", features = ["full"] }
+tokio = { version = "1.28.0", features = ["full"] }
 
 [features]
 
