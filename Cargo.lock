@@ -284,9 +284,9 @@ dependencies = [
 
 [[package]]
 name = "async-events"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07ff2da0dc27e4338b0355381d44619321d39eba0745f47ea4a181952d24aabe"
+checksum = "abe4b2e6c252e0f6b8736de3e52f802dda6feda8a9138df7ea56f91b7529cfeb"
 
 [[package]]
 name = "autocfg"
