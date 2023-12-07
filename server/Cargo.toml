@@ -55,10 +55,10 @@ thiserror = "1.0.50"
 version = "3.0.0"
 actix-http = "3.4.0"
 clap = { version = "4.4.11", features = ["derive"] }
+axum = "0.7.2"
 
 # We use it explicitly for the time::timeout feature
 [dependencies.tokio]
-# Update to tokio 0.3 currently prevented by dependecy client -> reqwest -> tokio 0.2
 version = "1.34.0"
 features = ["rt-multi-thread", "macros"]
 
