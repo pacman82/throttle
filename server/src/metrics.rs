@@ -3,12 +3,11 @@
 //! See the 404 route in the `not_found` module as an example.
 
 use crate::state::State;
-use actix_web::{get, web::Data};
+use axum::extract;
 use prometheus::{Encoder, TextEncoder};
 
 /// Renders the default prometheus registry into text
-#[get("/metrics")]
-pub async fn metrics(state: Data<State>) -> String {
+pub async fn metrics(state: extract::State<State>) -> String {
     let encoder = TextEncoder::new();
     let mut buf = Vec::new();
 

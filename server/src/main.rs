@@ -10,11 +10,10 @@
 //! Http interface for acquiring and releasing semaphores is not stable yet.
 #[macro_use]
 extern crate prometheus;
-use actix_web::web::Data;
 use axum::{routing::get, Router};
 use clap::Parser;
 use log::{info, warn};
-use std::io;
+use std::{io, sync::Arc};
 
 use crate::cli::Cli;
 
@@ -62,7 +61,7 @@ async fn main() -> io::Result<()> {
 
     // We only want to use one Map of semaphores across all worker threads. To do this we wrap it in
     // `Data` which uses an `Arc` to share it between threads.
-    let state = Data::new(state::State::new(application_cfg.semaphores));
+    let state = Arc::new(state::State::new(application_cfg.semaphores));
 
     // Copy a reference to state, before moving it into the closure. We need it later to start the
     // litter collection.
@@ -76,7 +75,9 @@ async fn main() -> io::Result<()> {
     let app = Router::new()
         .route("/", get(index))
         .route("/health", get(health::health))
-        .fallback(not_found::not_found);
+        // .route("/metrics", get(metrics::metrics))
+        .fallback(not_found::not_found)
+        .with_state(state.clone());
 
     // let server_terminated = HttpServer::new(move || {
     //     App::new()
@@ -104,7 +105,7 @@ async fn main() -> io::Result<()> {
     // start `lc` before the `.run` method, the ?-operator after `.bind` might early return and
     // leave us with a detached thread.
     let lc = litter_collection::start(
-        state_ref_lc.into_inner(),
+        state_ref_lc,
         application_cfg.litter_collection_interval,
     );
 
