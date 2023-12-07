@@ -28,7 +28,7 @@ impl Lock {
 
     /// Increments the suitable entries in `counts`.
     fn update_counts_pending(&self, counts: &mut HashMap<String, Counts>) {
-        let mut counts = counts
+        let counts = counts
             .get_mut(&self.semaphore)
             .expect("All available Semaphores must be prefilled in counts.");
         counts.pending += self.count;
