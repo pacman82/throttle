@@ -10,7 +10,8 @@
 //! Http interface for acquiring and releasing semaphores is not stable yet.
 #[macro_use]
 extern crate prometheus;
-use actix_web::{get, web, web::Data, App, HttpServer};
+use actix_web::web::Data;
+use axum::Router;
 use clap::Parser;
 use log::{info, warn};
 use std::io;
@@ -31,12 +32,11 @@ mod semaphore_service;
 mod state;
 mod version;
 
-#[get("/")]
 async fn index() -> &'static str {
     "Hello from Throttle!"
 }
 
-#[actix_rt::main]
+#[tokio::main]
 async fn main() -> io::Result<()> {
     let opt = Cli::parse();
 
@@ -73,30 +73,35 @@ async fn main() -> io::Result<()> {
     // before the first request to an unknown resource.
     not_found::initialize_metrics();
 
-    let server_terminated = HttpServer::new(move || {
-        App::new()
-            .app_data(state.clone())
-            .service(index)
-            .service(health::health)
-            .service(metrics::metrics)
-            .service(favicon::favicon)
-            .service(version::get_version)
-            .service(semaphore_service::new_peer)
-            .service(semaphore_service::acquire)
-            .service(semaphore_service::remainder)
-            .service(semaphore_service::release)
-            .service(semaphore_service::restore)
-            .service(semaphore_service::remove_expired)
-            .service(semaphore_service::put_peer)
-            .service(semaphore_service::is_acquired)
-            .service(semaphore_service::release_lock)
-            .default_service(
-                // 404 for GET requests
-                web::to(not_found::not_found),
-            )
-    })
-    .bind(&opt.endpoint())?
-    .run();
+    let app = Router::new().route("/", axum::routing::get(index));
+
+    // let server_terminated = HttpServer::new(move || {
+    //     App::new()
+    //         .app_data(state.clone())
+    //         .service(index)
+    //         .service(health::health)
+    //         .service(metrics::metrics)
+    //         .service(favicon::favicon)
+    //         .service(version::get_version)
+    //         .service(semaphore_service::new_peer)
+    //         .service(semaphore_service::acquire)
+    //         .service(semaphore_service::remainder)
+    //         .service(semaphore_service::release)
+    //         .service(semaphore_service::restore)
+    //         .service(semaphore_service::remove_expired)
+    //         .service(semaphore_service::put_peer)
+    //         .service(semaphore_service::is_acquired)
+    //         .service(semaphore_service::release_lock)
+    //         .default_service(
+    //             // 404 for GET requests
+    //             web::to(not_found::not_found),
+    //         )
+    // })
+    // .bind(&opt.endpoint())?
+    // .run();
+
+    let listener = tokio::net::TcpListener::bind(&opt.endpoint()).await?;
+    let server_terminated = axum::serve(listener, app);
 
     // Removes expired peers asynchrounously. We start litter collection after the server. Would we
     // start `lc` before the `.run` method, the ?-operator after `.bind` might early return and
