@@ -73,12 +73,13 @@ async fn main() -> io::Result<()> {
     // before the first request to an unknown resource.
     not_found::initialize_metrics();
 
-    let app = Router::new().route("/", axum::routing::get(index));
+    let app = Router::new()
+        .route("/", axum::routing::get(index))
+        .fallback(not_found::not_found);
 
     // let server_terminated = HttpServer::new(move || {
     //     App::new()
     //         .app_data(state.clone())
-    //         .service(index)
     //         .service(health::health)
     //         .service(metrics::metrics)
     //         .service(favicon::favicon)
@@ -92,10 +93,6 @@ async fn main() -> io::Result<()> {
     //         .service(semaphore_service::put_peer)
     //         .service(semaphore_service::is_acquired)
     //         .service(semaphore_service::release_lock)
-    //         .default_service(
-    //             // 404 for GET requests
-    //             web::to(not_found::not_found),
-    //         )
     // })
     // .bind(&opt.endpoint())?
     // .run();
