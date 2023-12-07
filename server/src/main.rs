@@ -11,7 +11,7 @@
 #[macro_use]
 extern crate prometheus;
 use actix_web::web::Data;
-use axum::Router;
+use axum::{routing::get, Router};
 use clap::Parser;
 use log::{info, warn};
 use std::io;
@@ -74,13 +74,13 @@ async fn main() -> io::Result<()> {
     not_found::initialize_metrics();
 
     let app = Router::new()
-        .route("/", axum::routing::get(index))
+        .route("/", get(index))
+        .route("/health", get(health::health))
         .fallback(not_found::not_found);
 
     // let server_terminated = HttpServer::new(move || {
     //     App::new()
     //         .app_data(state.clone())
-    //         .service(health::health)
     //         .service(metrics::metrics)
     //         .service(favicon::favicon)
     //         .service(version::get_version)
