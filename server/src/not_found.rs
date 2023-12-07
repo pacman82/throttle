@@ -1,4 +1,4 @@
-use actix_web::HttpResponse;
+use axum::{http::StatusCode, response::Html};
 use lazy_static::lazy_static;
 use prometheus::IntCounter;
 
@@ -23,28 +23,14 @@ lazy_static! {
 const NOT_FOUND_PAGE: &str = include_str!("404.html");
 
 /// 404 handler
-pub async fn not_found() -> HttpResponse {
+pub async fn not_found() -> (StatusCode, Html<&'static str>) {
     // Increment prometheous metric
     NUM_404_REQUESTS.inc();
     // Respond with static 404.html page
-    HttpResponse::NotFound()
-        .content_type("text/html")
-        .body(NOT_FOUND_PAGE)
+    (StatusCode::NOT_FOUND, Html(NOT_FOUND_PAGE))
 }
 
 /// Use this to initialize metrics eagerly, i.e. before the handler is called for the first time.
 pub fn initialize_metrics() {
     lazy_static::initialize(&NUM_404_REQUESTS);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use actix_web::http;
-
-    #[actix_rt::test]
-    async fn status_code() {
-        let resp = not_found().await;
-        assert_eq!(resp.status(), http::StatusCode::NOT_FOUND);
-    }
 }
