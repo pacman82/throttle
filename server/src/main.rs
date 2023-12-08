@@ -78,6 +78,7 @@ async fn main() -> io::Result<()> {
         // Stateless routes
         .route("/", get(index))
         .route("/health", get(health::health))
+        .route("/favicon.ico", get(favicon::favicon))
         .fallback(not_found::not_found);
 
     // let server_terminated = HttpServer::new(move || {
