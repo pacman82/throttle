@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.4.5
+-----
+
+* Fix docker build
+
 0.4.4
 -----
 
