@@ -72,17 +72,17 @@ async fn main() -> io::Result<()> {
     // before the first request to an unknown resource.
     not_found::initialize_metrics();
 
-    let app = Router::new()
+    let app: Router = Router::new()
+        .route("/metrics", get(metrics::metrics))
+        .with_state(state.clone())
+        // Stateless routes
         .route("/", get(index))
         .route("/health", get(health::health))
-        // .route("/metrics", get(metrics::metrics))
-        .fallback(not_found::not_found)
-        .with_state(state.clone());
+        .fallback(not_found::not_found);
 
     // let server_terminated = HttpServer::new(move || {
     //     App::new()
     //         .app_data(state.clone())
-    //         .service(metrics::metrics)
     //         .service(favicon::favicon)
     //         .service(version::get_version)
     //         .service(semaphore_service::new_peer)

@@ -2,12 +2,14 @@
 //! does and should not define individual metrics. These should go into their respective modules.
 //! See the 404 route in the `not_found` module as an example.
 
+use std::sync::Arc;
+
 use crate::state::State;
 use axum::extract;
 use prometheus::{Encoder, TextEncoder};
 
 /// Renders the default prometheus registry into text
-pub async fn metrics(state: extract::State<State>) -> String {
+pub async fn metrics(state: extract::State<Arc<State>>) -> String {
     let encoder = TextEncoder::new();
     let mut buf = Vec::new();
 
