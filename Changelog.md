@@ -1,6 +1,12 @@
 Changelog
 =========
 
+0.4.4
+-----
+
+* Migrated throttle server from actix to axum
+* Updated dependencies
+
 0.4.3
 -----
 

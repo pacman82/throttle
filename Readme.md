@@ -22,7 +22,7 @@ Throttle aims to be easy to operate, well-behaved in edge cases and works withou
   * Locks can be prolonged indefinetly using heartbeats which are send to the server.
 * Observability
   * Prometheus Metrics
-  * Logging to stderr or gelf server
+  * Logging to stderr
 * No persistence backend is required.
   * Server keeps state in memory.
   * Clients restore state to the server, in case of server reboot.
