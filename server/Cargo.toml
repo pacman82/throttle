@@ -39,21 +39,18 @@ name = "throttle"
 path = "src/main.rs"
 
 [dependencies]
-actix-web = "4.4.0"
 async-events = "0.2.0"
 prometheus = "0.13.3"
 percent-encoding = "2.3.1"
 lazy_static = "1.4.0"
 serde = "1.0.193"
 serde_json = "1.0.108"
-actix-rt = "2.9.0"
 toml = "0.8.8"
 rand = "0.8.5"
 env_logger = "0.10.1"
 humantime-serde = "1.1.1"
 thiserror = "1.0.50"
 version = "3.0.0"
-actix-http = "3.4.0"
 clap = { version = "4.4.11", features = ["derive"] }
 axum = "0.7.2"
 

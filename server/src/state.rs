@@ -19,7 +19,7 @@ use tokio::time;
 ///
 /// This class combines the confguration of the `semaphores`, with the state of the peers in
 /// `leases` and makes them consumable in an asynchronous, mulithreaded consumer.
-pub struct State {
+pub struct AppState {
     /// All known semaphores and their full count
     semaphores: Semaphores,
     /// Bookeeping for leases, protected by mutex so multiple threads (i.e. requests) can manipulate
@@ -29,10 +29,10 @@ pub struct State {
     wakers: AsyncEvents<u64, Result<(), ThrottleError>>,
 }
 
-impl State {
+impl AppState {
     /// Creates the state required for the semaphore service
-    pub fn new(semaphores: Semaphores) -> State {
-        State {
+    pub fn new(semaphores: Semaphores) -> AppState {
+        AppState {
             leases: Mutex::new(Leases::new()),
             semaphores,
             wakers: AsyncEvents::new(),
@@ -323,7 +323,7 @@ mod tests {
         // Semaphore with count of 3
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 3, level: 0 });
-        let state = State::new(semaphores);
+        let state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         // First three locks can be acquired immediatly
@@ -343,7 +343,7 @@ mod tests {
         // Semaphore with count of 3
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 3, level: 0 });
-        let state = State::new(semaphores);
+        let state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         // Create six peers
@@ -378,7 +378,7 @@ mod tests {
         // Semaphore with count of 3
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 3, level: 0 });
-        let state = State::new(semaphores);
+        let state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         // Create six peers
@@ -411,7 +411,7 @@ mod tests {
     async fn idempotent_acquire() {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 0 });
-        let state = State::new(semaphores);
+        let state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         let first = state.new_peer(one_sec);
@@ -428,7 +428,7 @@ mod tests {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 2, level: 1 });
         semaphores.insert(String::from("B"), SemaphoreCfg { max: 1, level: 0 });
-        let state = State::new(semaphores);
+        let state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         let first = state.new_peer(one_sec);
@@ -451,7 +451,7 @@ mod tests {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 1 });
         semaphores.insert(String::from("B"), SemaphoreCfg { max: 1, level: 0 });
-        let state = State::new(semaphores);
+        let state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         // Acquire both semaphores with blocker, so all other locks are going to be pending.
@@ -471,7 +471,7 @@ mod tests {
     async fn acquire_zero() {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 0 });
-        let state = State::new(semaphores);
+        let state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         let peer = state.new_peer(one_sec);
@@ -485,7 +485,7 @@ mod tests {
     async fn restore_with_lock_count_zero() {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 0 });
-        let state = State::new(semaphores);
+        let state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         let peer = 5;
@@ -499,7 +499,7 @@ mod tests {
 
     #[tokio::test]
     async fn restore_with_unknown_semaphore() {
-        let state = State::new(Semaphores::new());
+        let state = AppState::new(Semaphores::new());
         let one_sec = Duration::from_secs(1);
 
         let peer = 5;
@@ -515,7 +515,7 @@ mod tests {
     async fn restore_cant_change_existing_peers() {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 0 });
-        let state = State::new(semaphores);
+        let state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         let peer = state.new_peer(one_sec);
@@ -533,7 +533,7 @@ mod tests {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 1 });
         semaphores.insert(String::from("B"), SemaphoreCfg { max: 1, level: 0 });
-        let state = State::new(semaphores);
+        let state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         let first = state.new_peer(one_sec);

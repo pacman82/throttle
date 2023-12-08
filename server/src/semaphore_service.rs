@@ -3,20 +3,34 @@
 //! deserialize paramaters and serialize respones, or deciding on which HTTP methods to map the
 //! functions.
 
-use crate::{error::ThrottleError, leases::PeerId, state::State};
-use actix_web::{
-    delete, get,
+use crate::{error::ThrottleError, leases::PeerId, state::AppState};
+use axum::{
+    body::Body,
+    extract::{Path, Query, State},
     http::StatusCode,
-    post, put,
-    web::{Data, Json, Path, Query},
-    HttpResponse, ResponseError,
+    response::{IntoResponse, Response},
+    routing::{delete, get, post, put},
+    Json, Router,
 };
 use log::debug;
 use percent_encoding::percent_decode;
 use serde::Deserialize;
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
-impl ResponseError for ThrottleError {
+pub fn semaphores() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/new_peer", post(new_peer))
+        .route("/peers/:id", delete(release))
+        .route("/peers/:id/:semaphore", put(acquire))
+        .route("/peers/:id/:semaphore", delete(release_lock))
+        .route("/restore", post(restore))
+        .route("/remainder", get(remainder))
+        .route("/peers/:id/is_acquired", get(is_acquired))
+        .route("/remove_expired", post(remove_expired))
+        .route("/peers/:id", put(put_peer))
+}
+
+impl ThrottleError {
     fn status_code(&self) -> StatusCode {
         match self {
             ThrottleError::UnknownPeer
@@ -28,6 +42,15 @@ impl ResponseError for ThrottleError {
             | ThrottleError::AlreadyPending => StatusCode::CONFLICT,
             ThrottleError::ShrinkingLockCount => StatusCode::NOT_IMPLEMENTED,
         }
+    }
+}
+
+impl IntoResponse for ThrottleError {
+    fn into_response(self) -> Response {
+        Response::builder()
+            .status(self.status_code())
+            .body(Body::new(self.to_string()))
+            .unwrap()
     }
 }
 
@@ -47,18 +70,16 @@ struct ExpiresIn {
 /// Create a new peer with no acquired locks.
 ///
 /// Returns id of the new peer
-#[post("/new_peer")]
-async fn new_peer(body: Json<ExpiresIn>, state: Data<State>) -> Json<PeerId> {
+async fn new_peer(state: State<Arc<AppState>>, body: Json<ExpiresIn>) -> Json<PeerId> {
     Json(state.new_peer(body.expires_in))
 }
 
-#[delete("/peers/{id}")]
-async fn release(path: Path<PeerId>, state: Data<State>) -> HttpResponse {
+async fn release(path: Path<PeerId>, state: State<Arc<AppState>>) -> Json<&'static str> {
     if state.release(*path) {
-        HttpResponse::Ok().json("Peer released")
+        Json("Peer released")
     } else {
         // Post condition of lease not being there is satisfied, let's make this request 200 still.
-        HttpResponse::Ok().json("Peer not found")
+        Json("Peer not found")
     }
 }
 
@@ -76,38 +97,32 @@ struct AcquireQuery {
 /// It also updates the expiration timeout to prevent the litter collection from removing the peer
 /// while it is pending. Having repeated short lived requests is preferable over one long running,
 /// as many proxies, firewalls, and Gateways might kill them.
-#[put("/peers/{id}/{semaphore}")]
 async fn acquire(
-    path: Path<(PeerId, String)>,
+    state: State<Arc<AppState>>,
+    Path((peer_id, semaphore)): Path<(PeerId, String)>,
     query: Query<AcquireQuery>,
     body: Json<i64>,
-    state: Data<State>,
-) -> HttpResponse {
-    let (peer_id, semaphore) = path.into_inner();
-
+) -> Result<(StatusCode, Json<PeerId>), ThrottleError> {
     let semaphore = percent_decode(semaphore.as_bytes()).decode_utf8_lossy();
 
     let amount = body.0;
     // Turn `Option<HumantimeDuratino>` into `Option<Duration>`.
     let wait_for = query.block_for.map(|hd| hd.0);
     let expires_in = query.expires_in.map(|hd| hd.0);
-    match state
+    if state
         .acquire(peer_id, &semaphore, amount, wait_for, expires_in)
-        .await
+        .await?
     {
-        Ok(true) => HttpResponse::Ok().json(peer_id),
-        Ok(false) => HttpResponse::Accepted().json(peer_id),
-        Err(error) => HttpResponse::from_error(error),
+        Ok((StatusCode::OK, Json(peer_id)))
+    } else {
+        Ok((StatusCode::ACCEPTED, Json(peer_id)))
     }
 }
 
-#[delete("/peers/{id}/{semaphore}")]
 async fn release_lock(
-    path: Path<(PeerId, String)>,
-    state: Data<State>,
+    Path((peer_id, semaphore)): Path<(PeerId, String)>,
+    state: State<Arc<AppState>>,
 ) -> Result<&'static str, ThrottleError> {
-    let (peer_id, semaphore) = path.into_inner();
-
     let semaphore = percent_decode(semaphore.as_bytes()).decode_utf8_lossy();
 
     state.release_lock(peer_id, &semaphore)?;
@@ -115,7 +130,7 @@ async fn release_lock(
 }
 
 #[derive(Deserialize)]
-pub struct Restore {
+struct Restore {
     #[serde(with = "humantime_serde")]
     expires_in: Duration,
     peer_id: PeerId,
@@ -126,10 +141,9 @@ pub struct Restore {
 /// acquired locks of the peer are guaranteed to be acquired. Even if this means going over the full
 /// count of the semaphore. Pending locks may be resolved, if this is possible without going over
 /// the semaphores full count, or violating fairness.
-#[post("/restore")]
-pub async fn restore(
+async fn restore(
+    state: State<Arc<AppState>>,
     body: Json<Restore>,
-    state: Data<State>,
 ) -> Result<&'static str, ThrottleError> {
     state.restore(body.peer_id, body.expires_in, &body.acquired)?;
     Ok("Ok")
@@ -142,36 +156,33 @@ struct Remainder {
 }
 
 /// Get the remainder of a semaphore
-#[get("/remainder")]
 async fn remainder(
+    state: State<Arc<AppState>>,
     query: Query<Remainder>,
-    state: Data<State>,
 ) -> Result<Json<i64>, ThrottleError> {
     state.remainder(&query.semaphore).map(Json)
 }
 
 /// Returns wether all the locks of the peer have been acquired. This route will not block, but
 /// return immediatly.
-#[get("/peers/{id}/is_acquired")]
-async fn is_acquired(path: Path<PeerId>, state: Data<State>) -> Result<Json<bool>, ThrottleError> {
-    let peer_id = path.into_inner();
+async fn is_acquired(
+    state: State<Arc<AppState>>,
+    Path(peer_id): Path<PeerId>,
+) -> Result<Json<bool>, ThrottleError> {
     state.is_acquired(peer_id).map(Json)
 }
 
 /// Manually remove all expired semapahores. Usefull for testing
-#[post("/remove_expired")]
-async fn remove_expired(state: Data<State>) -> Json<usize> {
+async fn remove_expired(state: State<Arc<AppState>>) -> Json<usize> {
     debug!("Remove expired triggered");
     Json(state.remove_expired())
 }
 
-#[put("/peers/{id}")]
 async fn put_peer(
-    path: Path<PeerId>,
+    state: State<Arc<AppState>>,
+    Path(peer_id): Path<PeerId>,
     body: Json<ExpiresIn>,
-    state: Data<State>,
 ) -> Result<&'static str, ThrottleError> {
-    let peer_id = path.into_inner();
     state.heartbeat(peer_id, body.expires_in)?;
     Ok("Ok")
 }
