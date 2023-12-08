@@ -79,12 +79,12 @@ async fn main() -> io::Result<()> {
         .route("/", get(index))
         .route("/health", get(health::health))
         .route("/favicon.ico", get(favicon::favicon))
+        .route("/version", get(version::version))
         .fallback(not_found::not_found);
 
     // let server_terminated = HttpServer::new(move || {
     //     App::new()
     //         .app_data(state.clone())
-    //         .service(version::get_version)
     //         .service(semaphore_service::new_peer)
     //         .service(semaphore_service::acquire)
     //         .service(semaphore_service::remainder)
