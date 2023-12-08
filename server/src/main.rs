@@ -84,7 +84,6 @@ async fn main() -> io::Result<()> {
     // let server_terminated = HttpServer::new(move || {
     //     App::new()
     //         .app_data(state.clone())
-    //         .service(favicon::favicon)
     //         .service(version::get_version)
     //         .service(semaphore_service::new_peer)
     //         .service(semaphore_service::acquire)
