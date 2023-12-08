@@ -92,7 +92,7 @@ THROTTLE_LOG=WARN
 or PowerShell:
 
 ```shell
-$env:THROTLLE_LOG="INFO"
+$env:THROTTLE_LOG="INFO"
 ```
 
 Starting the server now yields more information.
@@ -100,8 +100,6 @@ Starting the server now yields more information.
 ```log
 [2020-04-12T18:56:23Z INFO  throttle] Hello From Throttle
 [2020-04-12T18:56:23Z WARN  throttle] No semaphores configured.
-[2020-04-12T18:56:23Z INFO  actix_server::builder] Starting 8 workers
-[2020-04-12T18:56:23Z INFO  actix_server::builder] Starting "actix-web-service-127.0.0.1:8000" service on 127.0.0.1:8000
 [2020-04-12T18:56:23Z INFO  throttle::litter_collection] Start litter collection with interval: 300s
 ```
 

@@ -15,7 +15,7 @@ use clap::Parser;
 use log::{info, warn};
 use std::{io, sync::Arc};
 
-use crate::cli::Cli;
+use crate::{cli::Cli, semaphore_service::semaphores, state::AppState};
 
 mod application_cfg;
 mod cli;
@@ -61,7 +61,7 @@ async fn main() -> io::Result<()> {
 
     // We only want to use one Map of semaphores across all worker threads. To do this we wrap it in
     // `Data` which uses an `Arc` to share it between threads.
-    let state = Arc::new(state::State::new(application_cfg.semaphores));
+    let state = Arc::new(AppState::new(application_cfg.semaphores));
 
     // Copy a reference to state, before moving it into the closure. We need it later to start the
     // litter collection.
@@ -74,6 +74,7 @@ async fn main() -> io::Result<()> {
 
     let app: Router = Router::new()
         .route("/metrics", get(metrics::metrics))
+        .merge(semaphores())
         .with_state(state.clone())
         // Stateless routes
         .route("/", get(index))
@@ -81,22 +82,6 @@ async fn main() -> io::Result<()> {
         .route("/favicon.ico", get(favicon::favicon))
         .route("/version", get(version::version))
         .fallback(not_found::not_found);
-
-    // let server_terminated = HttpServer::new(move || {
-    //     App::new()
-    //         .app_data(state.clone())
-    //         .service(semaphore_service::new_peer)
-    //         .service(semaphore_service::acquire)
-    //         .service(semaphore_service::remainder)
-    //         .service(semaphore_service::release)
-    //         .service(semaphore_service::restore)
-    //         .service(semaphore_service::remove_expired)
-    //         .service(semaphore_service::put_peer)
-    //         .service(semaphore_service::is_acquired)
-    //         .service(semaphore_service::release_lock)
-    // })
-    // .bind(&opt.endpoint())?
-    // .run();
 
     let listener = tokio::net::TcpListener::bind(&opt.endpoint()).await?;
     let server_terminated = axum::serve(listener, app);

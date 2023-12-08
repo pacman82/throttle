@@ -3,7 +3,7 @@
 // We run into this here, so let's silence this lint for this file.
 #![allow(clippy::mutex_atomic)]
 
-use crate::state::State;
+use crate::state::AppState;
 use log::{debug, info, warn};
 use std::{
     sync::{Arc, Condvar, Mutex},
@@ -39,7 +39,7 @@ impl LitterCollection {
 }
 
 /// Starts a new thread that removes expired leases.
-pub fn start(state: Arc<State>, interval: Duration) -> LitterCollection {
+pub fn start(state: Arc<AppState>, interval: Duration) -> LitterCollection {
     let stopped = Arc::new((Mutex::new(false), Condvar::new()));
     info!("Start litter collection with interval: {:?}", interval);
     // Copy of stopped for litter collecting thread

@@ -4,12 +4,12 @@
 
 use std::sync::Arc;
 
-use crate::state::State;
-use axum::extract;
+use crate::state::AppState;
+use axum::extract::State;
 use prometheus::{Encoder, TextEncoder};
 
 /// Renders the default prometheus registry into text
-pub async fn metrics(state: extract::State<Arc<State>>) -> String {
+pub async fn metrics(state: State<Arc<AppState>>) -> String {
     let encoder = TextEncoder::new();
     let mut buf = Vec::new();
 
