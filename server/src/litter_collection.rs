@@ -1,8 +1,3 @@
-// Not detecting wether a bool is used to wait before a critical section is a known weakness of this
-// See: https://rust-lang.github.io/rust-clippy/master/index.html#mutex_atomic
-// We run into this here, so let's silence this lint for this file.
-#![allow(clippy::mutex_atomic)]
-
 use crate::state::AppState;
 use log::{debug, info, warn};
 use std::sync::Arc;
@@ -55,14 +50,4 @@ pub fn start(state: Arc<AppState>, interval: Duration) -> LitterCollection {
         }
     });
     LitterCollection { send_stop, handle }
-}
-
-#[cfg(Debug)]
-impl Drop for LitterCollection {
-    fn drop(&mut self) {
-        assert!(
-            *self.stopped.0.lock().unwrap(),
-            "Litter Collection has not been stopped before the end of its lifetime."
-        )
-    }
 }
