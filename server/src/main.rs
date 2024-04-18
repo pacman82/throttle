@@ -97,7 +97,7 @@ async fn main() -> io::Result<()> {
     let result = server_terminated.await; // Don't use ? to early return before stopping the lc.
 
     // Stop litter collection.
-    lc.stop();
+    lc.stop().await;
 
     result
 }
