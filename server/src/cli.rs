@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use clap::Parser;
+use std::path::PathBuf;
 
 /// Arguments passed at the command line
 #[derive(Parser)]

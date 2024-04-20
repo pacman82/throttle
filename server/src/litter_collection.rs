@@ -2,10 +2,10 @@ use crate::state::AppState;
 use log::{debug, info, warn};
 use std::sync::Arc;
 use tokio::{
-    spawn,
+    select, spawn,
     sync::watch,
     task::JoinHandle,
-    time::{timeout, Duration},
+    time::{sleep, sleep_until, Duration, Instant},
 };
 
 /// Collects expired leases asynchronously. If all goes well leases are removed by the clients via
@@ -32,20 +32,31 @@ impl LitterCollection {
 
 /// Starts a new thread that removes expired leases.
 pub fn start(state: Arc<AppState>, interval: Duration) -> LitterCollection {
-    let (send_stop, mut receive_stop) = watch::channel(false);
+    let mut watch_valid_until = state.subscribe_valid_until();
+    let mut maybe_valid_until = *watch_valid_until.borrow_and_update();
+    let (send_stop, mut watch_stop) = watch::channel(false);
     info!("Start litter collection with interval: {:?}", interval);
     let handle = spawn(async move {
         loop {
-            let done = timeout(interval, receive_stop.changed()).await.is_ok();
-            if done {
-                break;
-            } else {
-                let num_removed = state.remove_expired();
-                if num_removed == 0 {
-                    debug!("Litter collection did not find any expired leases.")
-                } else {
-                    warn!("Litter collection removed {} expired leases", num_removed);
+            // We know then the next lease given that there is no heartbeat
+            if let Some(valid_until) = maybe_valid_until {
+                select! {
+                    _ = sleep_until(Instant::from_std(valid_until)) => (),
+                    _ = watch_stop.changed() => break,
+                    _ = watch_valid_until.changed() => maybe_valid_until = *watch_valid_until.borrow_and_update(),
                 }
+            } else {
+                select! {
+                    _ = sleep(interval) => (),
+                    _ = watch_stop.changed() => break,
+                    _ = watch_valid_until.changed() => maybe_valid_until = *watch_valid_until.borrow_and_update(),
+                }
+            }
+            let num_removed = state.remove_expired();
+            if num_removed == 0 {
+                debug!("Litter collection did not find any expired leases.")
+            } else {
+                warn!("Litter collection removed {} expired leases", num_removed);
             }
         }
     });
