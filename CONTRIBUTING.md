@@ -22,7 +22,6 @@ Wether they be in code, intersting feature suggestions, design critique or bug r
 
   ```bash
   cd python_client
-  pip install -r test-requirements.txt
-  pip install -e .
+  pip install -e .[test]
   pytest
   ```
