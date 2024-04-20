@@ -13,7 +13,7 @@ use std::{
     sync::Mutex,
     time::{Duration, Instant},
 };
-use tokio::time;
+use tokio::{sync::watch, time};
 
 /// State of the Semaphore service, shared between threads
 ///
@@ -27,6 +27,12 @@ pub struct AppState {
     leases: Mutex<Leases>,
     /// Peer id and weak references to mutex for each pending request.
     wakers: AsyncEvents<u64, Result<(), ThrottleError>>,
+    /// Used to tell litter collection when the next lease is going to expire (given it is not
+    /// prolonged using a heartbeat). We send `None` if there are no active leases.
+    send_valid_until: watch::Sender<Option<Instant>>,
+    /// Earliest point in time then one of the leases would expire. `None` implies there are no
+    /// leases.
+    valid_until: Option<Instant>,
 }
 
 impl AppState {
@@ -36,6 +42,8 @@ impl AppState {
             leases: Mutex::new(Leases::new()),
             semaphores,
             wakers: AsyncEvents::new(),
+            send_valid_until: watch::Sender::new(None),
+            valid_until: None,
         }
     }
 
@@ -103,7 +111,7 @@ impl AppState {
             // Release lock on leases, before waiting for acquire_or_timeout! Otherwise, we might
             // deadlock.
         };
-        
+
         if let Some(acquire_or_timeout) = acquire_or_timeout {
             // We could not acquire lock right away, and user decided to wait a bit, so this is what
             // we do.
@@ -282,6 +290,13 @@ impl AppState {
         leases.resolve_pending(semaphore, max, &mut resolved_peers);
         self.wakers.resolve_all_with(&resolved_peers, Ok(()));
         Ok(())
+    }
+
+    /// Allows the litter collection to watch for the earliest anticipated expiration of a leak.
+    /// The watched timepoint will be updated if it changes. It can become even earlier or (more
+    /// likely is prolonged). `None` implies there are no leases which can expire.
+    pub fn subscribe_valid_until(&self) -> watch::Receiver<Option<Instant>> {
+        self.send_valid_until.subscribe()
     }
 }
 

@@ -2,7 +2,6 @@
 
 use crate::logging::LoggingConfig;
 use serde::{de, Deserialize};
-use thiserror::Error;
 use std::{
     collections::HashMap,
     fs::File,
@@ -10,6 +9,7 @@ use std::{
     path::Path,
     time::Duration,
 };
+use thiserror::Error;
 
 /// Error scenarious which may occurr then reading the configuration.
 #[derive(Error, Debug)]
@@ -17,7 +17,7 @@ pub enum Error {
     #[error("Unable to read configuration file. {0}")]
     ReadConfigFile(#[source] io::Error),
     #[error("Unable to deserilize configuration. {0}")]
-    DeserilizeToml(#[source] toml::de::Error)
+    DeserilizeToml(#[source] toml::de::Error),
 }
 
 /// Configuration for one Semaphore
@@ -133,7 +133,8 @@ impl ApplicationCfg {
         match File::open(path) {
             Ok(mut file) => {
                 let mut buffer = String::new();
-                file.read_to_string(&mut buffer).map_err(Error::ReadConfigFile)?;
+                file.read_to_string(&mut buffer)
+                    .map_err(Error::ReadConfigFile)?;
                 let cfg = toml::from_str(&buffer).map_err(Error::DeserilizeToml)?;
                 Ok(cfg)
             }
