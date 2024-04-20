@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.4.7
+-----
+
+* Identical to `0.4.6`. Fixes bug in wheel release process
+
 0.4.6
 -----
 
