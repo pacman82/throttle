@@ -42,10 +42,11 @@ async fn locks_of_expired_peers_are_released() {
     let server = Server::new(8002, config);
     let client = server.make_client();
 
-    // Create a peer which expires immediately
-    let peer = client.new_peer(Duration::from_secs(0)).await.unwrap();
-    client.acquire(peer, "A", 1, None, None).await.unwrap();
-    assert_eq!(1, client.remove_expired().await.unwrap());
+    // Create a peer
+    let peer = client.new_peer(Duration::from_secs(1)).await.unwrap();
+    // Use heartbeat to make peer expire immediatly
+    let expire_in = Some(Duration::from_secs(0));
+    client.acquire(peer, "A", 1, expire_in, None).await.unwrap();
     // Semaphore should again be available
     assert_eq!(1, client.remainder("A").await.unwrap());
 }
@@ -319,7 +320,7 @@ async fn litter_collection() {
         .acquire(peer, "A", 1, Some(Duration::from_millis(1)), None)
         .await
         .unwrap();
-    std::thread::sleep(Duration::from_millis(15));
+    tokio::time::sleep(Duration::from_millis(15)).await;
     assert_eq!(1, client.remainder("A").await.unwrap());
 }
 

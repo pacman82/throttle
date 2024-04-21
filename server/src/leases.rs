@@ -271,6 +271,13 @@ impl Leases {
         id
     }
 
+    /// Earliest point in time when a peer would expire, given no further heartbeats are send. Used
+    /// to have litter collection woken up at precisly the points in time then it is needed. `None`
+    /// indicates that there are no peers.
+    pub fn min_valid_until(&self) -> Option<Instant> {
+        self.ledger.values().map(|peer| peer.valid_until).min()
+    }
+
     /// Acquires a lock for a peer. If the count of the semaphore is high enough, the lease is going
     /// to be acquired, otherwise it remains pending. This method does not block.
     ///

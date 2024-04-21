@@ -29,10 +29,7 @@ pub struct AppState {
     wakers: AsyncEvents<u64, Result<(), ThrottleError>>,
     /// Used to tell litter collection when the next lease is going to expire (given it is not
     /// prolonged using a heartbeat). We send `None` if there are no active leases.
-    send_valid_until: watch::Sender<Option<Instant>>,
-    /// Earliest point in time then one of the leases would expire. `None` implies there are no
-    /// leases.
-    valid_until: Option<Instant>,
+    send_min_valid_until: watch::Sender<Option<Instant>>,
 }
 
 impl AppState {
@@ -42,8 +39,7 @@ impl AppState {
             leases: Mutex::new(Leases::new()),
             semaphores,
             wakers: AsyncEvents::new(),
-            send_valid_until: watch::Sender::new(None),
-            valid_until: None,
+            send_min_valid_until: watch::Sender::new(None),
         }
     }
 
@@ -52,6 +48,7 @@ impl AppState {
         let mut leases = self.leases.lock().unwrap();
         let valid_until = Instant::now() + expires_in;
         let peer_id = leases.new_peer(valid_until);
+        self.send_min_valid_until_update(leases.min_valid_until());
         debug!("Created new peer {}.", peer_id);
         peer_id
     }
@@ -92,6 +89,7 @@ impl AppState {
             if let Some(expires_in) = expires_in {
                 let valid_until = Instant::now() + expires_in;
                 leases.update_valid_until(peer_id, valid_until)?;
+                self.send_min_valid_until_update(leases.min_valid_until())
             }
             let acquired = leases.acquire(peer_id, semaphore, amount, max, level, |s| {
                 self.semaphores.get(s).unwrap().level
@@ -140,7 +138,7 @@ impl AppState {
     ///
     /// Returns number of (now removed) expired leases
     pub fn remove_expired(&self) -> usize {
-        let (expired_peers, resolved_peers) = {
+        let (expired_peers, resolved_peers, min_valid_until) = {
             let mut leases = self.leases.lock().unwrap();
             let (expired_peers, affected_semaphores) = leases.remove_expired(Instant::now());
             // It is not enough to notify only the requests for the removed peers, as other peers
@@ -153,13 +151,14 @@ impl AppState {
                     &mut resolved_peers,
                 )
             }
-            (expired_peers, resolved_peers)
+            (expired_peers, resolved_peers, leases.min_valid_until())
         };
         if !expired_peers.is_empty() {
             warn!("Removed {} peers due to expiration.", expired_peers.len());
             self.wakers.resolve_all_with(&resolved_peers, Ok(()));
             self.wakers
                 .resolve_all_with(&expired_peers, Err(ThrottleError::UnknownPeer));
+            self.send_min_valid_until_update(min_valid_until);
         } else {
             debug!("Litter collection found no expired leases.");
         }
@@ -194,6 +193,7 @@ impl AppState {
 
         // Acquired all locks for the peer
         leases.restore(peer_id, acquired, valid_until)?;
+        self.send_min_valid_until_update(leases.min_valid_until());
 
         Ok(())
     }
@@ -203,6 +203,7 @@ impl AppState {
         // Determine valid_until after acquiring lock, in case we block for a long time.
         let valid_until = Instant::now() + expires_in;
         leases.update_valid_until(peer_id, valid_until)?;
+        self.send_min_valid_until_update(leases.min_valid_until());
         Ok(())
     }
 
@@ -235,7 +236,9 @@ impl AppState {
                         .expect("An active semaphore must always be configured");
                     leases.resolve_pending(&semaphore, sem.max, &mut resolved_peers);
                 }
+                let min_valid_until = leases.min_valid_until();
                 drop(leases); // Don't hold this longer than we need to.
+                self.send_min_valid_until_update(min_valid_until);
                 self.wakers.resolve_all_with(&resolved_peers, Ok(()));
                 true
             }
@@ -296,7 +299,19 @@ impl AppState {
     /// The watched timepoint will be updated if it changes. It can become even earlier or (more
     /// likely is prolonged). `None` implies there are no leases which can expire.
     pub fn subscribe_valid_until(&self) -> watch::Receiver<Option<Instant>> {
-        self.send_valid_until.subscribe()
+        let receiver = self.send_min_valid_until.subscribe();
+        // We are likely fine, if we just subscribe. This is just defensive in case min_valid until
+        // changes beetween App state construction and subscription.
+        let min_valid_until = self.leases.lock().unwrap().min_valid_until();
+        self.send_min_valid_until_update(min_valid_until);
+        receiver
+    }
+
+    fn send_min_valid_until_update(&self, valid_until: Option<Instant>) {
+        if *self.send_min_valid_until.borrow() != valid_until {
+            // If there are no receivers, we do not care
+            let _ = self.send_min_valid_until.send(valid_until);
+        }
     }
 }
 
@@ -329,7 +344,6 @@ lazy_static! {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use crate::application_cfg::SemaphoreCfg;
 
@@ -562,5 +576,69 @@ mod tests {
                 requested: 1
             })
         ));
+    }
+
+    #[tokio::test]
+    async fn announce_change_in_valid_until_through_new_peer() {
+        // Given an application state with no peers, the first call to acquire should announce that
+        // now there is something to expire.
+        let semaphores = Semaphores::new();
+        let state = AppState::new(semaphores);
+        let mut listener = state.subscribe_valid_until();
+
+        // When waiting for the peer to expire
+        let one_sec = Duration::from_secs(1);
+        let _peer_id = state.new_peer(one_sec);
+
+        // Then
+        assert!(listener.borrow_and_update().is_some())
+    }
+
+    #[tokio::test]
+    async fn announce_change_in_valid_until_through_restored_peer() {
+        // Given
+        let semaphores = Semaphores::new();
+        let state = AppState::new(semaphores);
+        let mut listener = state.subscribe_valid_until();
+
+        // When
+        let one_sec = Duration::from_secs(1);
+        let _peer_id = state.restore(1, one_sec, &HashMap::new());
+
+        // Then
+        assert!(listener.borrow_and_update().is_some())
+    }
+
+    #[tokio::test]
+    async fn announce_change_in_min_valid_until_through_removed_peer() {
+        // Given
+        let semaphores = Semaphores::new();
+        let state = AppState::new(semaphores);
+        let mut listener = state.subscribe_valid_until();
+        let peer_id = state.new_peer(Duration::from_secs(1));
+
+        // When
+        state.release(peer_id);
+
+        // Then
+        assert!(listener.borrow_and_update().is_none())
+    }
+
+    #[tokio::test]
+    async fn announce_change_in_min_valid_until_through_expired_peer() {
+        // Given
+        let semaphores = Semaphores::new();
+        let state = AppState::new(semaphores);
+        let mut listener = state.subscribe_valid_until();
+        let _ = state.new_peer(Duration::from_secs(1));
+
+        // When creating a new peer and letting it expiring before the first one
+        let old_valid_until = *listener.borrow_and_update();
+        let _ = state.new_peer(Duration::from_secs(0));
+        state.remove_expired();
+
+        // Then
+        let after_expiration = *listener.borrow_and_update();
+        assert_eq!(old_valid_until, after_expiration)
     }
 }

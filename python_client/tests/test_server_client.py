@@ -34,9 +34,8 @@ def test_non_blocking_acquire():
 def test_locks_of_expired_peers_are_released():
     """If a peer is removed due to expiration, it's locks must be released."""
     with throttle_client(b"[semaphores]\nA=1") as client:
-        peer = client.new_peer(expires_in=timedelta(seconds=0))
-        client.acquire(peer, "A")
-        client.remove_expired()
+        peer = client.new_peer(expires_in=timedelta(seconds=3))
+        client.acquire(peer, "A", expires_in=timedelta(seconds=0))
         assert client.remainder("A") == 1  # Semaphore should be free again
 
 
@@ -75,19 +74,20 @@ def test_acquire_can_prolong_lifetime_of_peer():
         # Acquire "A", so subsequent locks are pending
         client.acquire(blocker, "A")
 
-        peer = client.new_peer(expires_in=timedelta(seconds=1))
+        peer_id = client.new_peer(expires_in=timedelta(seconds=3))
         # This lock can not be acquired due to `blocker` holding the lock. This request
         # is going to block for one second. After which the peer should have been
         # expired. Yet acquire can prolong the lifetime of the peer.
         client.acquire(
-            peer,
+            peer_id,
             semaphore="A",
-            block_for=timedelta(seconds=1),
-            expires_in=timedelta(seconds=5),
+            block_for=timedelta(seconds=3),
+            expires_in=timedelta(seconds=100),
         )
-        # The initial timeout of one second should have been expired by now, yet nothing
-        # is removed.
-        assert client.remove_expired() == 0
+        # The initial timeout of one second should have been expired by now, yet peer must still be
+        # alive. We validate this calling a method for the peer and observing that "unknown peer"
+        # is **not** raised
+        assert not client.is_acquired(peer_id=peer_id)
 
 
 def test_restore_peer_with_unknown_semaphore():
