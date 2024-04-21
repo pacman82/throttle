@@ -60,12 +60,8 @@ async fn main() -> io::Result<()> {
     }
 
     // We only want to use one Map of semaphores across all worker threads. To do this we wrap it in
-    // `Data` which uses an `Arc` to share it between threads.
+    // an `Arc` to share it between threads.
     let state = Arc::new(AppState::new(application_cfg.semaphores));
-
-    // Copy a reference to state, before moving it into the closure. We need it later to start the
-    // litter collection.
-    let state_ref_lc = state.clone();
 
     let app: Router = Router::new()
         .route("/metrics", get(metrics::metrics))
@@ -84,7 +80,7 @@ async fn main() -> io::Result<()> {
     // Removes expired peers asynchrounously. We start litter collection after the server. Would we
     // start `lc` before the `.run` method, the ?-operator after `.bind` might early return and
     // leave us with a detached thread.
-    let lc = litter_collection::start(state_ref_lc);
+    let lc = litter_collection::start(state.clone());
 
     let result = server_terminated.await; // Don't use ? to early return before stopping the lc.
 
