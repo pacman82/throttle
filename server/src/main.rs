@@ -10,13 +10,12 @@
 //! Http interface for acquiring and releasing semaphores is not stable yet.
 #[macro_use]
 extern crate prometheus;
-use application_cfg::SemaphoreCfg;
 use clap::Parser;
 use log::{info, warn};
 use service_interface::ServiceInterface;
-use std::{collections::HashMap, io, sync::Arc};
+use std::io;
 
-use crate::{cli::Cli, service_interface::HttpServiceInterface, state::AppState};
+use crate::{cli::Cli, service_interface::HttpServiceInterface};
 
 mod application_cfg;
 mod cli;
@@ -57,32 +56,31 @@ async fn main() -> io::Result<()> {
         warn!("No semaphores configured.")
     }
 
-    let service_interface = HttpServiceInterface::new(opt.endpoint());
-    let app = Application::new(application_cfg.semaphores, service_interface);
+    let service_interface = HttpServiceInterface::new(application_cfg.semaphores, &opt.endpoint()).await?;
+    let app = Application::new(service_interface);
     app.run().await
 }
 
 struct Application<I> {
-    // We only want to use one Map of semaphores across all worker threads. To do this we wrap it in
-    // an `Arc` to share it between threads.
-    state: Arc<AppState>,
     service_interface: I,
 }
 
 impl<I> Application<I> {
-    pub fn new(semaphores_cfg: HashMap<String, SemaphoreCfg>, service_interface: I) -> Application<I> {
-        let state = Arc::new(AppState::new(semaphores_cfg));
-        Application { state, service_interface }
+    pub fn new(service_interface: I) -> Application<I> {
+        Application { service_interface }
     }
 
     pub async fn run(mut self) -> io::Result<()> where I: ServiceInterface {
         // Removes expired peers asynchrounously. We must take care not to exit early with the
         // ?-operator in order to not be left with a detached thread.
-        let lc = litter_collection::start(self.state.clone());
+        let lc = litter_collection::start(self.service_interface.app_state());
 
-        let server_terminated = self.service_interface.run_service(self.state);
+        while let Some(event) = self.service_interface.event().await {
 
-        let result = server_terminated.await; // Don't use ? to early return before stopping the lc.
+        }
+
+        // Don't use ? to early return before stopping the lc.
+        let result = self.service_interface.shutdown().await;
 
         // Stop litter collection.
         lc.stop().await;
