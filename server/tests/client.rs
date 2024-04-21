@@ -76,16 +76,20 @@ async fn acquiring_with_blocks_for() {
 /// repeating calls to acquire during waiting for a lock.
 #[tokio::test]
 async fn acquire_prolongs_lifetime_of_peer() {
-    let config = "[semaphores]\nA=1\n";
+    let config = "[semaphores]\nA = { max=1, level=1 }\nB = 1";
     let server = Server::new(8004, config);
     let client = server.make_client();
 
     let blocker = client.new_peer(Duration::from_secs(10)).await.unwrap();
 
     // Acquire `A` so subsequent locks are pending
-    client.acquire(blocker, "A", 1, None, None).await.unwrap();
+    client.acquire(blocker, "B", 1, None, None).await.unwrap();
 
     let peer = client.new_peer(Duration::from_millis(100)).await.unwrap();
+
+    // We acquire a semaphor to A first, so we can use it to validate if the peer is still alive
+    // by checking the remainder
+    client.acquire(peer, "A", 1, Some(Duration::from_millis(100)), None).await.unwrap();
 
     // This lock can not be acquired due to `blocker` holding the lock. This request is going to
     // block for one second. After which the peer should have been expired. Yet acquire can
@@ -93,7 +97,7 @@ async fn acquire_prolongs_lifetime_of_peer() {
     client
         .acquire(
             peer,
-            "A",
+            "B",
             1,
             Some(Duration::from_secs(10)),
             Some(Duration::from_millis(100)),
@@ -102,7 +106,7 @@ async fn acquire_prolongs_lifetime_of_peer() {
         .unwrap();
 
     // The initial timeout of 100ms should have been expired by now, yet nothing is removed.
-    assert_eq!(0, client.remove_expired().await.unwrap());
+    assert_eq!(0, client.remainder("A").await.unwrap());
 }
 
 /// A revenant Peer may not acquire a semaphore which does not exist on the server.

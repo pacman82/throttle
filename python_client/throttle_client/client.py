@@ -253,21 +253,6 @@ class Client:
 
         self._try_request(send_request)
 
-    def remove_expired(self) -> int:
-        """
-        Request the throttle server to remove all expired peers.
-
-        Returns number of expired peers.
-        """
-
-        def send_request():
-            response = requests.post(self.base_url + "/remove_expired", timeout=30)
-            return response
-
-        response = self._try_request(send_request)
-        # Number of expired peers
-        return json.loads(response.text)
-
     def heartbeat(self, peer_id: int, expires_in: timedelta):
         """
         Sends a PUT request to the server, updating the expiration timestamp.

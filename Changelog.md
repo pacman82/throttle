@@ -5,6 +5,7 @@ Changelog
 -----
 
 * Litter collection, which is responsible for removing peers and freeing their leases, if they did timeout no longer checks in regulare intervals for expired peers. Instead any expiration is acted upon immediatly at the earliest possible point in time. This makes throttles behaviour in these kind of edge cases more deterministic. The `litter_collection_interval` configuration option no longer holds any meaning.
+* `remove_expired_peers` function has been removed from both the Rust and the Python Client. It is now impossible for expired peers to still be tracked and to hold pending locks. Therfore the post condition of the function is always satisfied.
 
 0.4.8
 -----

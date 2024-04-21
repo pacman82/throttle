@@ -107,7 +107,7 @@ def test_keep_lease_alive_beyond_expiration():
             sleep(5)
             # Evens though enough time has passed, our lease should not be
             # expired, thanks to the heartbeat.
-            assert client.remove_expired() == 0
+            assert client.is_acquired(peer.id)
 
 
 def test_lock_count_larger_one():
