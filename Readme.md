@@ -100,7 +100,6 @@ Starting the server now yields more information.
 ```log
 [2020-04-12T18:56:23Z INFO  throttle] Hello From Throttle
 [2020-04-12T18:56:23Z WARN  throttle] No semaphores configured.
-[2020-04-12T18:56:23Z INFO  throttle::litter_collection] Start litter collection with interval: 300s
 ```
 
 #### Toml configuration file
@@ -109,10 +108,6 @@ To actually serve semaphores, we need to configure their names and full count. B
 
 ```toml
 # Sample throttle.cfg Explaining the options
-
-# The time interval in which the litter collection backgroud thread checks for expired leases.
-# Default is set to 5 minutes.
-litter_collection_interval = "5min"
 
 [semaphores]
 # Specify name and full count of semaphores. Below line creates a semaphore named A with a full
