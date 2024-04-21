@@ -67,11 +67,6 @@ async fn main() -> io::Result<()> {
     // litter collection.
     let state_ref_lc = state.clone();
 
-    // Without this line, the metric is only going to be initalized, after the first request to an
-    // unknown resource. I.e. We would see nothing instead of `num_404 0` in the metrics route,
-    // before the first request to an unknown resource.
-    not_found::initialize_metrics();
-
     let app: Router = Router::new()
         .route("/metrics", get(metrics::metrics))
         .merge(semaphores())
