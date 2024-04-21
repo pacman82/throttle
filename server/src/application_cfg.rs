@@ -7,7 +7,6 @@ use std::{
     fs::File,
     io::{self, Read},
     path::Path,
-    time::Duration,
 };
 use thiserror::Error;
 
@@ -98,34 +97,15 @@ impl<'de> de::Deserialize<'de> for SemaphoreCfg {
 
 pub type Semaphores = HashMap<String, SemaphoreCfg>;
 
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Default)]
 pub struct ApplicationCfg {
-    #[serde(
-        with = "humantime_serde",
-        default = "ApplicationCfg::litter_collection_interval_default"
-    )]
-    pub litter_collection_interval: Duration,
     #[serde(default = "HashMap::new")]
     pub semaphores: Semaphores,
     #[serde(default = "LoggingConfig::default")]
     pub logging: LoggingConfig,
 }
 
-impl Default for ApplicationCfg {
-    fn default() -> ApplicationCfg {
-        ApplicationCfg {
-            litter_collection_interval: Duration::from_secs(300), // 5min
-            semaphores: HashMap::new(),
-            logging: LoggingConfig::default(),
-        }
-    }
-}
-
 impl ApplicationCfg {
-    // Set default of litter collection interval to 5min
-    fn litter_collection_interval_default() -> Duration {
-        ApplicationCfg::default().litter_collection_interval
-    }
 
     /// Checks for a file named `application.cfg` in the working directory. It is then used to
     /// create a new configuration. If the file can not be found a default configuration is created.
@@ -162,17 +142,11 @@ mod tests {
 
     #[test]
     fn parse_toml_file() {
-        let cfg = "litter_collection_interval = \"100ms\"\n\
-                   \n\
-                   [semaphores]\n\
+        let cfg = "[semaphores]\n\
                    A=1\n\
                    \n\
                 ";
         let actual: ApplicationCfg = toml::from_str(cfg).unwrap();
-        assert_eq!(
-            actual.litter_collection_interval,
-            Duration::from_millis(100)
-        );
         assert_eq!(actual.semaphores.get("A").unwrap().max, 1);
     }
 
