@@ -14,7 +14,6 @@ use axum::{routing::get, Router};
 use clap::Parser;
 use log::{info, warn};
 use std::{io, sync::Arc};
-use tokio::signal::ctrl_c;
 
 use crate::{cli::Cli, semaphore_service::semaphores, state::AppState};
 
@@ -85,11 +84,7 @@ async fn main() -> io::Result<()> {
         .fallback(not_found::not_found);
 
     let listener = tokio::net::TcpListener::bind(&opt.endpoint()).await?;
-    let server_terminated =
-        axum::serve(listener, app);
-        
-    #[cfg(any(target_family = "unix", target_family = "windows"))]
-    let server_terminated = server_terminated.with_graceful_shutdown(async { ctrl_c().await.unwrap() });
+    let server_terminated = axum::serve(listener, app);
 
     // Removes expired peers asynchrounously. We start litter collection after the server. Would we
     // start `lc` before the `.run` method, the ?-operator after `.bind` might early return and

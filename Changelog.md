@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.5.3
+-----
+
+* Release to crates.io
+
 0.5.2
 -----
 
