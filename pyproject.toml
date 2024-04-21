@@ -1,6 +1,6 @@
 [project]
 name = "throttle_client"
-version = "0.5.0"
+version = "0.5.1"
 authors = [{ name = "Markus Klein " }]
 license = { text = "MIT License" }
 description = "Client for Throttle. Throttle is an http semaphore service, providing semaphores for distributed systems."

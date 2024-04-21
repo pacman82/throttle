@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.5.1
+-----
+
+* Updated Readme
+
 0.5.0
 -----
 
