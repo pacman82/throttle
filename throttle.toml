@@ -1,9 +1,5 @@
 # Sample throttle.cfg Explaining the options
 
-# The time interval in which the litter collection backgroud thread checks for expired leases.
-# Default is set to 5 minutes.
-# litter_collection_interval = "5min"
-
 [semaphores]
 # Specify name and full count of semaphores. Uncomment the below line to create a semaphore named A
 # with a full count of 42 and lock level 0. Setting the count to 1 would create a Mutex. If plan to
