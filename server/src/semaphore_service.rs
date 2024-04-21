@@ -12,7 +12,6 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
-use log::debug;
 use percent_encoding::percent_decode;
 use serde::Deserialize;
 use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -26,7 +25,6 @@ pub fn semaphores() -> Router<Arc<AppState>> {
         .route("/restore", post(restore))
         .route("/remainder", get(remainder))
         .route("/peers/:id/is_acquired", get(is_acquired))
-        .route("/remove_expired", post(remove_expired))
         .route("/peers/:id", put(put_peer))
 }
 
@@ -170,12 +168,6 @@ async fn is_acquired(
     Path(peer_id): Path<PeerId>,
 ) -> Result<Json<bool>, ThrottleError> {
     state.is_acquired(peer_id).map(Json)
-}
-
-/// Manually remove all expired semapahores. Usefull for testing
-async fn remove_expired(state: State<Arc<AppState>>) -> Json<usize> {
-    debug!("Remove expired triggered");
-    Json(state.remove_expired())
 }
 
 async fn put_peer(

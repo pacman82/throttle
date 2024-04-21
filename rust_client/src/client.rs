@@ -149,18 +149,6 @@ impl Client {
         Ok(acquired)
     }
 
-    /// Request the throttle server to remove all expired peers.
-    ///
-    /// # Return
-    ///
-    /// Number of expired peers.
-    pub async fn remove_expired(&self) -> Result<usize, Error> {
-        let url = self.url.join("remove_expired").unwrap();
-        let response = self.client.post(url).send().await?;
-        let num_expired = error_for_status(response).await?.json().await?;
-        Ok(num_expired)
-    }
-
     /// The curent semaphore count. I.e. the number of available leases
     ///
     /// This is equal to the full semaphore count minus the current count. This number
