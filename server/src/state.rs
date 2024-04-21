@@ -2,6 +2,7 @@ use crate::{
     application_cfg::Semaphores,
     error::ThrottleError,
     leases::{Counts, Leases, PeerId},
+    service_interface::ServiceEvent
 };
 use async_events::AsyncEvents;
 use lazy_static::lazy_static;
@@ -13,7 +14,7 @@ use std::{
     sync::Mutex,
     time::{Duration, Instant},
 };
-use tokio::{sync::watch, time};
+use tokio::{sync::{mpsc, watch}, time};
 
 /// State of the Semaphore service, shared between threads
 ///
