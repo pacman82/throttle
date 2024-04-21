@@ -1,11 +1,11 @@
 use crate::state::AppState;
-use log::{debug, info, warn};
+use log::{debug, warn};
 use std::sync::Arc;
 use tokio::{
     select, spawn,
     sync::watch,
     task::JoinHandle,
-    time::{sleep, sleep_until, Duration, Instant},
+    time::{sleep_until, Instant},
 };
 
 /// Collects expired leases asynchronously. If all goes well leases are removed by the clients via
@@ -31,25 +31,28 @@ impl LitterCollection {
 }
 
 /// Starts a new thread that removes expired leases.
-pub fn start(state: Arc<AppState>, interval: Duration) -> LitterCollection {
+pub fn start(state: Arc<AppState>) -> LitterCollection {
     let mut watch_valid_until = state.subscribe_valid_until();
     let mut maybe_valid_until = *watch_valid_until.borrow_and_update();
     let (send_stop, mut watch_stop) = watch::channel(false);
-    info!("Start litter collection with interval: {:?}", interval);
     let handle = spawn(async move {
         loop {
-            // We know then the next lease given that there is no heartbeat
             if let Some(valid_until) = maybe_valid_until {
+                // We know then the next peer would expire given that there is no heartbeat
                 select! {
                     _ = sleep_until(Instant::from_std(valid_until)) => (),
                     _ = watch_stop.changed() => break,
-                    _ = watch_valid_until.changed() => maybe_valid_until = *watch_valid_until.borrow_and_update(),
+                    _ = watch_valid_until.changed() => {
+                            maybe_valid_until = *watch_valid_until.borrow_and_update()
+                    }
                 }
             } else {
+                // There are no peers. Let's wait for this to change, or the application to stop
                 select! {
-                    _ = sleep(interval) => (),
                     _ = watch_stop.changed() => break,
-                    _ = watch_valid_until.changed() => maybe_valid_until = *watch_valid_until.borrow_and_update(),
+                    _ = watch_valid_until.changed() => {
+                            maybe_valid_until = *watch_valid_until.borrow_and_update()
+                    }
                 }
             }
             let num_removed = state.remove_expired();

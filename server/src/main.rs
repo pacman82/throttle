@@ -89,7 +89,7 @@ async fn main() -> io::Result<()> {
     // Removes expired peers asynchrounously. We start litter collection after the server. Would we
     // start `lc` before the `.run` method, the ?-operator after `.bind` might early return and
     // leave us with a detached thread.
-    let lc = litter_collection::start(state_ref_lc, application_cfg.litter_collection_interval);
+    let lc = litter_collection::start(state_ref_lc);
 
     let result = server_terminated.await; // Don't use ? to early return before stopping the lc.
 

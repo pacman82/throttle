@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.5.0
+-----
+
+* Litter collection, which is responsible for removing peers and freeing their leases, if they did timeout no longer checks in regulare intervals for expired peers. Instead any expiration is acted upon immediatly at the earliest possible point in time. This makes throttles behaviour in these kind of edge cases more deterministic. The `litter_collection_interval` configuration option no longer holds any meaning.
+
 0.4.8
 -----
 
