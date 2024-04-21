@@ -11,12 +11,12 @@
 #[macro_use]
 extern crate prometheus;
 use application_cfg::SemaphoreCfg;
-use axum::{routing::get, Router};
 use clap::Parser;
 use log::{info, warn};
-use std::{collections::HashMap, future::Future, io, sync::Arc};
+use service_interface::ServiceInterface;
+use std::{collections::HashMap, io, sync::Arc};
 
-use crate::{cli::Cli, semaphore_service::semaphores, state::AppState};
+use crate::{cli::Cli, service_interface::HttpServiceInterface, state::AppState};
 
 mod application_cfg;
 mod cli;
@@ -29,12 +29,9 @@ mod logging;
 mod metrics;
 mod not_found;
 mod semaphore_service;
+mod service_interface;
 mod state;
 mod version;
-
-async fn index() -> &'static str {
-    "Hello from Throttle!"
-}
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -63,38 +60,6 @@ async fn main() -> io::Result<()> {
     let service_interface = HttpServiceInterface::new(opt.endpoint());
     let app = Application::new(application_cfg.semaphores, service_interface);
     app.run().await
-}
-
-pub trait ServiceInterface {
-    fn run_service(&mut self, app_state: Arc<AppState>) -> impl Future<Output=io::Result<()>>;
-}
-
-pub struct HttpServiceInterface {
-    endpoint: String,
-}
-
-impl HttpServiceInterface {
-    pub fn new(endpoint: String) -> Self {
-        HttpServiceInterface { endpoint }
-    }
-}
-
-impl ServiceInterface for HttpServiceInterface {
-    async fn run_service(&mut self, app_state: Arc<AppState>) -> io::Result<()> {
-        let app: Router = Router::new()
-            .route("/metrics", get(metrics::metrics))
-            .merge(semaphores())
-            .with_state(app_state.clone())
-            // Stateless routes
-            .route("/", get(index))
-            .route("/health", get(health::health))
-            .route("/favicon.ico", get(favicon::favicon))
-            .route("/version", get(version::version))
-            .fallback(not_found::not_found);
-
-        let listener = tokio::net::TcpListener::bind(&self.endpoint).await?;
-        axum::serve(listener, app).await
-    }
 }
 
 struct Application<I> {
