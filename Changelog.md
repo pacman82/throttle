@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.5.2
+-----
+
+* Fix: Reintroduce shutdown with Ctrl+C
+
 0.5.1
 -----
 
