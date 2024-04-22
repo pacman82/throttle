@@ -3,7 +3,7 @@
 //! deserialize paramaters and serialize respones, or deciding on which HTTP methods to map the
 //! functions.
 
-use crate::{error::ThrottleError, leases::PeerId, state::AppState};
+use crate::{error::ThrottleError, leases::PeerId, service_interface::Api, state::AppState};
 use axum::{
     body::Body,
     extract::{Path, Query, State},
@@ -18,7 +18,6 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 pub fn semaphores() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/new_peer", post(new_peer))
         .route("/peers/:id", delete(release))
         .route("/peers/:id/:semaphore", put(acquire))
         .route("/peers/:id/:semaphore", delete(release_lock))
@@ -26,6 +25,11 @@ pub fn semaphores() -> Router<Arc<AppState>> {
         .route("/remainder", get(remainder))
         .route("/peers/:id/is_acquired", get(is_acquired))
         .route("/peers/:id", put(put_peer))
+}
+
+pub fn semaphores2() -> Router<Api> {
+    Router::new()
+        .route("/new_peer", post(new_peer))
 }
 
 impl ThrottleError {
@@ -68,8 +72,9 @@ struct ExpiresIn {
 /// Create a new peer with no acquired locks.
 ///
 /// Returns id of the new peer
-async fn new_peer(state: State<Arc<AppState>>, body: Json<ExpiresIn>) -> Json<PeerId> {
-    Json(state.new_peer(body.expires_in))
+async fn new_peer(mut app: State<Api>, body: Json<ExpiresIn>) -> Json<PeerId> {
+    let peer_id = app.new_peer(body.expires_in).await;
+    Json(peer_id)
 }
 
 async fn release(path: Path<PeerId>, state: State<Arc<AppState>>) -> Json<&'static str> {
