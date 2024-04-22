@@ -13,7 +13,8 @@ extern crate prometheus;
 use clap::Parser;
 use log::{info, warn};
 use service_interface::ServiceInterface;
-use std::io;
+use state::AppState;
+use std::{io, sync::Arc};
 
 use crate::{cli::Cli, service_interface::HttpServiceInterface};
 
@@ -63,20 +64,27 @@ async fn main() -> io::Result<()> {
 
 struct Application<I> {
     service_interface: I,
+    app_state: Arc<AppState>,
 }
 
 impl<I> Application<I> {
-    pub fn new(service_interface: I) -> Application<I> {
-        Application { service_interface }
+    pub fn new(service_interface: I) -> Application<I> where I: ServiceInterface {
+        let app_state = service_interface.app_state();
+        Application { app_state, service_interface }
     }
 
     pub async fn run(mut self) -> io::Result<()> where I: ServiceInterface {
         // Removes expired peers asynchrounously. We must take care not to exit early with the
         // ?-operator in order to not be left with a detached thread.
-        let lc = litter_collection::start(self.service_interface.app_state());
+        let lc = litter_collection::start(self.app_state.clone());
 
         while let Some(event) = self.service_interface.event().await {
-
+            match event {
+                service_interface::ServiceEvent::NewPeer { answer_peer_id, expires_in } => {
+                    let peer_id = self.app_state.new_peer(expires_in);
+                    answer_peer_id.send(peer_id).unwrap();
+                }
+            }
         }
 
         // Don't use ? to early return before stopping the lc.

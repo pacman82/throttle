@@ -1,10 +1,9 @@
 use axum::{routing::get, Router};
-use std::{collections::HashMap, future::Future, io, sync::Arc};
-use tokio::{spawn, sync::mpsc, task::JoinHandle};
+use std::{collections::HashMap, future::Future, io, sync::Arc, time::Duration};
+use tokio::{spawn, sync::{mpsc, oneshot}, task::JoinHandle};
 
 use crate::{
-    application_cfg::SemaphoreCfg, favicon::favicon, health::health, metrics::metrics,
-    not_found::not_found, semaphore_service::semaphores, state::AppState, version::version,
+    application_cfg::SemaphoreCfg, favicon::favicon, health::health, leases::PeerId, metrics::metrics, not_found::not_found, semaphore_service::{semaphores, semaphores2}, state::AppState, version::version
 };
 
 pub trait ServiceInterface {
@@ -13,8 +12,26 @@ pub trait ServiceInterface {
     fn event(&mut self) -> impl Future<Output = Option<ServiceEvent>>;
 }
 
+/// Channels used to communicate between request handlers and Domain logic
+#[derive(Clone)]
+pub struct Api {
+    sender: mpsc::Sender<ServiceEvent>
+}
+
+impl Api {
+    pub fn new(sender: mpsc::Sender<ServiceEvent>) -> Self {
+        Api { sender }
+    }
+
+    pub async fn new_peer(&mut self, expires_in: Duration) -> PeerId {
+        let (send, recv) = oneshot::channel();
+        self.sender.send(ServiceEvent::NewPeer { answer_peer_id: send, expires_in }).await.unwrap();
+        recv.await.unwrap()
+    }
+}
+
 pub enum ServiceEvent {
-    NewPeer,
+    NewPeer{ answer_peer_id: oneshot::Sender<PeerId>, expires_in: Duration },
 }
 
 pub struct HttpServiceInterface {
@@ -28,7 +45,10 @@ impl HttpServiceInterface {
         semaphores_cfg: HashMap<String, SemaphoreCfg>,
         endpoint: &str,
     ) -> Result<Self, io::Error> {
-        let (sender, event_receiver) = mpsc::channel(10);
+        let (sender, event_receiver) = mpsc::channel(5);
+
+        let channels = Api::new(sender);
+
         // We only want to use one Map of semaphores across all worker threads. To do this we wrap it in
         // an `Arc` to share it between threads.
         let app_state = Arc::new(AppState::new(semaphores_cfg));
@@ -41,6 +61,8 @@ impl HttpServiceInterface {
             .route("/metrics", get(metrics))
             .merge(semaphores())
             .with_state(app_state.clone())
+            .merge(semaphores2())
+            .with_state(channels)
             // Stateless routes
             .route("/", get(index))
             .route("/health", get(health))
