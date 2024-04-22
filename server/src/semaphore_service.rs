@@ -18,7 +18,6 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 pub fn semaphores() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/peers/:id", delete(release))
         .route("/peers/:id/:semaphore", put(acquire))
         .route("/peers/:id/:semaphore", delete(release_lock))
         .route("/restore", post(restore))
@@ -30,6 +29,7 @@ pub fn semaphores() -> Router<Arc<AppState>> {
 pub fn semaphores2() -> Router<Api> {
     Router::new()
         .route("/new_peer", post(new_peer))
+        .route("/peers/:id", delete(release))
 }
 
 impl ThrottleError {
@@ -72,13 +72,13 @@ struct ExpiresIn {
 /// Create a new peer with no acquired locks.
 ///
 /// Returns id of the new peer
-async fn new_peer(mut app: State<Api>, body: Json<ExpiresIn>) -> Json<PeerId> {
-    let peer_id = app.new_peer(body.expires_in).await;
+async fn new_peer(mut api: State<Api>, body: Json<ExpiresIn>) -> Json<PeerId> {
+    let peer_id = api.new_peer(body.expires_in).await;
     Json(peer_id)
 }
 
-async fn release(path: Path<PeerId>, state: State<Arc<AppState>>) -> Json<&'static str> {
-    if state.release(*path) {
+async fn release(mut api: State<Api>, path: Path<PeerId>) -> Json<&'static str> {
+    if api.release_peer(*path).await {
         Json("Peer released")
     } else {
         // Post condition of lease not being there is satisfied, let's make this request 200 still.

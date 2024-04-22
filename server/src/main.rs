@@ -12,7 +12,7 @@
 extern crate prometheus;
 use clap::Parser;
 use log::{info, warn};
-use service_interface::ServiceInterface;
+use service_interface::{ServiceEvent, ServiceInterface};
 use state::AppState;
 use std::{io, sync::Arc};
 
@@ -80,10 +80,14 @@ impl<I> Application<I> {
 
         while let Some(event) = self.service_interface.event().await {
             match event {
-                service_interface::ServiceEvent::NewPeer { answer_peer_id, expires_in } => {
+                ServiceEvent::NewPeer { answer_peer_id, expires_in } => {
                     let peer_id = self.app_state.new_peer(expires_in);
                     answer_peer_id.send(peer_id).unwrap();
                 }
+                ServiceEvent::ReleasePeer { answer_removed, peer_id } => {
+                    let removed = self.app_state.release(peer_id);
+                    answer_removed.send(removed).unwrap();
+                },
             }
         }
 
