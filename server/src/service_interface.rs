@@ -28,10 +28,19 @@ impl Api {
         self.sender.send(ServiceEvent::NewPeer { answer_peer_id: send, expires_in }).await.unwrap();
         recv.await.unwrap()
     }
+
+    pub async fn release_peer(&mut self, peer_id: PeerId) -> bool {
+        let (send, recv) = oneshot::channel();
+        self.sender.send(ServiceEvent::ReleasePeer { answer_removed: send, peer_id }).await.unwrap();
+        recv.await.unwrap()
+    }
 }
 
 pub enum ServiceEvent {
+    /// Create a new peer, with a given expiration time
     NewPeer{ answer_peer_id: oneshot::Sender<PeerId>, expires_in: Duration },
+    /// Release Peer and all associated locks. `true` if peer did actually exist before the call.
+    ReleasePeer { answer_removed: oneshot::Sender<bool>, peer_id: PeerId },
 }
 
 pub struct HttpServiceInterface {
