@@ -57,7 +57,8 @@ async fn main() -> io::Result<()> {
         warn!("No semaphores configured.")
     }
 
-    let service_interface = HttpServiceInterface::new(application_cfg.semaphores, &opt.endpoint()).await?;
+    let service_interface =
+        HttpServiceInterface::new(application_cfg.semaphores, &opt.endpoint()).await?;
     let app = Application::new(service_interface);
     app.run().await
 }
@@ -68,26 +69,55 @@ struct Application<I> {
 }
 
 impl<I> Application<I> {
-    pub fn new(service_interface: I) -> Application<I> where I: ServiceInterface {
+    pub fn new(service_interface: I) -> Application<I>
+    where
+        I: ServiceInterface,
+    {
         let app_state = service_interface.app_state();
-        Application { app_state, service_interface }
+        Application {
+            app_state,
+            service_interface,
+        }
     }
 
-    pub async fn run(mut self) -> io::Result<()> where I: ServiceInterface {
+    pub async fn run(mut self) -> io::Result<()>
+    where
+        I: ServiceInterface,
+    {
         // Removes expired peers asynchrounously. We must take care not to exit early with the
         // ?-operator in order to not be left with a detached thread.
         let lc = litter_collection::start(self.app_state.clone());
 
         while let Some(event) = self.service_interface.event().await {
             match event {
-                ServiceEvent::NewPeer { answer_peer_id, expires_in } => {
+                ServiceEvent::NewPeer {
+                    answer_peer_id,
+                    expires_in,
+                } => {
                     let peer_id = self.app_state.new_peer(expires_in);
                     answer_peer_id.send(peer_id).unwrap();
                 }
-                ServiceEvent::ReleasePeer { answer_removed, peer_id } => {
+                ServiceEvent::ReleasePeer {
+                    answer_removed,
+                    peer_id,
+                } => {
                     let removed = self.app_state.release(peer_id);
                     answer_removed.send(removed).unwrap();
-                },
+                }
+                ServiceEvent::AcquireLock {
+                    answer_acquired,
+                    peer_id,
+                    semaphore,
+                    amount,
+                    wait_for,
+                    expires_in,
+                } => {
+                    let acquired = self
+                        .app_state
+                        .acquire(peer_id, &semaphore, amount, wait_for, expires_in)
+                        .await;
+                    answer_acquired.send(acquired).unwrap()
+                }
             }
         }
 

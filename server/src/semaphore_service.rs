@@ -18,7 +18,6 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 pub fn semaphores() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/peers/:id/:semaphore", put(acquire))
         .route("/peers/:id/:semaphore", delete(release_lock))
         .route("/restore", post(restore))
         .route("/remainder", get(remainder))
@@ -30,6 +29,7 @@ pub fn semaphores2() -> Router<Api> {
     Router::new()
         .route("/new_peer", post(new_peer))
         .route("/peers/:id", delete(release))
+        .route("/peers/:id/:semaphore", put(acquire))
 }
 
 impl ThrottleError {
@@ -101,7 +101,7 @@ struct AcquireQuery {
 /// while it is pending. Having repeated short lived requests is preferable over one long running,
 /// as many proxies, firewalls, and Gateways might kill them.
 async fn acquire(
-    state: State<Arc<AppState>>,
+    mut api: State<Api>,
     Path((peer_id, semaphore)): Path<(PeerId, String)>,
     query: Query<AcquireQuery>,
     body: Json<i64>,
@@ -109,11 +109,11 @@ async fn acquire(
     let semaphore = percent_decode(semaphore.as_bytes()).decode_utf8_lossy();
 
     let amount = body.0;
-    // Turn `Option<HumantimeDuratino>` into `Option<Duration>`.
+    // Turn `Option<HumantimeDuration>` into `Option<Duration>`.
     let wait_for = query.block_for.map(|hd| hd.0);
     let expires_in = query.expires_in.map(|hd| hd.0);
-    if state
-        .acquire(peer_id, &semaphore, amount, wait_for, expires_in)
+    if api
+        .acquire(peer_id, semaphore.into_owned(), amount, wait_for, expires_in)
         .await?
     {
         Ok((StatusCode::OK, Json(peer_id)))
