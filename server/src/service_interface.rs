@@ -1,9 +1,22 @@
 use axum::{routing::get, Router};
 use std::{collections::HashMap, future::Future, io, sync::Arc, time::Duration};
-use tokio::{spawn, sync::{mpsc, oneshot}, task::JoinHandle};
+use tokio::{
+    spawn,
+    sync::{mpsc, oneshot},
+    task::JoinHandle,
+};
 
 use crate::{
-    application_cfg::SemaphoreCfg, favicon::favicon, health::health, leases::PeerId, metrics::metrics, not_found::not_found, semaphore_service::{semaphores, semaphores2}, state::AppState, version::version
+    application_cfg::SemaphoreCfg,
+    error::ThrottleError,
+    favicon::favicon,
+    health::health,
+    leases::PeerId,
+    metrics::metrics,
+    not_found::not_found,
+    semaphore_service::{semaphores, semaphores2},
+    state::AppState,
+    version::version,
 };
 
 pub trait ServiceInterface {
@@ -15,7 +28,7 @@ pub trait ServiceInterface {
 /// Channels used to communicate between request handlers and Domain logic
 #[derive(Clone)]
 pub struct Api {
-    sender: mpsc::Sender<ServiceEvent>
+    sender: mpsc::Sender<ServiceEvent>,
 }
 
 impl Api {
@@ -25,22 +38,71 @@ impl Api {
 
     pub async fn new_peer(&mut self, expires_in: Duration) -> PeerId {
         let (send, recv) = oneshot::channel();
-        self.sender.send(ServiceEvent::NewPeer { answer_peer_id: send, expires_in }).await.unwrap();
+        self.sender
+            .send(ServiceEvent::NewPeer {
+                answer_peer_id: send,
+                expires_in,
+            })
+            .await
+            .unwrap();
         recv.await.unwrap()
     }
 
     pub async fn release_peer(&mut self, peer_id: PeerId) -> bool {
         let (send, recv) = oneshot::channel();
-        self.sender.send(ServiceEvent::ReleasePeer { answer_removed: send, peer_id }).await.unwrap();
+        self.sender
+            .send(ServiceEvent::ReleasePeer {
+                answer_removed: send,
+                peer_id,
+            })
+            .await
+            .unwrap();
+        recv.await.unwrap()
+    }
+
+    pub async fn acquire(
+        &mut self,
+        peer_id: PeerId,
+        semaphore: String,
+        amount: i64,
+        wait_for: Option<Duration>,
+        expires_in: Option<Duration>,
+    ) -> Result<bool, ThrottleError> {
+        let (send, recv) = oneshot::channel();
+        self.sender
+            .send(ServiceEvent::AcquireLock {
+                answer_acquired: send,
+                peer_id,
+                semaphore,
+                amount,
+                wait_for,
+                expires_in,
+            })
+            .await
+            .unwrap();
         recv.await.unwrap()
     }
 }
 
 pub enum ServiceEvent {
     /// Create a new peer, with a given expiration time
-    NewPeer{ answer_peer_id: oneshot::Sender<PeerId>, expires_in: Duration },
+    NewPeer {
+        answer_peer_id: oneshot::Sender<PeerId>,
+        expires_in: Duration,
+    },
     /// Release Peer and all associated locks. `true` if peer did actually exist before the call.
-    ReleasePeer { answer_removed: oneshot::Sender<bool>, peer_id: PeerId },
+    ReleasePeer {
+        answer_removed: oneshot::Sender<bool>,
+        peer_id: PeerId,
+    },
+    AcquireLock {
+        answer_acquired: oneshot::Sender<Result<bool, ThrottleError>>,
+        peer_id: PeerId,
+        semaphore: String,
+        amount: i64,
+        wait_for: Option<Duration>,
+        expires_in: Option<Duration>,
+    },
 }
 
 pub struct HttpServiceInterface {
