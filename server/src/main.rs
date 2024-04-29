@@ -118,6 +118,14 @@ impl<I> Application<I> {
                         .await;
                     answer_acquired.send(acquired).unwrap()
                 }
+                ServiceEvent::ReleaseLock {
+                    peer_id,
+                    semaphore,
+                    answer_release,
+                } => {
+                    let result = self.app_state.release_lock(peer_id, &semaphore);
+                    answer_release.send(result).unwrap();
+                }
             }
         }
 
