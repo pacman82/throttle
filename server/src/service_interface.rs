@@ -82,6 +82,23 @@ impl Api {
             .unwrap();
         recv.await.unwrap()
     }
+
+    pub async fn release(
+        &mut self,
+        peer_id: PeerId,
+        semaphore: String,
+    ) -> Result<(), ThrottleError> {
+        let (send, recv) = oneshot::channel();
+        self.sender
+            .send(ServiceEvent::ReleaseLock {
+                answer_release: send,
+                peer_id,
+                semaphore,
+            })
+            .await
+            .unwrap();
+        recv.await.unwrap()
+    }
 }
 
 pub enum ServiceEvent {
@@ -102,6 +119,11 @@ pub enum ServiceEvent {
         amount: i64,
         wait_for: Option<Duration>,
         expires_in: Option<Duration>,
+    },
+    ReleaseLock {
+        peer_id: PeerId,
+        semaphore: String,
+        answer_release: oneshot::Sender<Result<(), ThrottleError>>,
     },
 }
 
