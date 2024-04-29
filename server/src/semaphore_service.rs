@@ -19,7 +19,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 pub fn semaphores() -> Router<Arc<AppState>> {
     Router::new()
         .route("/restore", post(restore))
-        .route("/remainder", get(remainder))
+        .route("/peers/:id", put(put_peer))
 }
 
 pub fn semaphores2() -> Router<Api> {
@@ -29,7 +29,8 @@ pub fn semaphores2() -> Router<Api> {
         .route("/peers/:id/:semaphore", put(acquire))
         .route("/peers/:id/:semaphore", delete(release_lock))
         .route("/peers/:id/is_acquired", get(is_acquired))
-        .route("/peers/:id", put(put_peer))
+        .route("/remainder", get(remainder))
+        
 }
 
 impl ThrottleError {
@@ -160,10 +161,10 @@ struct Remainder {
 
 /// Get the remainder of a semaphore
 async fn remainder(
-    state: State<Arc<AppState>>,
+    mut api: State<Api>,
     query: Query<Remainder>,
 ) -> Result<Json<i64>, ThrottleError> {
-    state.remainder(&query.semaphore).map(Json)
+    api.remainder(query.0.semaphore).await.map(Json)
 }
 
 /// Returns wether all the locks of the peer have been acquired. This route will not block, but
@@ -176,10 +177,10 @@ async fn is_acquired(
 }
 
 async fn put_peer(
-    mut api: State<Api>,
+    app_state: State<Arc<AppState>>,
     Path(peer_id): Path<PeerId>,
     body: Json<ExpiresIn>,
 ) -> Result<&'static str, ThrottleError> {
-    api.heartbeat(peer_id, body.expires_in).await?;
+    app_state.heartbeat(peer_id, body.expires_in)?;
     Ok("Ok")
 }

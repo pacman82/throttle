@@ -128,6 +128,18 @@ impl Api {
             .unwrap();
         recv.await.unwrap()
     }
+
+    pub async fn remainder(&mut self, semaphore: String) -> Result<i64, ThrottleError> {
+        let (send, recv) = oneshot::channel();
+        self.sender
+            .send(ServiceEvent::Remainder {
+                semaphore,
+                answer_remainder: send,
+            })
+            .await
+            .unwrap();
+        recv.await.unwrap()
+    }
 }
 
 pub enum ServiceEvent {
@@ -162,6 +174,10 @@ pub enum ServiceEvent {
         peer_id: PeerId,
         expires_in: Duration,
         answer_heartbeat: oneshot::Sender<Result<(), ThrottleError>>,
+    },
+    Remainder {
+        semaphore: String,
+        answer_remainder: oneshot::Sender<Result<i64, ThrottleError>>,
     },
 }
 
