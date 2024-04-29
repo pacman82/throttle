@@ -20,7 +20,6 @@ pub fn semaphores() -> Router<Arc<AppState>> {
     Router::new()
         .route("/restore", post(restore))
         .route("/remainder", get(remainder))
-        .route("/peers/:id/is_acquired", get(is_acquired))
         .route("/peers/:id", put(put_peer))
 }
 
@@ -30,6 +29,7 @@ pub fn semaphores2() -> Router<Api> {
         .route("/peers/:id", delete(release))
         .route("/peers/:id/:semaphore", put(acquire))
         .route("/peers/:id/:semaphore", delete(release_lock))
+        .route("/peers/:id/is_acquired", get(is_acquired))
 }
 
 impl ThrottleError {
@@ -169,10 +169,10 @@ async fn remainder(
 /// Returns wether all the locks of the peer have been acquired. This route will not block, but
 /// return immediatly.
 async fn is_acquired(
-    state: State<Arc<AppState>>,
+    mut api: State<Api>,
     Path(peer_id): Path<PeerId>,
 ) -> Result<Json<bool>, ThrottleError> {
-    state.is_acquired(peer_id).map(Json)
+    api.is_acquired(peer_id).await.map(Json)
 }
 
 async fn put_peer(

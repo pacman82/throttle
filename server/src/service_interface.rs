@@ -99,6 +99,18 @@ impl Api {
             .unwrap();
         recv.await.unwrap()
     }
+
+    pub async fn is_acquired(&mut self, peer_id: PeerId) -> Result<bool, ThrottleError> {
+        let (send, recv) = oneshot::channel();
+        self.sender
+            .send(ServiceEvent::IsAcquired {
+                answer_is_aquired: send,
+                peer_id,
+            })
+            .await
+            .unwrap();
+        recv.await.unwrap()
+    }
 }
 
 pub enum ServiceEvent {
@@ -124,6 +136,10 @@ pub enum ServiceEvent {
         peer_id: PeerId,
         semaphore: String,
         answer_release: oneshot::Sender<Result<(), ThrottleError>>,
+    },
+    IsAcquired {
+        peer_id: PeerId,
+        answer_is_aquired: oneshot::Sender<Result<bool, ThrottleError>>,
     },
 }
 

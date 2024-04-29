@@ -126,6 +126,10 @@ impl<I> Application<I> {
                     let result = self.app_state.release_lock(peer_id, &semaphore);
                     answer_release.send(result).unwrap();
                 }
+                ServiceEvent::IsAcquired { peer_id, answer_is_aquired } => {
+                    let result = self.app_state.is_acquired(peer_id);
+                    answer_is_aquired.send(result).unwrap();
+                },
             }
         }
 
