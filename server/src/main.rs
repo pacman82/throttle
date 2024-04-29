@@ -130,6 +130,10 @@ impl<I> Application<I> {
                     let result = self.app_state.is_acquired(peer_id);
                     answer_is_aquired.send(result).unwrap();
                 },
+                ServiceEvent::Heartbeat { peer_id, expires_in, answer_heartbeat } => {
+                    let result = self.app_state.heartbeat(peer_id, expires_in);
+                    answer_heartbeat.send(result).unwrap();
+                },
             }
         }
 
