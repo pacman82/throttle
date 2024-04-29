@@ -20,7 +20,6 @@ pub fn semaphores() -> Router<Arc<AppState>> {
     Router::new()
         .route("/restore", post(restore))
         .route("/remainder", get(remainder))
-        .route("/peers/:id", put(put_peer))
 }
 
 pub fn semaphores2() -> Router<Api> {
@@ -30,6 +29,7 @@ pub fn semaphores2() -> Router<Api> {
         .route("/peers/:id/:semaphore", put(acquire))
         .route("/peers/:id/:semaphore", delete(release_lock))
         .route("/peers/:id/is_acquired", get(is_acquired))
+        .route("/peers/:id", put(put_peer))
 }
 
 impl ThrottleError {
@@ -176,10 +176,10 @@ async fn is_acquired(
 }
 
 async fn put_peer(
-    state: State<Arc<AppState>>,
+    mut api: State<Api>,
     Path(peer_id): Path<PeerId>,
     body: Json<ExpiresIn>,
 ) -> Result<&'static str, ThrottleError> {
-    state.heartbeat(peer_id, body.expires_in)?;
+    api.heartbeat(peer_id, body.expires_in).await?;
     Ok("Ok")
 }

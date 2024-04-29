@@ -111,6 +111,23 @@ impl Api {
             .unwrap();
         recv.await.unwrap()
     }
+
+    pub async fn heartbeat(
+        &mut self,
+        peer_id: PeerId,
+        expires_in: Duration,
+    ) -> Result<(), ThrottleError> {
+        let (send, recv) = oneshot::channel();
+        self.sender
+            .send(ServiceEvent::Heartbeat {
+                peer_id,
+                expires_in,
+                answer_heartbeat: send,
+            })
+            .await
+            .unwrap();
+        recv.await.unwrap()
+    }
 }
 
 pub enum ServiceEvent {
@@ -140,6 +157,11 @@ pub enum ServiceEvent {
     IsAcquired {
         peer_id: PeerId,
         answer_is_aquired: oneshot::Sender<Result<bool, ThrottleError>>,
+    },
+    Heartbeat {
+        peer_id: PeerId,
+        expires_in: Duration,
+        answer_heartbeat: oneshot::Sender<Result<(), ThrottleError>>,
     },
 }
 
