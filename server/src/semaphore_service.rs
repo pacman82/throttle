@@ -18,7 +18,6 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 pub fn semaphores() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/peers/:id/:semaphore", delete(release_lock))
         .route("/restore", post(restore))
         .route("/remainder", get(remainder))
         .route("/peers/:id/is_acquired", get(is_acquired))
@@ -30,6 +29,7 @@ pub fn semaphores2() -> Router<Api> {
         .route("/new_peer", post(new_peer))
         .route("/peers/:id", delete(release))
         .route("/peers/:id/:semaphore", put(acquire))
+        .route("/peers/:id/:semaphore", delete(release_lock))
 }
 
 impl ThrottleError {
@@ -124,11 +124,11 @@ async fn acquire(
 
 async fn release_lock(
     Path((peer_id, semaphore)): Path<(PeerId, String)>,
-    state: State<Arc<AppState>>,
+    mut api: State<Api>,
 ) -> Result<&'static str, ThrottleError> {
     let semaphore = percent_decode(semaphore.as_bytes()).decode_utf8_lossy();
 
-    state.release_lock(peer_id, &semaphore)?;
+    api.release(peer_id, semaphore.into_owned()).await?;
     Ok("Ok")
 }
 
