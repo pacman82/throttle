@@ -256,7 +256,8 @@ async fn acquire_locks_immediatly_after_expiration() {
     let heartbeat = client.heartbeat(one, Duration::from_secs(0));
 
     let (wait_for_two, _) = tokio::join!(wait_for_two, heartbeat);
-    assert!(wait_for_two.unwrap());
+    let two_could_be_acquired = wait_for_two.unwrap();
+    assert!(two_could_be_acquired);
 }
 
 /// `acquire` must return `False` while pending and `True` once lock is acquired.
