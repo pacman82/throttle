@@ -217,7 +217,7 @@ pub enum ServiceEvent {
     },
     RemovedExpired {
         answer_remove_expired: oneshot::Sender<usize>,
-    }
+    },
 }
 
 pub struct HttpServiceInterface {
@@ -239,9 +239,7 @@ impl HttpServiceInterface {
 
         let listener = tokio::net::TcpListener::bind(endpoint).await?;
         let join_handle = spawn(async move { axum::serve(listener, app).await });
-        Ok(HttpServiceInterface {
-            join_handle,
-        })
+        Ok(HttpServiceInterface { join_handle })
     }
 
     pub async fn shutdown(self) -> io::Result<()> {

@@ -15,7 +15,7 @@ use clap::Parser;
 use log::{info, warn};
 use service_interface::{Api, ServiceEvent};
 use state::AppState;
-use std::{io, sync::Arc};
+use std::io;
 use tokio::{spawn, sync::mpsc};
 
 use crate::{cli::Cli, service_interface::HttpServiceInterface};
@@ -63,11 +63,11 @@ async fn main() -> io::Result<()> {
 
     // Removes expired peers asynchrounously. We must take care not to exit early with the
     // ?-operator in order to not be left with a detached thread.
-    let lc = litter_collection::start(app.app_state());
+    let lc = litter_collection::start(app.app_state(), app.api());
 
     let service_interface = HttpServiceInterface::new(&opt.endpoint(), app.api()).await?;
-    
-    app.run_message_loop().await;
+
+    app.run_event_loop().await;
 
     // Don't use ? to early return before stopping the lc.
     let result = service_interface.shutdown().await;
@@ -81,12 +81,12 @@ async fn main() -> io::Result<()> {
 struct Application {
     event_receiver: mpsc::Receiver<ServiceEvent>,
     api: Api,
-    app_state: Arc<AppState>,
+    app_state: AppState,
 }
 
 impl Application {
     pub fn new(config: ApplicationCfg) -> Self {
-        let app_state = Arc::new(AppState::new(config.semaphores));
+        let app_state = AppState::new(config.semaphores);
         let (sender, event_receiver) = mpsc::channel(5);
         let api = Api::new(sender);
         Application {
@@ -101,12 +101,11 @@ impl Application {
         self.api.clone()
     }
 
-    pub fn app_state(&self) -> Arc<AppState> {
-        self.app_state.clone()
+    pub fn app_state(&self) -> &AppState {
+        &self.app_state
     }
 
-    pub async fn run_message_loop(mut self)
-    {
+    pub async fn run_event_loop(mut self) {
         while let Some(event) = self.event_receiver.recv().await {
             match event {
                 ServiceEvent::NewPeer {

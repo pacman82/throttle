@@ -1,6 +1,5 @@
-use crate::state::AppState;
+use crate::{service_interface::Api, state::AppState};
 use log::{debug, warn};
-use std::sync::Arc;
 use tokio::{
     select, spawn,
     sync::watch,
@@ -31,7 +30,7 @@ impl LitterCollection {
 }
 
 /// Starts a new thread that removes expired leases.
-pub fn start(state: Arc<AppState>) -> LitterCollection {
+pub fn start(state: &AppState, mut api: Api) -> LitterCollection {
     let mut watch_valid_until = state.subscribe_valid_until();
     let mut maybe_valid_until = *watch_valid_until.borrow_and_update();
     let (send_stop, mut watch_stop) = watch::channel(false);
@@ -55,7 +54,7 @@ pub fn start(state: Arc<AppState>) -> LitterCollection {
                     }
                 }
             }
-            let num_removed = state.remove_expired();
+            let num_removed = api.remove_expired().await;
             if num_removed == 0 {
                 debug!("Litter collection did not find any expired leases.")
             } else {
