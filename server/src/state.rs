@@ -326,7 +326,7 @@ impl AppState {
     /// Allows the litter collection to watch for the earliest anticipated expiration of a leak.
     /// The watched timepoint will be updated if it changes. It can become even earlier or (more
     /// likely is prolonged). `None` implies there are no leases which can expire.
-    pub fn subscribe_valid_until(&self) -> watch::Receiver<Option<Instant>> {
+    pub fn watch_valid_until(&self) -> watch::Receiver<Option<Instant>> {
         let receiver = self.send_min_valid_until.subscribe();
         // We are likely fine, if we just subscribe. This is just defensive in case min_valid until
         // changes beetween App state construction and subscription.
@@ -696,7 +696,7 @@ mod tests {
         // now there is something to expire.
         let semaphores = Semaphores::new();
         let state = AppState::new(semaphores);
-        let mut listener = state.subscribe_valid_until();
+        let mut listener = state.watch_valid_until();
 
         // When waiting for the peer to expire
         let one_sec = Duration::from_secs(1);
@@ -711,7 +711,7 @@ mod tests {
         // Given
         let semaphores = Semaphores::new();
         let state = AppState::new(semaphores);
-        let mut listener = state.subscribe_valid_until();
+        let mut listener = state.watch_valid_until();
 
         // When
         let one_sec = Duration::from_secs(1);
@@ -726,7 +726,7 @@ mod tests {
         // Given
         let semaphores = Semaphores::new();
         let state = AppState::new(semaphores);
-        let mut listener = state.subscribe_valid_until();
+        let mut listener = state.watch_valid_until();
         let peer_id = state.new_peer(Duration::from_secs(1));
 
         // When
@@ -741,7 +741,7 @@ mod tests {
         // Given
         let semaphores = Semaphores::new();
         let state = AppState::new(semaphores);
-        let mut listener = state.subscribe_valid_until();
+        let mut listener = state.watch_valid_until();
         let _ = state.new_peer(Duration::from_secs(1));
 
         // When creating a new peer and letting it expiring before the first one

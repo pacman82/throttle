@@ -1,4 +1,4 @@
-use crate::{service_interface::Api, state::AppState};
+use crate::service_interface::Api;
 use log::{debug, warn};
 use tokio::{
     select, spawn,
@@ -30,8 +30,10 @@ impl LitterCollection {
 }
 
 /// Starts a new thread that removes expired leases.
-pub fn start(state: &AppState, mut api: Api) -> LitterCollection {
-    let mut watch_valid_until = state.subscribe_valid_until();
+pub fn start(
+    mut watch_valid_until: watch::Receiver<Option<std::time::Instant>>,
+    mut api: Api,
+) -> LitterCollection {
     let mut maybe_valid_until = *watch_valid_until.borrow_and_update();
     let (send_stop, mut watch_stop) = watch::channel(false);
     let handle = spawn(async move {
