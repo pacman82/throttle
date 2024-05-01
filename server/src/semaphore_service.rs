@@ -144,11 +144,9 @@ struct Restore {
 /// acquired locks of the peer are guaranteed to be acquired. Even if this means going over the full
 /// count of the semaphore. Pending locks may be resolved, if this is possible without going over
 /// the semaphores full count, or violating fairness.
-async fn restore(
-    mut api: State<Api>,
-    body: Json<Restore>,
-) -> Result<&'static str, ThrottleError> {
-    api.restore(body.peer_id, body.expires_in, body.0.acquired).await?;
+async fn restore(mut api: State<Api>, body: Json<Restore>) -> Result<&'static str, ThrottleError> {
+    api.restore(body.peer_id, body.expires_in, body.0.acquired)
+        .await?;
     Ok("Ok")
 }
 
