@@ -10,6 +10,7 @@
 //! Http interface for acquiring and releasing semaphores is not stable yet.
 #[macro_use]
 extern crate prometheus;
+use application_cfg::ApplicationCfg;
 use clap::Parser;
 use log::{info, warn};
 use service_interface::{ServiceEvent, ServiceInterface};
@@ -59,8 +60,8 @@ async fn main() -> io::Result<()> {
     }
 
     let service_interface =
-        HttpServiceInterface::new(application_cfg.semaphores, &opt.endpoint()).await?;
-    let app = Application::new(service_interface);
+        HttpServiceInterface::new(&opt.endpoint()).await?;
+    let app = Application::new(service_interface, application_cfg);
     app.run().await
 }
 
@@ -70,11 +71,11 @@ struct Application<I> {
 }
 
 impl<I> Application<I> {
-    pub fn new(service_interface: I) -> Application<I>
+    pub fn new(service_interface: I, config: ApplicationCfg) -> Application<I>
     where
         I: ServiceInterface,
     {
-        let app_state = service_interface.app_state();
+        let app_state = Arc::new(AppState::new(config.semaphores));
         Application {
             app_state,
             service_interface,
