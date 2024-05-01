@@ -15,6 +15,9 @@ use std::{
 };
 use tokio::{sync::watch, time};
 
+/// List of lock acquired ba a peer
+pub type Locks = HashMap<String, i64>;
+
 /// State of the Semaphore service, shared between threads
 ///
 /// This class combines the confguration of the `semaphores`, with the state of the peers in
@@ -170,7 +173,7 @@ impl AppState {
         &self,
         peer_id: PeerId,
         expires_in: Duration,
-        acquired: &HashMap<String, i64>,
+        acquired: &Locks,
     ) -> Result<(), ThrottleError> {
         warn!(
             "Revenant Peer {}. Has locks: {}",

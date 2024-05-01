@@ -14,8 +14,8 @@ use crate::{
     leases::PeerId,
     metrics::metrics,
     not_found::not_found,
-    semaphore_service::{semaphores, semaphores2},
-    state::AppState,
+    semaphore_service::semaphores as semaphores,
+    state::{AppState, Locks},
     version::version,
 };
 
@@ -140,6 +140,25 @@ impl Api {
             .unwrap();
         recv.await.unwrap()
     }
+
+    pub async fn restore(
+        &mut self,
+        peer_id: PeerId,
+        expires_in: Duration,
+        acquired: Locks,
+    ) -> Result<(), ThrottleError> {
+        let (send, recv) = oneshot::channel();
+        self.sender
+            .send(ServiceEvent::Restore {
+                peer_id,
+                expires_in,
+                acquired,
+                answer_restore: send,
+            })
+            .await
+            .unwrap();
+        recv.await.unwrap()
+    }
 }
 
 pub enum ServiceEvent {
@@ -179,6 +198,12 @@ pub enum ServiceEvent {
         semaphore: String,
         answer_remainder: oneshot::Sender<Result<i64, ThrottleError>>,
     },
+    Restore {
+        peer_id: PeerId,
+        expires_in: Duration,
+        acquired: Locks,
+        answer_restore: oneshot::Sender<Result<(), ThrottleError>>,
+    },
 }
 
 pub struct HttpServiceInterface {
@@ -206,9 +231,8 @@ impl HttpServiceInterface {
 
         let app: Router = Router::new()
             .route("/metrics", get(metrics))
-            .merge(semaphores())
             .with_state(app_state.clone())
-            .merge(semaphores2())
+            .merge(semaphores())
             .with_state(channels)
             // Stateless routes
             .route("/", get(index))

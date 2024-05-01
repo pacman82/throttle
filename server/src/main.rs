@@ -151,6 +151,15 @@ impl<I> Application<I> {
                     let result = self.app_state.remainder(&semaphore);
                     answer_remainder.send(result).unwrap()
                 }
+                ServiceEvent::Restore {
+                    peer_id,
+                    expires_in,
+                    acquired,
+                    answer_restore,
+                } => {
+                    let result = self.app_state.restore(peer_id, expires_in, &acquired);
+                    answer_restore.send(result).unwrap();
+                }
             }
         }
 

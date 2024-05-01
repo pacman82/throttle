@@ -3,7 +3,7 @@
 //! deserialize paramaters and serialize respones, or deciding on which HTTP methods to map the
 //! functions.
 
-use crate::{error::ThrottleError, leases::PeerId, service_interface::Api, state::AppState};
+use crate::{error::ThrottleError, leases::PeerId, service_interface::Api, state::Locks};
 use axum::{
     body::Body,
     extract::{Path, Query, State},
@@ -14,13 +14,9 @@ use axum::{
 };
 use percent_encoding::percent_decode;
 use serde::Deserialize;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::time::Duration;
 
-pub fn semaphores() -> Router<Arc<AppState>> {
-    Router::new().route("/restore", post(restore))
-}
-
-pub fn semaphores2() -> Router<Api> {
+pub fn semaphores() -> Router<Api> {
     Router::new()
         .route("/new_peer", post(new_peer))
         .route("/peers/:id", put(put_peer))
@@ -29,6 +25,7 @@ pub fn semaphores2() -> Router<Api> {
         .route("/peers/:id/:semaphore", delete(release_lock))
         .route("/peers/:id/is_acquired", get(is_acquired))
         .route("/remainder", get(remainder))
+        .route("/restore", post(restore))
 }
 
 impl ThrottleError {
@@ -54,8 +51,6 @@ impl IntoResponse for ThrottleError {
             .unwrap()
     }
 }
-
-type Locks = HashMap<String, i64>;
 
 /// Strict alias around `Duration`. Yet it serializes from a human readable representation.
 #[derive(Deserialize, Clone, Copy)]
@@ -150,10 +145,10 @@ struct Restore {
 /// count of the semaphore. Pending locks may be resolved, if this is possible without going over
 /// the semaphores full count, or violating fairness.
 async fn restore(
-    state: State<Arc<AppState>>,
+    mut api: State<Api>,
     body: Json<Restore>,
 ) -> Result<&'static str, ThrottleError> {
-    state.restore(body.peer_id, body.expires_in, &body.acquired)?;
+    api.restore(body.peer_id, body.expires_in, body.0.acquired).await?;
     Ok("Ok")
 }
 
