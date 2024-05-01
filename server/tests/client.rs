@@ -89,7 +89,10 @@ async fn acquire_prolongs_lifetime_of_peer() {
 
     // We acquire a semaphor to A first, so we can use it to validate if the peer is still alive
     // by checking the remainder
-    client.acquire(peer, "A", 1, Some(Duration::from_millis(100)), None).await.unwrap();
+    client
+        .acquire(peer, "A", 1, Some(Duration::from_millis(100)), None)
+        .await
+        .unwrap();
 
     // This lock can not be acquired due to `blocker` holding the lock. This request is going to
     // block for one second. After which the peer should have been expired. Yet acquire can

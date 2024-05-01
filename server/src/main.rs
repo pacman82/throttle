@@ -15,6 +15,7 @@ use log::{info, warn};
 use service_interface::{ServiceEvent, ServiceInterface};
 use state::AppState;
 use std::{io, sync::Arc};
+use tokio::spawn;
 
 use crate::{cli::Cli, service_interface::HttpServiceInterface};
 
@@ -112,11 +113,13 @@ impl<I> Application<I> {
                     wait_for,
                     expires_in,
                 } => {
-                    let acquired = self
-                        .app_state
-                        .acquire(peer_id, &semaphore, amount, wait_for, expires_in)
-                        .await;
-                    answer_acquired.send(acquired).unwrap()
+                    let app_state = self.app_state.clone();
+                    spawn(async move {
+                        let acquired = app_state
+                            .acquire(peer_id, &semaphore, amount, wait_for, expires_in)
+                            .await;
+                        answer_acquired.send(acquired).unwrap()
+                    });
                 }
                 ServiceEvent::ReleaseLock {
                     peer_id,

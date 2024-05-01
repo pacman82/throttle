@@ -106,7 +106,6 @@ pub struct ApplicationCfg {
 }
 
 impl ApplicationCfg {
-
     /// Checks for a file named `application.cfg` in the working directory. It is then used to
     /// create a new configuration. If the file can not be found a default configuration is created.
     pub fn init(path: &Path) -> Result<ApplicationCfg, Error> {
