@@ -14,7 +14,7 @@ use crate::{
     leases::PeerId,
     metrics::metrics,
     not_found::not_found,
-    semaphore_service::semaphores as semaphores,
+    semaphore_service::semaphores,
     state::{AppState, Locks},
     version::version,
 };
@@ -159,6 +159,17 @@ impl Api {
             .unwrap();
         recv.await.unwrap()
     }
+
+    pub async fn update_metrics(&mut self) {
+        let (send, recv) = oneshot::channel();
+        self.sender
+            .send(ServiceEvent::UpdateMetrics {
+                answer_update_metrics: send,
+            })
+            .await
+            .unwrap();
+        recv.await.unwrap()
+    }
 }
 
 pub enum ServiceEvent {
@@ -204,6 +215,9 @@ pub enum ServiceEvent {
         acquired: Locks,
         answer_restore: oneshot::Sender<Result<(), ThrottleError>>,
     },
+    UpdateMetrics {
+        answer_update_metrics: oneshot::Sender<()>,
+    },
 }
 
 pub struct HttpServiceInterface {
@@ -231,7 +245,6 @@ impl HttpServiceInterface {
 
         let app: Router = Router::new()
             .route("/metrics", get(metrics))
-            .with_state(app_state.clone())
             .merge(semaphores())
             .with_state(channels)
             // Stateless routes
