@@ -10,8 +10,6 @@ use prometheus::IntGaugeVec;
 use std::{
     collections::HashMap,
     future::Future,
-    mem::drop,
-    sync::Mutex,
     time::{Duration, Instant},
 };
 use tokio::{sync::watch, time};
@@ -28,7 +26,7 @@ pub struct AppState {
     semaphores: Semaphores,
     /// Bookeeping for leases, protected by mutex so multiple threads (i.e. requests) can manipulate
     /// it. Must not contain any leases not configured in semaphores.
-    leases: Mutex<Leases>,
+    leases: Leases,
     /// Peer id and weak references to mutex for each pending request.
     wakers: AsyncEvents<u64, Result<(), ThrottleError>>,
     /// Used to tell litter collection when the next lease is going to expire (given it is not
@@ -40,7 +38,7 @@ impl AppState {
     /// Creates the state required for the semaphore service
     pub fn new(semaphores: Semaphores) -> AppState {
         AppState {
-            leases: Mutex::new(Leases::new()),
+            leases: Leases::new(),
             semaphores,
             wakers: AsyncEvents::new(),
             send_min_valid_until: watch::Sender::new(None),
@@ -48,11 +46,10 @@ impl AppState {
     }
 
     /// Creates a new peer.
-    pub fn new_peer(&self, expires_in: Duration) -> PeerId {
-        let mut leases = self.leases.lock().unwrap();
+    pub fn new_peer(&mut self, expires_in: Duration) -> PeerId {
         let valid_until = Instant::now() + expires_in;
-        let peer_id = leases.new_peer(valid_until);
-        self.send_min_valid_until_update(leases.min_valid_until());
+        let peer_id = self.leases.new_peer(valid_until);
+        self.send_min_valid_until_update(self.leases.min_valid_until());
         debug!("Created new peer {}.", peer_id);
         peer_id
     }
@@ -71,7 +68,7 @@ impl AppState {
     /// * `expires_in`: Used to prolong the expiration timestamp of the affected peer. This saves us
     /// an extra heartbeat request.
     pub fn acquire(
-        &self,
+        &mut self,
         peer_id: PeerId,
         semaphore: String,
         amount: i64,
@@ -93,7 +90,7 @@ impl AppState {
     /// futures does not borrow self. However the caller now needs to distinguish between errors
     /// happing at scheduling or resolving
     pub fn sync_acquire(
-        &self,
+        &mut self,
         peer_id: PeerId,
         semaphore: String,
         amount: i64,
@@ -111,15 +108,17 @@ impl AppState {
             return Err(ThrottleError::Never { asked: amount, max });
         }
         let (acquired, acquire_or_timeout) = {
-            let mut leases = self.leases.lock().unwrap();
             if let Some(expires_in) = expires_in {
                 let valid_until = Instant::now() + expires_in;
-                leases.update_valid_until(peer_id, valid_until)?;
-                self.send_min_valid_until_update(leases.min_valid_until())
+                self.leases.update_valid_until(peer_id, valid_until)?;
+                let min_vaild_until = self.leases.min_valid_until();
+                self.send_min_valid_until_update(min_vaild_until)
             }
-            let acquired = leases.acquire(peer_id, &semaphore, amount, max, level, |s| {
-                self.semaphores.get(s).unwrap().level
-            })?;
+            let semaphores = &self.semaphores;
+            let lock_levels = |s: &str| semaphores.get(s).unwrap().level;
+            let acquired =
+                self.leases
+                    .acquire(peer_id, &semaphore, amount, max, level, lock_levels)?;
             if acquired {
                 // Resolve this immediatly
                 debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
@@ -165,21 +164,20 @@ impl AppState {
     /// which have been waiting for pending leases.
     ///
     /// Returns number of (now removed) expired leases
-    pub fn remove_expired(&self) -> usize {
+    pub fn remove_expired(&mut self) -> usize {
         let (expired_peers, resolved_peers, min_valid_until) = {
-            let mut leases = self.leases.lock().unwrap();
-            let (expired_peers, affected_semaphores) = leases.remove_expired(Instant::now());
+            let (expired_peers, affected_semaphores) = self.leases.remove_expired(Instant::now());
             // It is not enough to notify only the requests for the removed peers, as other peers
             // might be able to acquire their locks due to the removal of these.
             let mut resolved_peers = Vec::new();
             for semaphore in affected_semaphores {
-                leases.resolve_pending(
+                self.leases.resolve_pending(
                     &semaphore,
                     self.semaphores.get(&semaphore).unwrap().max,
                     &mut resolved_peers,
                 )
             }
-            (expired_peers, resolved_peers, leases.min_valid_until())
+            (expired_peers, resolved_peers, self.leases.min_valid_until())
         };
         if !expired_peers.is_empty() {
             warn!("Removed {} peers due to expiration.", expired_peers.len());
@@ -195,7 +193,7 @@ impl AppState {
 
     /// Restore peer
     pub fn restore(
-        &self,
+        &mut self,
         peer_id: PeerId,
         expires_in: Duration,
         acquired: &Locks,
@@ -216,29 +214,30 @@ impl AppState {
                 .ok_or(ThrottleError::UnknownSemaphore)?;
         }
 
-        let mut leases = self.leases.lock().unwrap();
         let valid_until = Instant::now() + expires_in;
 
         // Acquired all locks for the peer
-        leases.restore(peer_id, acquired, valid_until)?;
-        self.send_min_valid_until_update(leases.min_valid_until());
+        self.leases.restore(peer_id, acquired, valid_until)?;
+        self.send_min_valid_until_update(self.leases.min_valid_until());
 
         Ok(())
     }
 
-    pub fn heartbeat(&self, peer_id: PeerId, expires_in: Duration) -> Result<(), ThrottleError> {
-        let mut leases = self.leases.lock().unwrap();
+    pub fn heartbeat(
+        &mut self,
+        peer_id: PeerId,
+        expires_in: Duration,
+    ) -> Result<(), ThrottleError> {
         // Determine valid_until after acquiring lock, in case we block for a long time.
         let valid_until = Instant::now() + expires_in;
-        leases.update_valid_until(peer_id, valid_until)?;
-        self.send_min_valid_until_update(leases.min_valid_until());
+        self.leases.update_valid_until(peer_id, valid_until)?;
+        self.send_min_valid_until_update(self.leases.min_valid_until());
         Ok(())
     }
 
-    pub fn remainder(&self, semaphore: &str) -> Result<i64, ThrottleError> {
+    pub fn remainder(&mut self, semaphore: &str) -> Result<i64, ThrottleError> {
         if let Some(sem) = self.semaphores.get(semaphore) {
-            let leases = self.leases.lock().unwrap();
-            let count = leases.count(semaphore);
+            let count = self.leases.count(semaphore);
             Ok(sem.max - count)
         } else {
             warn!("Unknown semaphore requested: {}", semaphore);
@@ -250,22 +249,21 @@ impl AppState {
     ///
     /// Returns `false` should the peer not be found and `true` otherwise. `false` could occur due
     /// to e.g. the peer already being removed by litter collection.
-    pub fn release(&self, peer_id: PeerId) -> bool {
-        let mut leases = self.leases.lock().unwrap();
-        match leases.remove_peer(peer_id) {
+    pub fn release(&mut self, peer_id: PeerId) -> bool {
+        match self.leases.remove_peer(peer_id) {
             Some(semaphores) => {
-                // Keep book about all peers, those locks have been acquired, so we can notify their pending
-                // requests.
+                // Keep book about all peers, those locks have been acquired, so we can notify their
+                // pending requests.
                 let mut resolved_peers = Vec::new();
                 for semaphore in semaphores {
                     let sem = self
                         .semaphores
                         .get(&semaphore)
                         .expect("An active semaphore must always be configured");
-                    leases.resolve_pending(&semaphore, sem.max, &mut resolved_peers);
+                    self.leases
+                        .resolve_pending(&semaphore, sem.max, &mut resolved_peers);
                 }
-                let min_valid_until = leases.min_valid_until();
-                drop(leases); // Don't hold this longer than we need to.
+                let min_valid_until = self.leases.min_valid_until();
                 self.send_min_valid_until_update(min_valid_until);
                 self.wakers.resolve_all_with(&resolved_peers, Ok(()));
                 true
@@ -290,7 +288,7 @@ impl AppState {
             counts.insert(name.clone(), Counts::default());
         }
         // Most of the work happens in here. Now counts contains the active and pending counts
-        self.leases.lock().unwrap().fill_counts(&mut counts);
+        self.leases.fill_counts(&mut counts);
         let now = Instant::now();
         for (semaphore, count) in counts {
             COUNT.with_label_values(&[&semaphore]).set(count.acquired);
@@ -303,22 +301,21 @@ impl AppState {
 
     /// Returns true if all the locks of the peer are acquired
     pub fn is_acquired(&self, peer_id: PeerId) -> Result<bool, ThrottleError> {
-        let leases = self.leases.lock().unwrap();
-        leases.has_pending(peer_id).map(|pending| !pending)
+        self.leases.has_pending(peer_id).map(|pending| !pending)
     }
 
     /// Releases a lock associated with the peer. Due to the relased lock, other locks may be
     /// acquired, futures may need to be woken.
-    pub fn release_lock(&self, peer_id: PeerId, semaphore: &str) -> Result<(), ThrottleError> {
+    pub fn release_lock(&mut self, peer_id: PeerId, semaphore: &str) -> Result<(), ThrottleError> {
         let max = self
             .semaphores
             .get(semaphore)
             .ok_or(ThrottleError::UnknownSemaphore)?
             .max;
-        let mut leases = self.leases.lock().unwrap();
-        leases.release_lock(peer_id, semaphore)?;
+        self.leases.release_lock(peer_id, semaphore)?;
         let mut resolved_peers = Vec::new();
-        leases.resolve_pending(semaphore, max, &mut resolved_peers);
+        self.leases
+            .resolve_pending(semaphore, max, &mut resolved_peers);
         self.wakers.resolve_all_with(&resolved_peers, Ok(()));
         Ok(())
     }
@@ -330,7 +327,7 @@ impl AppState {
         let receiver = self.send_min_valid_until.subscribe();
         // We are likely fine, if we just subscribe. This is just defensive in case min_valid until
         // changes beetween App state construction and subscription.
-        let min_valid_until = self.leases.lock().unwrap().min_valid_until();
+        let min_valid_until = self.leases.min_valid_until();
         self.send_min_valid_until_update(min_valid_until);
         receiver
     }
@@ -380,7 +377,7 @@ mod tests {
         // Semaphore with count of 3
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 3, level: 0 });
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         // First three locks can be acquired immediatly
@@ -412,7 +409,7 @@ mod tests {
         // Semaphore with count of 3
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 3, level: 0 });
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         // Create six peers
@@ -465,7 +462,7 @@ mod tests {
         // Semaphore with count of 3
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 3, level: 0 });
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         // Create six peers
@@ -516,7 +513,7 @@ mod tests {
     async fn idempotent_acquire() {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 0 });
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         let first = state.new_peer(one_sec);
@@ -545,7 +542,7 @@ mod tests {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 2, level: 1 });
         semaphores.insert(String::from("B"), SemaphoreCfg { max: 1, level: 0 });
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         let first = state.new_peer(one_sec);
@@ -580,7 +577,7 @@ mod tests {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 1 });
         semaphores.insert(String::from("B"), SemaphoreCfg { max: 1, level: 0 });
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         // Acquire both semaphores with blocker, so all other locks are going to be pending.
@@ -609,7 +606,7 @@ mod tests {
     async fn acquire_zero() {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 0 });
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         let peer = state.new_peer(one_sec);
@@ -623,7 +620,7 @@ mod tests {
     async fn restore_with_lock_count_zero() {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 0 });
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         let peer = 5;
@@ -637,7 +634,7 @@ mod tests {
 
     #[tokio::test]
     async fn restore_with_unknown_semaphore() {
-        let state = AppState::new(Semaphores::new());
+        let mut state = AppState::new(Semaphores::new());
         let one_sec = Duration::from_secs(1);
 
         let peer = 5;
@@ -653,7 +650,7 @@ mod tests {
     async fn restore_cant_change_existing_peers() {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 0 });
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         let peer = state.new_peer(one_sec);
@@ -671,7 +668,7 @@ mod tests {
         let mut semaphores = Semaphores::new();
         semaphores.insert(String::from("A"), SemaphoreCfg { max: 1, level: 1 });
         semaphores.insert(String::from("B"), SemaphoreCfg { max: 1, level: 0 });
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let one_sec = Duration::from_secs(1);
 
         let first = state.new_peer(one_sec);
@@ -695,7 +692,7 @@ mod tests {
         // Given an application state with no peers, the first call to acquire should announce that
         // now there is something to expire.
         let semaphores = Semaphores::new();
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let mut listener = state.watch_valid_until();
 
         // When waiting for the peer to expire
@@ -710,7 +707,7 @@ mod tests {
     async fn announce_change_in_valid_until_through_restored_peer() {
         // Given
         let semaphores = Semaphores::new();
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let mut listener = state.watch_valid_until();
 
         // When
@@ -725,7 +722,7 @@ mod tests {
     async fn announce_change_in_min_valid_until_through_removed_peer() {
         // Given
         let semaphores = Semaphores::new();
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let mut listener = state.watch_valid_until();
         let peer_id = state.new_peer(Duration::from_secs(1));
 
@@ -740,7 +737,7 @@ mod tests {
     async fn announce_change_in_min_valid_until_through_expired_peer() {
         // Given
         let semaphores = Semaphores::new();
-        let state = AppState::new(semaphores);
+        let mut state = AppState::new(semaphores);
         let mut listener = state.watch_valid_until();
         let _ = state.new_peer(Duration::from_secs(1));
 
