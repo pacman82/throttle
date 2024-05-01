@@ -17,20 +17,18 @@ use serde::Deserialize;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 pub fn semaphores() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/restore", post(restore))
-        .route("/peers/:id", put(put_peer))
+    Router::new().route("/restore", post(restore))
 }
 
 pub fn semaphores2() -> Router<Api> {
     Router::new()
         .route("/new_peer", post(new_peer))
+        .route("/peers/:id", put(put_peer))
         .route("/peers/:id", delete(release))
         .route("/peers/:id/:semaphore", put(acquire))
         .route("/peers/:id/:semaphore", delete(release_lock))
         .route("/peers/:id/is_acquired", get(is_acquired))
         .route("/remainder", get(remainder))
-        
 }
 
 impl ThrottleError {
@@ -114,7 +112,13 @@ async fn acquire(
     let wait_for = query.block_for.map(|hd| hd.0);
     let expires_in = query.expires_in.map(|hd| hd.0);
     if api
-        .acquire(peer_id, semaphore.into_owned(), amount, wait_for, expires_in)
+        .acquire(
+            peer_id,
+            semaphore.into_owned(),
+            amount,
+            wait_for,
+            expires_in,
+        )
         .await?
     {
         Ok((StatusCode::OK, Json(peer_id)))
@@ -177,10 +181,10 @@ async fn is_acquired(
 }
 
 async fn put_peer(
-    app_state: State<Arc<AppState>>,
+    mut api: State<Api>,
     Path(peer_id): Path<PeerId>,
     body: Json<ExpiresIn>,
 ) -> Result<&'static str, ThrottleError> {
-    app_state.heartbeat(peer_id, body.expires_in)?;
+    api.heartbeat(peer_id, body.expires_in).await?;
     Ok("Ok")
 }
