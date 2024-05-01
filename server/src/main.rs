@@ -116,7 +116,7 @@ impl<I> Application<I> {
                     let app_state = self.app_state.clone();
                     spawn(async move {
                         let acquired = app_state
-                            .acquire(peer_id, &semaphore, amount, wait_for, expires_in)
+                            .acquire(peer_id, semaphore, amount, wait_for, expires_in)
                             .await;
                         answer_acquired.send(acquired).unwrap()
                     });
