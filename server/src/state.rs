@@ -9,6 +9,7 @@ use log::{debug, warn};
 use prometheus::IntGaugeVec;
 use std::{
     collections::HashMap,
+    future::Future,
     mem::drop,
     sync::Mutex,
     time::{Duration, Instant},
@@ -69,14 +70,36 @@ impl AppState {
     /// returns immediatly.
     /// * `expires_in`: Used to prolong the expiration timestamp of the affected peer. This saves us
     /// an extra heartbeat request.
-    pub async fn acquire(
+    pub fn acquire(
         &self,
         peer_id: PeerId,
         semaphore: String,
         amount: i64,
         wait_for: Option<Duration>,
         expires_in: Option<Duration>,
-    ) -> Result<bool, ThrottleError> {
+    ) -> impl Future<Output = Result<bool, ThrottleError>> {
+        let result = self.sync_acquire(peer_id, semaphore, amount, wait_for, expires_in);
+        async move {
+            match result {
+                Ok(is_acquired) => Ok(is_acquired.await?),
+                Err(error) => Err(error),
+            }
+        }
+    }
+
+    /// Synchronous implementation of acquire. Distinguishes in its signature between errors during
+    /// creation of the future and ones which happens during it being resolved. This makes it easy
+    /// during implementing to early return and being explicit about the fact that the resulting
+    /// futures does not borrow self. However the caller now needs to distinguish between errors
+    /// happing at scheduling or resolving
+    pub fn sync_acquire(
+        &self,
+        peer_id: PeerId,
+        semaphore: String,
+        amount: i64,
+        wait_for: Option<Duration>,
+        expires_in: Option<Duration>,
+    ) -> Result<impl Future<Output = Result<bool, ThrottleError>>, ThrottleError> {
         let sem = self.semaphores.get(&semaphore).ok_or_else(|| {
             warn!("Unknown semaphore requested: {}", semaphore);
             ThrottleError::UnknownSemaphore
@@ -113,27 +136,29 @@ impl AppState {
             // deadlock.
         };
 
-        if let Some(acquire_or_timeout) = acquire_or_timeout {
-            // We could not acquire lock right away, and user decided to wait a bit, so this is what
-            // we do.
+        Ok(async move {
+            if let Some(acquire_or_timeout) = acquire_or_timeout {
+                // We could not acquire lock right away, and user decided to wait a bit, so this is what
+                // we do.
 
-            // The outer `Err` indicates a timeout.
-            match acquire_or_timeout.await {
-                // Locks could be acquired
-                Ok(Ok(())) => {
-                    debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
-                    Ok(true)
+                // The outer `Err` indicates a timeout.
+                match acquire_or_timeout.await {
+                    // Locks could be acquired
+                    Ok(Ok(())) => {
+                        debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
+                        Ok(true)
+                    }
+                    // Failure
+                    Ok(Err(e)) => Err(e),
+                    // Lock could not be acquired in time
+                    Err(_) => Ok(false),
                 }
-                // Failure
-                Ok(Err(e)) => Err(e),
-                // Lock could not be acquired in time
-                Err(_) => Ok(false),
+            } else {
+                // We could acquire the lock immediatly, or the user did not decide to wait. Either way
+                // we can answer right away.
+                Ok(acquired)
             }
-        } else {
-            // We could acquire the lock immediately, or the user did not decide to wait. Either way
-            // we can answer right away.
-            Ok(acquired)
-        }
+        })
     }
 
     /// Removes leases which have gone past their expiration time. If any leases are removed, wakes threads

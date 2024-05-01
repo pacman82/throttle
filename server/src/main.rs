@@ -113,11 +113,11 @@ impl<I> Application<I> {
                     wait_for,
                     expires_in,
                 } => {
-                    let app_state = self.app_state.clone();
+                    let acquired_future = self
+                        .app_state
+                        .acquire(peer_id, semaphore, amount, wait_for, expires_in);
                     spawn(async move {
-                        let acquired = app_state
-                            .acquire(peer_id, semaphore, amount, wait_for, expires_in)
-                            .await;
+                        let acquired = acquired_future.await;
                         answer_acquired.send(acquired).unwrap()
                     });
                 }
@@ -160,7 +160,9 @@ impl<I> Application<I> {
                     let result = self.app_state.restore(peer_id, expires_in, &acquired);
                     answer_restore.send(result).unwrap();
                 }
-                ServiceEvent::UpdateMetrics { answer_update_metrics } => {
+                ServiceEvent::UpdateMetrics {
+                    answer_update_metrics,
+                } => {
                     self.app_state.update_metrics();
                     answer_update_metrics.send(()).unwrap()
                 }
