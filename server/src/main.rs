@@ -160,6 +160,10 @@ impl<I> Application<I> {
                     let result = self.app_state.restore(peer_id, expires_in, &acquired);
                     answer_restore.send(result).unwrap();
                 }
+                ServiceEvent::UpdateMetrics { answer_update_metrics } => {
+                    self.app_state.update_metrics();
+                    answer_update_metrics.send(()).unwrap()
+                }
             }
         }
 
