@@ -1,5 +1,5 @@
 use axum::{routing::get, Router};
-use std::{future::Future, io, time::Duration};
+use std::{io, time::Duration};
 use tokio::{
     spawn,
     sync::{mpsc, oneshot},
@@ -10,11 +10,6 @@ use crate::{
     error::ThrottleError, favicon::favicon, health::health, leases::PeerId, metrics::metrics,
     not_found::not_found, semaphore_service::semaphores, state::Locks, version::version,
 };
-
-pub trait ServiceInterface {
-    fn shutdown(self) -> impl Future<Output = io::Result<()>>;
-    fn event(&mut self) -> impl Future<Output = Option<ServiceEvent>>;
-}
 
 /// Channels used to communicate between request handlers and Domain logic
 #[derive(Clone)]
@@ -161,6 +156,17 @@ impl Api {
             .unwrap();
         recv.await.unwrap()
     }
+
+    pub async fn remove_expired(&mut self) -> usize {
+        let (send, recv) = oneshot::channel();
+        self.sender
+            .send(ServiceEvent::RemovedExpired {
+                answer_remove_expired: send,
+            })
+            .await
+            .unwrap();
+        recv.await.unwrap()
+    }
 }
 
 pub enum ServiceEvent {
@@ -209,27 +215,21 @@ pub enum ServiceEvent {
     UpdateMetrics {
         answer_update_metrics: oneshot::Sender<()>,
     },
+    RemovedExpired {
+        answer_remove_expired: oneshot::Sender<usize>,
+    }
 }
 
 pub struct HttpServiceInterface {
-    event_receiver: mpsc::Receiver<ServiceEvent>,
     join_handle: JoinHandle<io::Result<()>>,
 }
 
 impl HttpServiceInterface {
-    pub async fn new(endpoint: &str) -> Result<Self, io::Error> {
-        let (sender, event_receiver) = mpsc::channel(5);
-
-        let channels = Api::new(sender);
-
-        // TODO: idea: introduce move route for new_peers here and make it dependend on `sender`
-        // instead of `app_state`. It will then forward the request to the application via event.
-        // Initially we can try to answer with a OneShot channel
-
+    pub async fn new(endpoint: &str, api: Api) -> Result<Self, io::Error> {
         let app: Router = Router::new()
             .route("/metrics", get(metrics))
             .merge(semaphores())
-            .with_state(channels)
+            .with_state(api)
             // Stateless routes
             .route("/", get(index))
             .route("/health", get(health))
@@ -240,18 +240,11 @@ impl HttpServiceInterface {
         let listener = tokio::net::TcpListener::bind(endpoint).await?;
         let join_handle = spawn(async move { axum::serve(listener, app).await });
         Ok(HttpServiceInterface {
-            event_receiver,
             join_handle,
         })
     }
-}
 
-impl ServiceInterface for HttpServiceInterface {
-    async fn event(&mut self) -> Option<ServiceEvent> {
-        self.event_receiver.recv().await
-    }
-
-    async fn shutdown(self) -> io::Result<()> {
+    pub async fn shutdown(self) -> io::Result<()> {
         self.join_handle.await.unwrap()
     }
 }
