@@ -13,10 +13,10 @@ extern crate prometheus;
 use application_cfg::ApplicationCfg;
 use clap::Parser;
 use log::{info, warn};
-use service_interface::{ServiceEvent, ServiceInterface};
+use service_interface::{Api, ServiceEvent};
 use state::AppState;
 use std::{io, sync::Arc};
-use tokio::spawn;
+use tokio::{spawn, sync::mpsc};
 
 use crate::{cli::Cli, service_interface::HttpServiceInterface};
 
@@ -59,38 +59,55 @@ async fn main() -> io::Result<()> {
         warn!("No semaphores configured.")
     }
 
-    let service_interface =
-        HttpServiceInterface::new(&opt.endpoint()).await?;
-    let app = Application::new(service_interface, application_cfg);
-    app.run().await
+    let app = Application::new(application_cfg);
+
+    // Removes expired peers asynchrounously. We must take care not to exit early with the
+    // ?-operator in order to not be left with a detached thread.
+    let lc = litter_collection::start(app.app_state());
+
+    let service_interface = HttpServiceInterface::new(&opt.endpoint(), app.api()).await?;
+    
+    app.run_message_loop().await;
+
+    // Don't use ? to early return before stopping the lc.
+    let result = service_interface.shutdown().await;
+
+    // Stop litter collection.
+    lc.stop().await;
+
+    result
 }
 
-struct Application<I> {
-    service_interface: I,
+struct Application {
+    event_receiver: mpsc::Receiver<ServiceEvent>,
+    api: Api,
     app_state: Arc<AppState>,
 }
 
-impl<I> Application<I> {
-    pub fn new(service_interface: I, config: ApplicationCfg) -> Application<I>
-    where
-        I: ServiceInterface,
-    {
+impl Application {
+    pub fn new(config: ApplicationCfg) -> Self {
         let app_state = Arc::new(AppState::new(config.semaphores));
+        let (sender, event_receiver) = mpsc::channel(5);
+        let api = Api::new(sender);
         Application {
+            event_receiver,
+            api,
             app_state,
-            service_interface,
         }
     }
 
-    pub async fn run(mut self) -> io::Result<()>
-    where
-        I: ServiceInterface,
-    {
-        // Removes expired peers asynchrounously. We must take care not to exit early with the
-        // ?-operator in order to not be left with a detached thread.
-        let lc = litter_collection::start(self.app_state.clone());
+    /// Provides an Api to interfaces and actors, in order to send events to the application logic.
+    pub fn api(&self) -> Api {
+        self.api.clone()
+    }
 
-        while let Some(event) = self.service_interface.event().await {
+    pub fn app_state(&self) -> Arc<AppState> {
+        self.app_state.clone()
+    }
+
+    pub async fn run_message_loop(mut self)
+    {
+        while let Some(event) = self.event_receiver.recv().await {
             match event {
                 ServiceEvent::NewPeer {
                     answer_peer_id,
@@ -167,15 +184,13 @@ impl<I> Application<I> {
                     self.app_state.update_metrics();
                     answer_update_metrics.send(()).unwrap()
                 }
+                ServiceEvent::RemovedExpired {
+                    answer_remove_expired,
+                } => {
+                    let num_expired = self.app_state.remove_expired();
+                    answer_remove_expired.send(num_expired).unwrap();
+                }
             }
         }
-
-        // Don't use ? to early return before stopping the lc.
-        let result = self.service_interface.shutdown().await;
-
-        // Stop litter collection.
-        lc.stop().await;
-
-        result
     }
 }
