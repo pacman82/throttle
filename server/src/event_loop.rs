@@ -1,14 +1,20 @@
 use crate::{
-    state::AppState,
+    application_cfg::Semaphores,
     service_interface::{Api, ServiceEvent},
-    application_cfg::Semaphores
+    state::AppState,
 };
 use std::time::Instant;
-use tokio::{spawn, sync::{mpsc, watch}};
+use tokio::{
+    spawn,
+    sync::{mpsc, watch},
+};
 
 pub struct EventLoop {
     event_receiver: mpsc::Receiver<ServiceEvent>,
     api: Api,
+    /// Used to tell litter collection when the next lease is going to expire (given it is not
+    /// prolonged using a heartbeat). We send `None` if there are no active leases.
+    send_min_valid_until: watch::Sender<Option<Instant>>,
     app_state: AppState,
 }
 
@@ -21,6 +27,7 @@ impl EventLoop {
             event_receiver,
             api,
             app_state,
+            send_min_valid_until: watch::Sender::new(None),
         }
     }
 
@@ -33,7 +40,7 @@ impl EventLoop {
     /// The watched timepoint will be updated if it changes. It can become even earlier or (more
     /// likely is prolonged). `None` implies there are no leases which can expire.
     pub fn watch_valid_until(&self) -> watch::Receiver<Option<Instant>> {
-        self.app_state.watch_valid_until()
+        self.send_min_valid_until.subscribe()
     }
 
     pub async fn run_event_loop(mut self) {
@@ -121,6 +128,90 @@ impl EventLoop {
                     answer_remove_expired.send(num_expired).unwrap();
                 }
             }
+            if *self.send_min_valid_until.borrow() != self.app_state.min_valid_until() {
+                let _ = self
+                    .send_min_valid_until
+                    .send(self.app_state.min_valid_until());
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, time::Duration};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn announce_change_in_valid_until_through_new_peer() {
+        // Given an application state with no peers, the first call to acquire should announce that
+        // now there is something to expire.
+        let semaphores = Semaphores::new();
+        let app = EventLoop::new(semaphores);
+        let mut listener = app.watch_valid_until();
+        let mut api = app.api();
+        spawn(app.run_event_loop());
+
+        // When waiting for the peer to expire
+        let one_sec = Duration::from_secs(1);
+        let _peer_id = api.new_peer(one_sec).await;
+
+        // Then
+        assert!(listener.borrow_and_update().is_some())
+    }
+
+    #[tokio::test]
+    async fn announce_change_in_valid_until_through_restored_peer() {
+        // Given
+        let semaphores = Semaphores::new();
+        let app = EventLoop::new(semaphores);
+        let mut listener = app.watch_valid_until();
+        let mut api = app.api();
+        spawn(app.run_event_loop());
+
+        // When
+        let one_sec = Duration::from_secs(1);
+        let _peer_id = api.restore(1, one_sec, HashMap::new()).await;
+
+        // Then
+        assert!(listener.borrow_and_update().is_some())
+    }
+
+    #[tokio::test]
+    async fn announce_change_in_min_valid_until_through_removed_peer() {
+        // Given
+        let semaphores = Semaphores::new();
+        let app = EventLoop::new(semaphores);
+        let mut listener = app.watch_valid_until();
+        let mut api = app.api();
+        spawn(app.run_event_loop());
+        let peer_id = api.new_peer(Duration::from_secs(1)).await;
+
+        // When
+        api.release_peer(peer_id).await;
+
+        // Then
+        assert!(listener.borrow_and_update().is_none())
+    }
+
+    #[tokio::test]
+    async fn announce_change_in_min_valid_until_through_expired_peer() {
+        // Given
+        let semaphores = Semaphores::new();
+        let app = EventLoop::new(semaphores);
+        let mut listener = app.watch_valid_until();
+        let mut api = app.api();
+        spawn(app.run_event_loop());
+        let _ = api.new_peer(Duration::from_secs(1)).await;
+
+        // When creating a new peer and letting it expiring before the first one
+        let old_valid_until = *listener.borrow_and_update();
+        let _ = api.new_peer(Duration::from_secs(0)).await;
+        api.remove_expired().await;
+
+        // Then
+        let after_expiration = *listener.borrow_and_update();
+        assert_eq!(old_valid_until, after_expiration)
     }
 }
