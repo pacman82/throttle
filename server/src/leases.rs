@@ -6,11 +6,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Peers hold locks to semaphores, while holding this locks they have access to the semaphore.
+/// Peers hold locks to semaphores, while holding these locks they have access to the semaphore.
 struct Lock {
     /// Name of the resource the semaphore protects
     semaphore: String,
-    /// The semapohre count is decreased by `count` if the lease is active.
+    /// The semaphore count is decreased by `count` if the lease is active.
     count: i64,
     /// Instant of lock creation. Used to implement fairness of semaphores.
     since: Instant,
@@ -137,8 +137,8 @@ impl Peer {
     //
     // # Return
     //
-    // Outer `Option` indicates wether the peer is still valid. If so it is `None`. If not the inner
-    // Option holds the name of the semaphores if available.
+    // Outer `Option` indicates wether the peer is still valid. If so it is `None`. Otherwise, the inner
+    // Option retains the name of the semaphores if available.
     fn remove_expired(&mut self, now: Instant) -> Option<Vec<String>> {
         if self.valid_until < now {
             // Peer is expired
@@ -229,7 +229,7 @@ impl Peer {
         }
     }
 
-    /// Current lock level of the peer. Which is the minimum lock level of all acquired locks.
+    /// Current lock level of the peer i.e. the minimum lock level of all acquired locks.
     fn level(&self, lock_levels: impl Fn(&str) -> i32) -> Option<i32> {
         self.acquired
             .keys()
@@ -361,7 +361,7 @@ impl Leases {
     ///
     /// * `peer_id`: Peer for which the locks are restored.
     /// * `acquired`: Semaphore names and counts, acquired by this peer.
-    /// * `valid_until`: The instant until the new peer remains valid (i.e. does not expire).
+    /// * `valid_until`: The instant until the new peer remains valid (i.e. the expiration time).
     ///
     /// # Return
     ///
@@ -550,7 +550,7 @@ impl Leases {
     }
 
     /// Return the pending lock with the highest priority for this semaphore. Since we have fair
-    /// semaphores, this is the peer waiting the longest. Returns `None` in case there are not any
+    /// semaphores, this is the peer waiting the longest (FIFO). Returns `None` in case there are not any
     /// pending locks.
     fn resolve_highest_priority_pending(
         &mut self,

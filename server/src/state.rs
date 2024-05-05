@@ -127,14 +127,14 @@ impl AppState {
                 Err(_) => Ok(false),
             }
         } else {
-            // We could acquire the lock immediatly, or the user did not decide to wait. Either way
+            // We could acquire the lock immediately, or the user did not decide to wait. Either way
             // we can answer right away.
             Ok(acquired)
         }
     }
 
-    /// Removes leases outdated due to timestamp. Wakes threads waiting for pending leases if any
-    /// leases are removed.
+    /// Removes leases which have gone past their expiration time. If any leases are removed, wakes threads
+    /// which have been waiting for pending leases.
     ///
     /// Returns number of (now removed) expired leases
     pub fn remove_expired(&self) -> usize {
@@ -218,7 +218,7 @@ impl AppState {
         }
     }
 
-    /// Removes a peer from bookeeping and releases all acquired leases.
+    /// Removes a peer from bookkeeping and releases all acquired leases.
     ///
     /// Returns `false` should the peer not be found and `true` otherwise. `false` could occur due
     /// to e.g. the peer already being removed by litter collection.
