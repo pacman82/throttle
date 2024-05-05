@@ -1,4 +1,4 @@
-//! This module exposes the sate of the server via an HTTP interface. As such it primary concerns
+//! This module exposes the state of the server via an HTTP interface. As such its primary concerns
 //! are modding success and error states to HTTP status codes. Defining in which formats to
 //! deserialize paramaters and serialize respones, or deciding on which HTTP methods to map the
 //! functions.
