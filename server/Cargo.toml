@@ -40,7 +40,7 @@ path = "src/main.rs"
 
 [dependencies]
 async-events = "0.2.0"
-prometheus = "0.13.3"
+prometheus = "0.13.4"
 percent-encoding = "2.3.1"
 lazy_static = "1.4.0"
 serde = "1.0.198"
