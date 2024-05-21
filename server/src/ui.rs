@@ -8,7 +8,7 @@ pub struct Frontend {
 
 impl Frontend {
     pub async fn new(endpoint: &str) -> Result<Self, io::Error> {
-        let assets = load_assets!("../ui");
+        let assets = load_assets!("../ui/build");
         let app = MemoryServe::new(assets).index_file(Some("/index.html")).into_router();
 
         let listener = tokio::net::TcpListener::bind(endpoint).await?;
