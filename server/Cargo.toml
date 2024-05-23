@@ -54,6 +54,7 @@ version = "3.0.0"
 clap = { version = "4.5.4", features = ["derive"] }
 axum = "0.7.5"
 memory-serve = "0.4.5"
+tower-http = { version = "0.5.2", features = ["cors"] }
 
 # We use it explicitly for the time::timeout feature
 [dependencies.tokio]

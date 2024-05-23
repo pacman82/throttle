@@ -5,6 +5,7 @@ use tokio::{
     sync::{mpsc, oneshot},
     task::JoinHandle,
 };
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::{
     error::ThrottleError,
@@ -247,6 +248,9 @@ pub struct HttpServiceInterface {
 
 impl HttpServiceInterface {
     pub async fn new(endpoint: &str, api: Api) -> Result<Self, io::Error> {
+
+        let cors = CorsLayer::new().allow_origin(Any);
+
         let app: Router = Router::new()
             .route("/metrics", get(metrics))
             .merge(semaphores())
@@ -256,7 +260,8 @@ impl HttpServiceInterface {
             .route("/health", get(health))
             .route("/favicon.ico", get(favicon))
             .route("/version", get(version))
-            .fallback(not_found);
+            .fallback(not_found)
+            .layer(cors);
 
         let listener = tokio::net::TcpListener::bind(endpoint).await?;
         let join_handle = spawn(async move { axum::serve(listener, app).await });

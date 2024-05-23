@@ -9,7 +9,7 @@
 
 # Lock level 0 is quite common. So there is a shortcut. This creates also a semaphore with full
 # count 42 and default lock level 0.
-# A = 42
+A = 42
 
 # Alternative verbose style. This is not specific to throttle, it is just how TOML works.
 # [semaphores.A]
@@ -17,6 +17,6 @@
 # level = 0
 
 # Uncomment below lines to log to standard error.
-# [logging.stderr]
-## Set this to either ERROR, WARN, INFO, DEBUG or TRACE. Default is WARN.
-# level = "WARN"
+[logging.stderr]
+# Set this to either ERROR, WARN, INFO, DEBUG or TRACE. Default is WARN.
+level = "INFO"

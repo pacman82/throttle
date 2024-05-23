@@ -16,6 +16,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Build
         run: |
+          cd ui
+          npm install
+          npm run build
+          cd ..
           cargo build --release
           Compress-Archive -LiteralPath target/release/throttle.exe -DestinationPath throttle-win64.zip
       - name: Github Upload

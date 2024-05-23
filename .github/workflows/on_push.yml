@@ -11,6 +11,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Build UI
+      run: |
+        cd ui
+        npm install
+        npm run build
+        cd ..
     - name: Cargo Build
       run: cargo build        
     - name: Cargo Tests
