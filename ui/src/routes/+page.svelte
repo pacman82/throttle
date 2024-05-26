@@ -1,8 +1,11 @@
 <script>
     import { onMount } from 'svelte';
 
-    let backend = window.location.hostname + (window.location.port + 1)
+    let backend = window.location.host;
 
+    /**
+	 * @type {string}
+	 */
     let version;
     onMount(() => (
         fetch('http://' + backend + '/version')

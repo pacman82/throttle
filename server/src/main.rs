@@ -14,7 +14,7 @@ use clap::Parser;
 use log::{info, warn};
 use std::io;
 
-use crate::{cli::Cli, event_loop::EventLoop, service_interface::HttpServiceInterface, ui::Frontend};
+use crate::{cli::Cli, event_loop::EventLoop, service_interface::HttpServiceInterface};
 
 mod application_cfg;
 mod cli;
@@ -64,16 +64,14 @@ async fn main() -> io::Result<()> {
     let lc = litter_collection::start(app.watch_valid_until(), app.api());
 
     let service_interface = HttpServiceInterface::new(&opt.endpoint(), app.api()).await?;
-    let frontend = Frontend::new(&opt.endpoint_frontend()).await?;
 
     app.run_event_loop().await;
 
     // Don't use ? to early return before stopping the lc.
     let result = service_interface.shutdown().await;
-    let result_frontend = frontend.shutdown().await;
 
     // Stop litter collection.
     lc.stop().await;
 
-    result.and(result_frontend)
+    result
 }

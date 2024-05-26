@@ -14,9 +14,6 @@ pub struct Cli {
     /// Port on which the server listens to requests
     #[arg(long, default_value = "8000")]
     pub port: u16,
-    /// Port used for the UI
-    #[arg(long, default_value = "8001")]
-    pub port_frontend: u16,
     /// Path to TOML configuration file
     #[arg(long, short = 'c', default_value = "throttle.toml")]
     pub configuration: PathBuf,
@@ -25,9 +22,5 @@ pub struct Cli {
 impl Cli {
     pub fn endpoint(&self) -> String {
         format!("{}:{}", self.address, self.port)
-    }
-
-    pub fn endpoint_frontend(&self) -> String {
-        format!("{}:{}", self.address, self.port_frontend)
     }
 }
