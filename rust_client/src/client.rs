@@ -1,7 +1,7 @@
 use crate::error::Error;
 use humantime::format_duration;
 use reqwest::{self, IntoUrl, Response, StatusCode, Url};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::Duration};
 
 /// Returns an error for http status translating domain specific errors.
@@ -78,8 +78,7 @@ impl Client {
         let mut url = self.url.clone();
         url.path_segments_mut()
             .unwrap()
-            .push("peers")
-            .push(&peer_id.to_string());
+            .extend(["peers", &peer_id.to_string()]);
         let response = self.client.delete(url).send().await?;
         error_for_status(response).await?;
         Ok(())
@@ -118,9 +117,7 @@ impl Client {
         let mut url = self.url.clone();
         url.path_segments_mut()
             .unwrap()
-            .push("peers")
-            .push(&peer_id.to_string())
-            .push(semaphore);
+            .extend(["peers", &peer_id.to_string(), semaphore]);
 
         {
             let mut query = url.query_pairs_mut();
@@ -141,9 +138,7 @@ impl Client {
         let mut url = self.url.clone();
         url.path_segments_mut()
             .unwrap()
-            .push("peers")
-            .push(&peer_id.to_string())
-            .push("is_acquired");
+            .extend(["peers", &peer_id.to_string(), "is_acquired"]);
         let response = self.client.get(url).send().await?;
         let acquired = error_for_status(response).await?.json().await?;
         Ok(acquired)
@@ -194,8 +189,7 @@ impl Client {
         let mut url = self.url.clone();
         url.path_segments_mut()
             .unwrap()
-            .push("peers")
-            .push(&peer_id.to_string());
+            .extend(["peers", &peer_id.to_string()]);
         let response = self
             .client
             .put(url)
@@ -211,14 +205,27 @@ impl Client {
         let mut url = self.url.clone();
         url.path_segments_mut()
             .unwrap()
-            .push("peers")
-            .push(&peer_id.to_string())
-            .push(semaphore);
+            .extend(["peers", &peer_id.to_string(), semaphore]);
         let response = self.client.delete(url).send().await?;
         error_for_status(response).await?;
         Ok(())
     }
+
+    pub async fn list_of_peers(&self) -> Result<Vec<PeerDescription>, Error> {
+        let mut url = self.url.clone();
+        url.path_segments_mut()
+            .unwrap()
+            // Use empty string to achieve trailing slash (`/`) in path
+            .extend(["peers", ""]);
+        let response = self.client.get(url).send().await?;
+        let peers = error_for_status(response).await?.json().await?;
+        Ok(peers)
+    }
 }
+
+/// The properties and state of a peer, as returned by throttle then listing peers.
+#[derive(Deserialize)]
+pub struct PeerDescription {}
 
 /// Used as a query parameter in requests. E.g. `?expires_in=5m`.
 #[derive(Serialize)]

@@ -315,7 +315,7 @@ async fn acquire_two_locks_with_one_peer() {
 /// Locks of unresponsive clients must be freed by litter collection.
 #[tokio::test]
 async fn litter_collection() {
-    let config = r#" litter_collection_interval="10ms"
+    let config = r#"
         [semaphores]
         A = 1
         "#;
@@ -328,7 +328,7 @@ async fn litter_collection() {
         .acquire(peer, "A", 1, Some(Duration::from_millis(1)), None)
         .await
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(15)).await;
+    tokio::time::sleep(Duration::from_millis(2)).await;
     assert_eq!(1, client.remainder("A").await.unwrap());
 }
 
@@ -343,10 +343,30 @@ async fn semaphore_named_slash_ampersand() {
     let server = Server::new(8014, config);
     let client = server.make_client();
 
-    // Acquire lock but never release it.
     let peer = client.new_peer(Duration::from_secs(1)).await.unwrap();
     client
         .acquire(peer, "/&", 1, Some(Duration::from_millis(1)), None)
         .await
         .unwrap();
+}
+
+/// Create to peers and list them and their properties and state
+#[tokio::test]
+async fn list_peers() {
+    let config = r#"
+        [semaphores]
+        A = 1
+        "#;
+    let server = Server::new(8015, config);
+    let client = server.make_client();
+
+    let peer_a = client.new_peer(Duration::from_secs(1)).await.unwrap();
+    let _ = client.new_peer(Duration::from_secs(1)).await.unwrap();
+    client
+        .acquire(peer_a, "A", 1, Some(Duration::from_secs(1)), None)
+        .await
+        .unwrap();
+
+    let peers = client.list_of_peers().await.unwrap();
+    assert_eq!(peers.len(), 2);
 }

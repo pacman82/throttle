@@ -1,7 +1,7 @@
 use crate::{
     application_cfg::Semaphores,
     error::ThrottleError,
-    leases::{Counts, Leases, PeerId},
+    leases::{Counts, Leases, PeerDescription, PeerId},
 };
 use async_events::AsyncEvents;
 use lazy_static::lazy_static;
@@ -316,6 +316,10 @@ impl AppState {
             .resolve_pending(semaphore, max, &mut resolved_peers);
         self.wakers.resolve_all_with(&resolved_peers, Ok(()));
         Ok(())
+    }
+
+    pub fn list_of_peers(&self) -> Vec<PeerDescription> {
+        self.leases.list_of_peers()
     }
 
     /// Earliest point in time, when a lease could expire

@@ -3,7 +3,7 @@
 //! deserialize paramaters and serialize respones, or deciding on which HTTP methods to map the
 //! functions.
 
-use crate::{error::ThrottleError, leases::PeerId, service_interface::Api, state::Locks};
+use crate::{error::ThrottleError, leases::{PeerDescription, PeerId}, service_interface::Api, state::Locks};
 use axum::{
     body::Body,
     extract::{Path, Query, State},
@@ -19,6 +19,7 @@ use std::time::Duration;
 pub fn semaphores() -> Router<Api> {
     Router::new()
         .route("/new_peer", post(new_peer))
+        .route("/peers/", get(list_peers))
         .route("/peers/:id", put(put_peer))
         .route("/peers/:id", delete(release))
         .route("/peers/:id/:semaphore", put(acquire))
@@ -78,6 +79,10 @@ async fn release(mut api: State<Api>, path: Path<PeerId>) -> Json<&'static str> 
         // Post condition of lease not being there is satisfied, let's make this request 200 still.
         Json("Peer not found")
     }
+}
+
+async fn list_peers(mut api: State<Api>) -> Json<Vec<PeerDescription>> {
+    Json(api.list_of_peers().await)
 }
 
 /// Used as a query parameter in requests. E.g. `?expires_in=5m`.

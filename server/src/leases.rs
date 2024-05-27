@@ -1,5 +1,6 @@
 use crate::error::ThrottleError;
 use rand::random;
+use serde::Serialize;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -575,4 +576,13 @@ impl Leases {
             None
         }
     }
+
+    pub fn list_of_peers(&self) -> Vec<PeerDescription> {
+        self.ledger.iter().map(|(&id, _peer)| PeerDescription { id }).collect()
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub struct PeerDescription {
+    id: PeerId
 }

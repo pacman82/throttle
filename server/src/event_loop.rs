@@ -126,6 +126,10 @@ impl EventLoop {
                 } => {
                     let num_expired = self.app_state.remove_expired();
                     answer_remove_expired.send(num_expired).unwrap();
+                },
+                ServiceEvent::ListPeers { answer_list_peers } => {
+                    let list_of_peers = self.app_state.list_of_peers();
+                    answer_list_peers.send(list_of_peers).unwrap();
                 }
             }
             if *self.send_min_valid_until.borrow() != self.app_state.min_valid_until() {

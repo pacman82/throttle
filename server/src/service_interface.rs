@@ -7,8 +7,15 @@ use tokio::{
 };
 
 use crate::{
-    error::ThrottleError, favicon::favicon, health::health, leases::PeerId, metrics::metrics,
-    not_found::not_found, semaphore_service::semaphores, state::Locks, version::version,
+    error::ThrottleError,
+    favicon::favicon,
+    health::health,
+    leases::{PeerDescription, PeerId},
+    metrics::metrics,
+    not_found::not_found,
+    semaphore_service::semaphores,
+    state::Locks,
+    version::version,
 };
 
 /// Channels used to communicate between request handlers and Domain logic
@@ -167,6 +174,17 @@ impl Api {
             .unwrap();
         recv.await.unwrap()
     }
+
+    pub async fn list_of_peers(&mut self) -> Vec<PeerDescription> {
+        let (send, recv) = oneshot::channel();
+        self.sender
+            .send(ServiceEvent::ListPeers {
+                answer_list_peers: send,
+            })
+            .await
+            .unwrap();
+        recv.await.unwrap()
+    }
 }
 
 pub enum ServiceEvent {
@@ -217,6 +235,9 @@ pub enum ServiceEvent {
     },
     RemovedExpired {
         answer_remove_expired: oneshot::Sender<usize>,
+    },
+    ListPeers {
+        answer_list_peers: oneshot::Sender<Vec<PeerDescription>>,
     },
 }
 
