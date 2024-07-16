@@ -524,7 +524,7 @@ impl Leases {
     fn new_unique_peer_id(&self) -> PeerId {
         loop {
             let candidate = random();
-            if self.ledger.get(&candidate).is_none() {
+            if !self.ledger.contains_key(&candidate) {
                 return candidate;
             }
         }
