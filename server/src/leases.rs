@@ -289,7 +289,7 @@ impl Leases {
     /// * `semaphore`: Name of the semaphore to which a lock is requested.
     /// * `amount`: Requested amount of the semaphore.
     /// * `max`: A check is performed and the lock is only going to be acquired, if the total demand
-    /// for the requested semaphore would not exceed the `max`.
+    ///   for the requested semaphore would not exceed the `max`.
     ///
     /// # Return
     ///

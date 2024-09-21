@@ -50,9 +50,9 @@ impl Client {
     ///
     /// # Parameters
     ///
-    /// * `expires_in`: Retention time of the peer on the server.
-    /// A peer is used to acquire locks and keep the leases to them alive. A Peer owns the locks
-    /// which it acquires and releasing it is going to release the owned locks as well.
+    /// * `expires_in`: Retention time of the peer on the server. A peer is used to acquire locks
+    ///   and keep the leases to them alive. A Peer owns the locks which it acquires and releasing
+    ///   it is going to release the owned locks as well.
     ///
     /// Every call to `new_peer` should be matched by a call to `release`.
     ///
@@ -93,15 +93,14 @@ impl Client {
     ///
     /// * `semaphore`: Name of the semaphore to be acquired.
     /// * `count`: The count of the lock. A larger count represents a larger 'piece' of the resource
-    /// under procection.
+    ///   under procection.
     /// * `block_for`: The request returns as soon as the lock could be acquireod or after the
-    /// duration has elapsed, even if the lock could not be acquired. If set to `None`, the request
-    /// returns immediatly. Please note that this function is asynchronous and does not block. The
-    /// blocking does refer to the actual request. As such `block_for` represents an upper bound
-    /// after which the returned futures poll method is going to return `Ready`.
-    /// * `expires_in`: The amount of time the remains valid. Can be prolonged by
-    /// calling heartbeat. After the time has passed the lock is considered released on
-    /// the server side.
+    ///   duration has elapsed, even if the lock could not be acquired. If set to `None`, the
+    ///   request returns immediatly. Please note that this function is asynchronous and does not
+    ///   block. The blocking does refer to the actual request. As such `block_for` represents an
+    ///   upper bound after which the returned futures poll method is going to return `Ready`.
+    /// * `expires_in`: The amount of time the remains valid. Can be prolonged by calling heartbeat.
+    ///   After the time has passed the lock is considered released on the server side.
     ///
     /// # Return
     ///
