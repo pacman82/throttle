@@ -43,7 +43,7 @@ impl EventLoop {
         self.send_min_valid_until.subscribe()
     }
 
-    pub async fn run_event_loop(mut self) {
+    pub async fn run(mut self) {
         while let Some(event) = self.event_receiver.recv().await {
             match event {
                 ServiceEvent::NewPeer {
@@ -155,7 +155,7 @@ mod tests {
         let app = EventLoop::new(semaphores);
         let mut listener = app.watch_valid_until();
         let mut api = app.api();
-        spawn(app.run_event_loop());
+        spawn(app.run());
 
         // When waiting for the peer to expire
         let one_sec = Duration::from_secs(1);
@@ -172,7 +172,7 @@ mod tests {
         let app = EventLoop::new(semaphores);
         let mut listener = app.watch_valid_until();
         let mut api = app.api();
-        spawn(app.run_event_loop());
+        spawn(app.run());
 
         // When
         let one_sec = Duration::from_secs(1);
@@ -189,7 +189,7 @@ mod tests {
         let app = EventLoop::new(semaphores);
         let mut listener = app.watch_valid_until();
         let mut api = app.api();
-        spawn(app.run_event_loop());
+        spawn(app.run());
         let peer_id = api.new_peer(Duration::from_secs(1)).await;
 
         // When
@@ -206,7 +206,7 @@ mod tests {
         let app = EventLoop::new(semaphores);
         let mut listener = app.watch_valid_until();
         let mut api = app.api();
-        spawn(app.run_event_loop());
+        spawn(app.run());
         let _ = api.new_peer(Duration::from_secs(1)).await;
 
         // When creating a new peer and letting it expiring before the first one

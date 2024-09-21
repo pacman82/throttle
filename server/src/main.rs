@@ -64,7 +64,7 @@ async fn main() -> io::Result<()> {
 
     let service_interface = HttpServiceInterface::new(&opt.endpoint(), app.api()).await?;
 
-    app.run_event_loop().await;
+    app.run().await;
 
     // Don't use ? to early return before stopping the lc.
     let result = service_interface.shutdown().await;
