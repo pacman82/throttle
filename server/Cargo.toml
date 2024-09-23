@@ -51,7 +51,7 @@ env_logger = "0.11.5"
 humantime-serde = "1.1.1"
 thiserror = "1.0.63"
 version = "3.0.0"
-clap = { version = "4.5.17", features = ["derive"] }
+clap = { version = "4.5.18", features = ["derive"] }
 axum = "0.7.5"
 
 # We use it explicitly for the time::timeout feature
