@@ -32,7 +32,7 @@ readme = "../Readme.md"
 
 [dependencies]
 reqwest = { version = "0.12.9", features = ["json"] }
-thiserror = "2.0.7"
+thiserror = "2.0.8"
 humantime-serde = "1.1.1"
 serde = "1.0.216"
 humantime = "2.1.0"
