@@ -1,9 +1,7 @@
 use axum::{routing::get, Router};
 use std::{io, time::Duration};
 use tokio::{
-    spawn,
-    sync::{mpsc, oneshot},
-    task::JoinHandle,
+    net::ToSocketAddrs, spawn, sync::{mpsc, oneshot}, task::JoinHandle
 };
 
 use crate::{
@@ -246,7 +244,7 @@ pub struct HttpServiceInterface {
 }
 
 impl HttpServiceInterface {
-    pub async fn new(endpoint: &str, api: Api) -> Result<Self, io::Error> {
+    pub async fn new(endpoint: impl ToSocketAddrs, api: Api) -> Result<Self, io::Error> {
         let app: Router = Router::new()
             .route("/metrics", get(metrics))
             .merge(semaphores())
