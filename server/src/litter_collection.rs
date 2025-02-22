@@ -4,7 +4,7 @@ use tokio::{
     select, spawn,
     sync::watch,
     task::JoinHandle,
-    time::{sleep_until, Instant},
+    time::{Instant, sleep_until},
 };
 
 /// Collects expired leases asynchronously. If all goes well leases are removed by the clients via

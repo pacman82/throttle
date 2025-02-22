@@ -1,7 +1,7 @@
 //! Application configuration, and how it is read from a TOML file.
 
 use crate::logging::LoggingConfig;
-use serde::{de, Deserialize};
+use serde::{Deserialize, de};
 use std::{
     collections::HashMap,
     fs::File,

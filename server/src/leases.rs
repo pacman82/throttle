@@ -323,7 +323,7 @@ impl Leases {
                     return Err(ThrottleError::Deadlock {
                         current: level,
                         requested: level,
-                    })
+                    });
                 }
             }
         }

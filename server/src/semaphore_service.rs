@@ -10,12 +10,12 @@ use crate::{
     state::Locks,
 };
 use axum::{
+    Json, Router,
     body::Body,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
-    Json, Router,
 };
 use percent_encoding::percent_decode;
 use serde::Deserialize;

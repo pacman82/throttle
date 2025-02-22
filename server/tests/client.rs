@@ -152,10 +152,12 @@ async fn do_not_starve_large_locks() {
     assert!(!client.acquire(big, "A", 5, None, None).await.unwrap());
     // This one could be acquired due to semaphore count, but won't, since the larger one is
     // still pending.
-    assert!(!client
-        .acquire(other_small, "A", 1, None, None)
-        .await
-        .unwrap());
+    assert!(
+        !client
+            .acquire(other_small, "A", 1, None, None)
+            .await
+            .unwrap()
+    );
     // Remainder is still 4
     assert_eq!(4, client.remainder("A").await.unwrap());
 
@@ -229,13 +231,15 @@ async fn server_side_timeout() {
     client.acquire(one, "A", 1, None, None).await.unwrap();
 
     // Wait for two in a seperate thread so we do not block forever if this test fails.
-    assert!(!timeout(
-        Duration::from_secs(1),
-        client.acquire(two, "A", 1, None, Some(Duration::from_millis(1))),
-    )
-    .await
-    .unwrap() // <-- Did not timeout
-    .unwrap());
+    assert!(
+        !timeout(
+            Duration::from_secs(1),
+            client.acquire(two, "A", 1, None, Some(Duration::from_millis(1))),
+        )
+        .await
+        .unwrap() // <-- Did not timeout
+        .unwrap()
+    );
 }
 
 // `acquire` must return immediatly after the pending lock can be acquired and not wait for the

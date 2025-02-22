@@ -369,26 +369,34 @@ mod tests {
 
         // First three locks can be acquired immediatly
         let one = state.new_peer(one_sec);
-        assert!(state
-            .acquire(one, "A".to_owned(), 1, None, None)
-            .await
-            .unwrap());
+        assert!(
+            state
+                .acquire(one, "A".to_owned(), 1, None, None)
+                .await
+                .unwrap()
+        );
         let two = state.new_peer(one_sec);
-        assert!(state
-            .acquire(two, "A".to_owned(), 1, None, None)
-            .await
-            .unwrap());
+        assert!(
+            state
+                .acquire(two, "A".to_owned(), 1, None, None)
+                .await
+                .unwrap()
+        );
         let three = state.new_peer(one_sec);
-        assert!(state
-            .acquire(three, "A".to_owned(), 1, None, None)
-            .await
-            .unwrap());
+        assert!(
+            state
+                .acquire(three, "A".to_owned(), 1, None, None)
+                .await
+                .unwrap()
+        );
         // The fourth must wait
         let four = state.new_peer(one_sec);
-        assert!(!state
-            .acquire(four, "A".to_owned(), 1, None, None)
-            .await
-            .unwrap());
+        assert!(
+            !state
+                .acquire(four, "A".to_owned(), 1, None, None)
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -504,24 +512,32 @@ mod tests {
         let one_sec = Duration::from_secs(1);
 
         let first = state.new_peer(one_sec);
-        assert!(state
-            .acquire(first, "A".to_owned(), 1, None, None)
-            .await
-            .unwrap());
-        assert!(state
-            .acquire(first, "A".to_owned(), 1, None, None)
-            .await
-            .unwrap());
+        assert!(
+            state
+                .acquire(first, "A".to_owned(), 1, None, None)
+                .await
+                .unwrap()
+        );
+        assert!(
+            state
+                .acquire(first, "A".to_owned(), 1, None, None)
+                .await
+                .unwrap()
+        );
 
         let second = state.new_peer(one_sec);
-        assert!(!state
-            .acquire(second, "A".to_owned(), 1, None, None)
-            .await
-            .unwrap());
-        assert!(!state
-            .acquire(second, "A".to_owned(), 1, None, None)
-            .await
-            .unwrap());
+        assert!(
+            !state
+                .acquire(second, "A".to_owned(), 1, None, None)
+                .await
+                .unwrap()
+        );
+        assert!(
+            !state
+                .acquire(second, "A".to_owned(), 1, None, None)
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -534,25 +550,33 @@ mod tests {
 
         let first = state.new_peer(one_sec);
         // Acquire one of 'A' and 'B' each.
-        assert!(state
-            .acquire(first, "A".to_owned(), 1, None, None)
-            .await
-            .unwrap());
-        assert!(state
-            .acquire(first, "B".to_owned(), 1, None, None)
-            .await
-            .unwrap());
+        assert!(
+            state
+                .acquire(first, "A".to_owned(), 1, None, None)
+                .await
+                .unwrap()
+        );
+        assert!(
+            state
+                .acquire(first, "B".to_owned(), 1, None, None)
+                .await
+                .unwrap()
+        );
 
         let second = state.new_peer(one_sec);
         // Second can still acquire lock to 'A' since its full count is 2, but 'B' must pend.
-        assert!(state
-            .acquire(second, "A".to_owned(), 1, None, None)
-            .await
-            .unwrap());
-        assert!(!state
-            .acquire(second, "B".to_owned(), 1, None, None)
-            .await
-            .unwrap());
+        assert!(
+            state
+                .acquire(second, "A".to_owned(), 1, None, None)
+                .await
+                .unwrap()
+        );
+        assert!(
+            !state
+                .acquire(second, "B".to_owned(), 1, None, None)
+                .await
+                .unwrap()
+        );
 
         state.release(first);
         assert!(state.is_acquired(second).unwrap());
@@ -579,10 +603,12 @@ mod tests {
             .unwrap();
 
         let peer = state.new_peer(one_sec);
-        assert!(!state
-            .acquire(peer, "A".to_owned(), 1, None, None)
-            .await
-            .unwrap());
+        assert!(
+            !state
+                .acquire(peer, "A".to_owned(), 1, None, None)
+                .await
+                .unwrap()
+        );
         assert!(matches!(
             state.acquire(peer, "B".to_owned(), 1, None, None).await,
             Err(ThrottleError::AlreadyPending)
