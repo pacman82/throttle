@@ -183,7 +183,6 @@ impl AppState {
             self.wakers
                 .resolve_all_with(&expired_peers, Err(ThrottleError::UnknownPeer));
             self.min_valid_until = self.leases.min_valid_until();
-
         } else {
             debug!("Litter collection found no expired leases.");
         }

@@ -1,7 +1,10 @@
 use axum::{routing::get, Router};
 use std::{io, time::Duration};
 use tokio::{
-    net::ToSocketAddrs, spawn, sync::{mpsc, oneshot}, task::JoinHandle
+    net::ToSocketAddrs,
+    spawn,
+    sync::{mpsc, oneshot},
+    task::JoinHandle,
 };
 
 use crate::{

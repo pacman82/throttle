@@ -578,11 +578,14 @@ impl Leases {
     }
 
     pub fn list_of_peers(&self) -> Vec<PeerDescription> {
-        self.ledger.iter().map(|(&id, _peer)| PeerDescription { id }).collect()
+        self.ledger
+            .iter()
+            .map(|(&id, _peer)| PeerDescription { id })
+            .collect()
     }
 }
 
 #[derive(Serialize, Debug)]
 pub struct PeerDescription {
-    id: PeerId
+    id: PeerId,
 }

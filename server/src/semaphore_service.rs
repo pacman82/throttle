@@ -3,7 +3,12 @@
 //! deserialize paramaters and serialize respones, or deciding on which HTTP methods to map the
 //! functions.
 
-use crate::{error::ThrottleError, leases::{PeerDescription, PeerId}, service_interface::Api, state::Locks};
+use crate::{
+    error::ThrottleError,
+    leases::{PeerDescription, PeerId},
+    service_interface::Api,
+    state::Locks,
+};
 use axum::{
     body::Body,
     extract::{Path, Query, State},
