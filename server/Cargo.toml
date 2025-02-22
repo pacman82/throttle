@@ -2,7 +2,7 @@
 name = "throttle-server"
 version = "0.5.4"
 authors = ["Markus Klein"]
-edition = "2018"
+edition = "2024"
 license = "MIT"
 
 # Link to github repository

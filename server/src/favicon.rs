@@ -6,6 +6,6 @@ const FAVICON: &[u8] = include_bytes!("favicon.ico");
 
 /// Browsers like to ask for an Icon. We do not want to clutter our logs with meaningless 404s so we
 /// just provide one.
-pub async fn favicon() -> impl IntoResponse {
+pub async fn favicon() -> impl IntoResponse + use<> {
     ([(header::CONTENT_TYPE, "image/x-icon")], FAVICON)
 }

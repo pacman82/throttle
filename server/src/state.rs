@@ -73,7 +73,7 @@ impl AppState {
         amount: i64,
         wait_for: Option<Duration>,
         expires_in: Option<Duration>,
-    ) -> impl Future<Output = Result<bool, ThrottleError>> {
+    ) -> impl Future<Output = Result<bool, ThrottleError>> + use<> {
         let result = self.sync_acquire(peer_id, semaphore, amount, wait_for, expires_in);
         async move {
             match result {
@@ -95,7 +95,7 @@ impl AppState {
         amount: i64,
         wait_for: Option<Duration>,
         expires_in: Option<Duration>,
-    ) -> Result<impl Future<Output = Result<bool, ThrottleError>>, ThrottleError> {
+    ) -> Result<impl Future<Output = Result<bool, ThrottleError>> + use<>, ThrottleError> {
         let sem = self.semaphores.get(&semaphore).ok_or_else(|| {
             warn!("Unknown semaphore requested: {}", semaphore);
             ThrottleError::UnknownSemaphore
