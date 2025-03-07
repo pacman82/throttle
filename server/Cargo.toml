@@ -49,7 +49,7 @@ toml = "0.8.20"
 rand = "0.9.0"
 env_logger = "0.11.6"
 humantime-serde = "1.1.1"
-thiserror = "2.0.11"
+thiserror = "2.0.12"
 version = "3.0.0"
 clap = { version = "4.5.31", features = ["derive"] }
 axum = "0.8.2"
