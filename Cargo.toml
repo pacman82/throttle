@@ -1,6 +1,6 @@
 [workspace]
 members = ["server", "rust_client"]
-workspace.resolver = "3"
+resolver = "3"
 
 [profile.release]
 # Panics should only be caused by logic errors and are considered bugs

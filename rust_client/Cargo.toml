@@ -2,7 +2,7 @@
 name = "throttle-client"
 version = "0.5.4"
 authors = ["Markus Klein <markus-klein@live.de>"]
-edition = "2018"
+edition = "2024"
 license = "MIT"
 
 # Link to github repository
