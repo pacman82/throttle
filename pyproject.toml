@@ -15,11 +15,11 @@ dependencies = [
     "requests", "tenacity"
 ]
 
-[project.optional-dependencies]
-test = ["pytest"]
-
 [project.urls]
 Repository = "https://github.com/pacman82/throttle.git"
 
 [tool.setuptools.packages.find]
 where = ["python_client"]
+
+[dependency-groups]
+dev = ["pytest"]

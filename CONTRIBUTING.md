@@ -21,7 +21,6 @@ Wether they be in code, intersting feature suggestions, design critique or bug r
 * Execute integration of throttle server with Python client.
 
   ```bash
-  cd python_client
-  pip install -e .[test]
-  pytest
+  uv sync --dev
+  uv run pytest
   ```
