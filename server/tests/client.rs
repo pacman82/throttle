@@ -4,7 +4,7 @@ use common::Server;
 
 use std::{collections::HashMap, time::Duration};
 
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 
 /// `client.acquire` if called in a non-blocking fashion, must return `true` if the lock can be
 /// acquired immediatly and `false` otherwise. This must also be in affirmed by subsequent calls
@@ -47,6 +47,12 @@ async fn locks_of_expired_peers_are_released() {
     // Use heartbeat to make peer expire immediatly
     let expire_in = Some(Duration::from_secs(0));
     client.acquire(peer, "A", 1, expire_in, None).await.unwrap();
+
+    // Wait just a short moment to allow the async runtime on the server to finish the litter
+    // collection. Locally this even works without the sleep, but on ci, we this test was flaky
+    // without any sleep.
+    sleep(Duration::from_millis(5)).await;
+
     // Semaphore should again be available
     assert_eq!(1, client.remainder("A").await.unwrap());
 }
