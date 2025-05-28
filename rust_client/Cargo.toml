@@ -31,7 +31,7 @@ readme = "../Readme.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.12.15", features = ["json"] }
+reqwest = { version = "0.12.16", features = ["json"] }
 thiserror = "2.0.12"
 humantime-serde = "1.1.1"
 serde = "1.0.219"
