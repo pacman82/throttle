@@ -19,7 +19,7 @@ jobs:
           cargo build --release
           Compress-Archive -LiteralPath target/release/throttle.exe -DestinationPath throttle-win64.zip
       - name: Github Upload
-        uses: svenstaro/upload-release-action@2.9.0
+        uses: svenstaro/upload-release-action@2.10.0
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: throttle-win64.zip
@@ -42,7 +42,7 @@ jobs:
       - name: Build
         run: cargo build --release
       - name: Github Upload
-        uses: svenstaro/upload-release-action@2.9.0
+        uses: svenstaro/upload-release-action@2.10.0
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/release/throttle
@@ -59,7 +59,7 @@ jobs:
       - name: Build server
         run: cross build --package throttle-server --release --target x86_64-unknown-linux-musl
       - name: Github Upload
-        uses: svenstaro/upload-release-action@2.9.0
+        uses: svenstaro/upload-release-action@2.10.0
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/x86_64-unknown-linux-musl/release/throttle
