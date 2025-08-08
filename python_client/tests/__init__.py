@@ -28,7 +28,7 @@ def cargo_main(cfg: str):
                 response = requests.get(f"{BASE_URL}/health", timeout=0.2)
                 response.raise_for_status()
                 no_connection = False
-            except (requests.ConnectionError):
+            except requests.ConnectionError:
                 sleep(0.1)  # Sleep a tenth of a second, don't busy waits
 
         yield proc

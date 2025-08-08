@@ -196,7 +196,7 @@ def test_acquire_locks_immediatly_after_expiration():
     than being deleted explicitly.
     """
     with throttle_client(
-        b'litter_collection_interval = "10ms"\n' b"[semaphores]\nA=1"
+        b'litter_collection_interval = "10ms"\n[semaphores]\nA=1'
     ) as client:
         one = client.new_peer(expires_in=timedelta(minutes=1))
         two = client.new_peer(expires_in=timedelta(minutes=1))
@@ -242,7 +242,7 @@ def test_acquire_two_locks_with_one_peer():
     acquired.
     """
     with throttle_client(
-        b"[semaphores.A]\nmax=1\nlevel=1\n" b"[semaphores.B]\nmax=1\nlevel=0\n"
+        b"[semaphores.A]\nmax=1\nlevel=1\n[semaphores.B]\nmax=1\nlevel=0\n"
     ) as client:
         one = client.new_peer(expires_in=timedelta(minutes=1))
         two = client.new_peer(expires_in=timedelta(minutes=1))
@@ -266,7 +266,7 @@ def test_litter_collection():
     Verify that leases don't leak thanks to litter collection
     """
     with throttle_client(
-        (b'litter_collection_interval="10ms"\n' b"[semaphores]\n" b"A=1\n")
+        (b'litter_collection_interval="10ms"\n[semaphores]\nA=1\n')
     ) as client:
         # Acquire lease, but since we don't use the context manager we never release
         # it.

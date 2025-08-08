@@ -192,12 +192,10 @@ def test_nested_locks():
     with throttle(b"[semaphores]\nA={ max=1, level=1 }\nB={ max=1, level=0 }") as url:
         client = Client(url)
         with lock(url, "A"):
-
             assert client.remainder("A") == 0
             assert client.remainder("B") == 1
 
             with lock(url, "B"):
-
                 assert client.remainder("A") == 0
                 assert client.remainder("B") == 0
 
