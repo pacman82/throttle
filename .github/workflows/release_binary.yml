@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Build
         run: |
           cargo build --release
@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Install latests rust toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -55,7 +55,7 @@ jobs:
     steps:
       - name: Setup cross
         run: cargo install cross  
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build server
         run: cross build --package throttle-server --release --target x86_64-unknown-linux-musl
       - name: Github Upload
