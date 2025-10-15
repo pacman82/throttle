@@ -6,7 +6,7 @@ use tokio::{
     time::{Instant, sleep_until},
 };
 
-use crate::event_loop::{Api, SemaphoresApi};
+use crate::event_loop::SemaphoresApi;
 
 /// Collects expired leases asynchronously. If all goes well leases are removed by the clients via
 /// DELETE requests. Yet, clients crash and requests may never make it. To not leak semaphores in
@@ -33,7 +33,7 @@ impl LitterCollection {
 /// Starts a new thread that removes expired leases.
 pub fn start(
     mut watch_valid_until: watch::Receiver<Option<std::time::Instant>>,
-    mut api: Api,
+    mut api: impl SemaphoresApi + Send + 'static,
 ) -> LitterCollection {
     let mut maybe_valid_until = *watch_valid_until.borrow_and_update();
     let (send_stop, mut watch_stop) = watch::channel(false);

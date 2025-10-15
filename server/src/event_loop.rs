@@ -149,7 +149,7 @@ pub struct Api {
 }
 
 impl Api {
-    pub fn new(sender: mpsc::Sender<ServiceEvent>) -> Self {
+    fn new(sender: mpsc::Sender<ServiceEvent>) -> Self {
         Api { sender }
     }
 }
@@ -389,7 +389,7 @@ pub trait SemaphoresApi {
         acquired: Locks,
     ) -> Result<(), ThrottleError>;
     async fn update_metrics(&mut self);
-    async fn remove_expired(&mut self) -> usize;
+    fn remove_expired(&mut self) -> impl Future<Output = usize> + Send;
     async fn list_of_peers(&mut self) -> Vec<PeerDescription>;
 }
 
