@@ -145,6 +145,8 @@ impl EventLoop {
 mod tests {
     use std::{collections::HashMap, time::Duration};
 
+    use crate::service_interface::SemaphoresApi as _;
+
     use super::*;
 
     #[tokio::test]

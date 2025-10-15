@@ -29,8 +29,10 @@ impl Api {
     pub fn new(sender: mpsc::Sender<ServiceEvent>) -> Self {
         Api { sender }
     }
+}
 
-    pub async fn new_peer(&mut self, expires_in: Duration) -> PeerId {
+impl SemaphoresApi for Api {
+    async fn new_peer(&mut self, expires_in: Duration) -> PeerId {
         let (send, recv) = oneshot::channel();
         self.sender
             .send(ServiceEvent::NewPeer {
@@ -42,7 +44,7 @@ impl Api {
         recv.await.unwrap()
     }
 
-    pub async fn release_peer(&mut self, peer_id: PeerId) -> bool {
+    async fn release_peer(&mut self, peer_id: PeerId) -> bool {
         let (send, recv) = oneshot::channel();
         self.sender
             .send(ServiceEvent::ReleasePeer {
@@ -54,7 +56,7 @@ impl Api {
         recv.await.unwrap()
     }
 
-    pub async fn acquire(
+    async fn acquire(
         &mut self,
         peer_id: PeerId,
         semaphore: String,
@@ -77,11 +79,7 @@ impl Api {
         recv.await.unwrap()
     }
 
-    pub async fn release(
-        &mut self,
-        peer_id: PeerId,
-        semaphore: String,
-    ) -> Result<(), ThrottleError> {
+    async fn release(&mut self, peer_id: PeerId, semaphore: String) -> Result<(), ThrottleError> {
         let (send, recv) = oneshot::channel();
         self.sender
             .send(ServiceEvent::ReleaseLock {
@@ -94,7 +92,7 @@ impl Api {
         recv.await.unwrap()
     }
 
-    pub async fn is_acquired(&mut self, peer_id: PeerId) -> Result<bool, ThrottleError> {
+    async fn is_acquired(&mut self, peer_id: PeerId) -> Result<bool, ThrottleError> {
         let (send, recv) = oneshot::channel();
         self.sender
             .send(ServiceEvent::IsAcquired {
@@ -106,7 +104,7 @@ impl Api {
         recv.await.unwrap()
     }
 
-    pub async fn heartbeat(
+    async fn heartbeat(
         &mut self,
         peer_id: PeerId,
         expires_in: Duration,
@@ -123,7 +121,7 @@ impl Api {
         recv.await.unwrap()
     }
 
-    pub async fn remainder(&mut self, semaphore: String) -> Result<i64, ThrottleError> {
+    async fn remainder(&mut self, semaphore: String) -> Result<i64, ThrottleError> {
         let (send, recv) = oneshot::channel();
         self.sender
             .send(ServiceEvent::Remainder {
@@ -135,7 +133,7 @@ impl Api {
         recv.await.unwrap()
     }
 
-    pub async fn restore(
+    async fn restore(
         &mut self,
         peer_id: PeerId,
         expires_in: Duration,
@@ -154,7 +152,7 @@ impl Api {
         recv.await.unwrap()
     }
 
-    pub async fn update_metrics(&mut self) {
+    async fn update_metrics(&mut self) {
         let (send, recv) = oneshot::channel();
         self.sender
             .send(ServiceEvent::UpdateMetrics {
@@ -165,7 +163,7 @@ impl Api {
         recv.await.unwrap()
     }
 
-    pub async fn remove_expired(&mut self) -> usize {
+    async fn remove_expired(&mut self) -> usize {
         let (send, recv) = oneshot::channel();
         self.sender
             .send(ServiceEvent::RemovedExpired {
@@ -176,7 +174,7 @@ impl Api {
         recv.await.unwrap()
     }
 
-    pub async fn list_of_peers(&mut self) -> Vec<PeerDescription> {
+    async fn list_of_peers(&mut self) -> Vec<PeerDescription> {
         let (send, recv) = oneshot::channel();
         self.sender
             .send(ServiceEvent::ListPeers {
@@ -240,6 +238,36 @@ pub enum ServiceEvent {
     ListPeers {
         answer_list_peers: oneshot::Sender<Vec<PeerDescription>>,
     },
+}
+
+pub trait SemaphoresApi {
+    async fn new_peer(&mut self, expires_in: Duration) -> PeerId;
+    async fn release_peer(&mut self, peer_id: PeerId) -> bool;
+    async fn acquire(
+        &mut self,
+        peer_id: PeerId,
+        semaphore: String,
+        amount: i64,
+        wait_for: Option<Duration>,
+        expires_in: Option<Duration>,
+    ) -> Result<bool, ThrottleError>;
+    async fn release(&mut self, peer_id: PeerId, semaphore: String) -> Result<(), ThrottleError>;
+    async fn is_acquired(&mut self, peer_id: PeerId) -> Result<bool, ThrottleError>;
+    async fn heartbeat(
+        &mut self,
+        peer_id: PeerId,
+        expires_in: Duration,
+    ) -> Result<(), ThrottleError>;
+    async fn remainder(&mut self, semaphore: String) -> Result<i64, ThrottleError>;
+    async fn restore(
+        &mut self,
+        peer_id: PeerId,
+        expires_in: Duration,
+        acquired: Locks,
+    ) -> Result<(), ThrottleError>;
+    async fn update_metrics(&mut self);
+    async fn remove_expired(&mut self) -> usize;
+    async fn list_of_peers(&mut self) -> Vec<PeerDescription>;
 }
 
 pub struct HttpServiceInterface {

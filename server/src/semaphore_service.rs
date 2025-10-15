@@ -6,7 +6,7 @@
 use crate::{
     error::ThrottleError,
     leases::{PeerDescription, PeerId},
-    service_interface::Api,
+    service_interface::{Api, SemaphoresApi},
     state::Locks,
 };
 use axum::{

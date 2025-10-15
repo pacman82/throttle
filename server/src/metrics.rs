@@ -1,7 +1,7 @@
 //! This module defines the `/metrics` route with which metrics can be accessed from via http. It
 //! does and should not define individual metrics. These should go into their respective modules.
 
-use crate::service_interface::Api;
+use crate::service_interface::{Api, SemaphoresApi};
 use axum::extract::State;
 use prometheus::{Encoder, TextEncoder};
 

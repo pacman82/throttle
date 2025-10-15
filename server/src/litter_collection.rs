@@ -1,4 +1,4 @@
-use crate::service_interface::Api;
+use crate::service_interface::{Api, SemaphoresApi};
 use log::{debug, warn};
 use tokio::{
     select, spawn,
