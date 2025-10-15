@@ -1,4 +1,3 @@
-use crate::service_interface::{Api, SemaphoresApi};
 use log::{debug, warn};
 use tokio::{
     select, spawn,
@@ -6,6 +5,8 @@ use tokio::{
     task::JoinHandle,
     time::{Instant, sleep_until},
 };
+
+use crate::event_loop::{Api, SemaphoresApi};
 
 /// Collects expired leases asynchronously. If all goes well leases are removed by the clients via
 /// DELETE requests. Yet, clients crash and requests may never make it. To not leak semaphores in

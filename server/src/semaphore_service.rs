@@ -5,8 +5,8 @@
 
 use crate::{
     error::ThrottleError,
+    event_loop::{Api, SemaphoresApi},
     leases::{PeerDescription, PeerId},
-    service_interface::{Api, SemaphoresApi},
     state::Locks,
 };
 use axum::{
