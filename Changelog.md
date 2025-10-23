@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.5.6
+-----
+
+* Relase container to Github Container Registry
+
 0.5.5
 -----
 
