@@ -1,6 +1,6 @@
 [package]
 name = "throttle-client"
-version = "0.5.4"
+version = "0.5.5"
 authors = ["Markus Klein <markus-klein@live.de>"]
 edition = "2024"
 license = "MIT"
@@ -36,4 +36,3 @@ thiserror = "2.0.17"
 humantime-serde = "1.1.1"
 serde = "1.0.228"
 humantime = "2.3.0"
-

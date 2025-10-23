@@ -1,6 +1,12 @@
 Changelog
 =========
 
+0.5.5
+-----
+
+* Updated dependencies
+* Auditable executable in Container Image
+
 0.5.4
 -----
 
