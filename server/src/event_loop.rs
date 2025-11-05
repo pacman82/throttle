@@ -5,22 +5,16 @@ use crate::{
     state::{AppState, Locks},
 };
 use log::{debug, warn};
-use std::{
-    future::pending,
-    time::{Duration, Instant},
-};
+use std::{future::pending, time::Duration};
 use tokio::{
     select, spawn,
-    sync::{mpsc, oneshot, watch},
+    sync::{mpsc, oneshot},
     time::sleep_until,
 };
 
 pub struct EventLoop {
     event_receiver: mpsc::Receiver<ServiceEvent>,
     api: Api,
-    /// Used to tell litter collection when the next lease is going to expire (given it is not
-    /// prolonged using a heartbeat). We send `None` if there are no active leases.
-    send_min_valid_until: watch::Sender<Option<Instant>>,
     app_state: AppState,
 }
 
@@ -33,7 +27,6 @@ impl EventLoop {
             event_receiver,
             api,
             app_state,
-            send_min_valid_until: watch::Sender::new(None),
         }
     }
 
@@ -156,11 +149,6 @@ impl EventLoop {
                 let list_of_peers = self.app_state.list_of_peers();
                 answer_list_peers.send(list_of_peers).unwrap();
             }
-        }
-        if *self.send_min_valid_until.borrow() != self.app_state.min_valid_until() {
-            let _ = self
-                .send_min_valid_until
-                .send(self.app_state.min_valid_until());
         }
     }
 }
