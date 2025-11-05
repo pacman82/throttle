@@ -4,7 +4,6 @@ use crate::{
     leases::{PeerDescription, PeerId},
     state::{AppState, Locks},
 };
-use log::{debug, warn};
 use std::{future::pending, time::Duration};
 use tokio::{
     select, spawn,
@@ -55,12 +54,7 @@ impl EventLoop {
                 // Leases typically expire if the client does not explicitly delete them and also
                 // does not extend their lifetime using heartbeats.
                 () = sleep_until_lease_expires => {
-                    let num_removed = self.app_state.remove_expired();
-                    if num_removed == 0 {
-                        debug!("Litter collection did not find any expired leases.")
-                    } else {
-                        warn!("Litter collection removed {} expired leases", num_removed);
-                    }
+                    self.app_state.remove_expired();
                 }
                 // All senders have been shutdown. Exiting event loop.
                 else => break,
