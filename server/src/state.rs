@@ -3,7 +3,6 @@ use crate::{
     error::ThrottleError,
     leases::{Counts, Leases, PeerDescription, PeerId},
 };
-use async_events::AsyncEvents;
 use lazy_static::lazy_static;
 use log::{debug, warn};
 use prometheus::IntGaugeVec;
@@ -27,8 +26,6 @@ pub struct AppState {
     /// Bookeeping for leases, protected by mutex so multiple threads (i.e. requests) can manipulate
     /// it. Must not contain any leases not configured in semaphores.
     leases: Leases,
-    /// Peer id and weak references to mutex for each pending request.
-    wakers: AsyncEvents<u64, Result<(), ThrottleError>>,
     /// Cached value of leases.min_valid_until()
     min_valid_until: Option<Instant>,
     /// Allow subscribers to watch then a peer has acquired its locks.
@@ -41,7 +38,6 @@ impl AppState {
         AppState {
             leases: Leases::new(),
             semaphores,
-            wakers: AsyncEvents::new(),
             min_valid_until: None,
             peer_notifiers: HashMap::new(),
         }
@@ -188,14 +184,11 @@ impl AppState {
         };
         if !expired_peers.is_empty() {
             warn!("Removed {} peers due to expiration.", expired_peers.len());
-            self.wakers.resolve_all_with(&resolved_peers, Ok(()));
             self.notify_resolved_peers(&resolved_peers);
-            self.wakers
-                .resolve_all_with(&expired_peers, Err(ThrottleError::UnknownPeer));
-            self.min_valid_until = self.leases.min_valid_until();
             for peer_id in &expired_peers {
                 self.peer_notifiers.remove(peer_id);
             }
+            self.min_valid_until = self.leases.min_valid_until();
         } else {
             debug!("Litter collection found no expired leases.");
         }
@@ -277,7 +270,6 @@ impl AppState {
                         .resolve_pending(&semaphore, sem.max, &mut resolved_peers);
                 }
                 self.min_valid_until = self.leases.min_valid_until();
-                self.wakers.resolve_all_with(&resolved_peers, Ok(()));
                 self.notify_resolved_peers(&resolved_peers);
                 self.peer_notifiers.remove(&peer_id);
                 true
@@ -330,7 +322,6 @@ impl AppState {
         let mut resolved_peers = Vec::new();
         self.leases
             .resolve_pending(semaphore, max, &mut resolved_peers);
-        self.wakers.resolve_all_with(&resolved_peers, Ok(()));
         self.notify_resolved_peers(&resolved_peers);
         Ok(())
     }
