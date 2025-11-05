@@ -11,7 +11,7 @@ use std::{
     future::Future,
     time::{Duration, Instant},
 };
-use tokio::{sync::watch, time};
+use tokio::{sync::watch, time::timeout};
 
 /// List of lock acquired ba a peer
 pub type Locks = HashMap<String, i64>;
@@ -76,28 +76,38 @@ impl AppState {
         wait_for: Option<Duration>,
         expires_in: Option<Duration>,
     ) -> impl Future<Output = Result<bool, ThrottleError>> + use<> {
-        let result = self.sync_acquire(peer_id, semaphore, amount, wait_for, expires_in);
+        let result = self.sync_acquire(peer_id, semaphore, amount, expires_in);
+        let wait_for_acquired = self.wait_for_acquired(peer_id);
         async move {
             match result {
-                Ok(is_acquired) => Ok(is_acquired.await?),
+                Ok(true) => Ok(true),
+                Ok(false) => {
+                    match timeout(
+                        wait_for.unwrap_or_else(|| Duration::ZERO),
+                        wait_for_acquired,
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => Ok(true),
+                        Ok(Err(e)) => Err(e),
+                        Err(_) => Ok(false),
+                    }
+                }
                 Err(error) => Err(error),
             }
         }
     }
 
-    /// Synchronous implementation of acquire. Distinguishes in its signature between errors during
-    /// creation of the future and ones which happens during it being resolved. This makes it easy
-    /// during implementing to early return and being explicit about the fact that the resulting
-    /// futures does not borrow self. However the caller now needs to distinguish between errors
-    /// happing at scheduling or resolving
+    /// Tries to acquire the lock for the peer. Returns immediatly with `true` if successful. If not
+    /// it returns `false`, yet changes the peer state. It is now pending until it can acquire all
+    /// its locks.
     pub fn sync_acquire(
         &mut self,
         peer_id: PeerId,
         semaphore: String,
         amount: i64,
-        wait_for: Option<Duration>,
         expires_in: Option<Duration>,
-    ) -> Result<impl Future<Output = Result<bool, ThrottleError>> + use<>, ThrottleError> {
+    ) -> Result<bool, ThrottleError> {
         let sem = self.semaphores.get(&semaphore).ok_or_else(|| {
             warn!("Unknown semaphore requested: {}", semaphore);
             ThrottleError::UnknownSemaphore
@@ -108,59 +118,33 @@ impl AppState {
         if max < amount {
             return Err(ThrottleError::Never { asked: amount, max });
         }
-        let (acquired, acquire_or_timeout) = {
-            if let Some(expires_in) = expires_in {
-                let valid_until = Instant::now() + expires_in;
-                self.leases.update_valid_until(peer_id, valid_until)?;
-                self.min_valid_until = self.leases.min_valid_until();
-            }
-            let semaphores = &self.semaphores;
-            let lock_levels = |s: &str| semaphores.get(s).unwrap().level;
-            let acquired =
-                self.leases
-                    .acquire(peer_id, &semaphore, amount, max, level, lock_levels)?;
-            if acquired {
-                // Resolve this immediatly
-                debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
-                (true, None)
-            } else {
-                debug!("Peer {} waiting for lock to '{}'", peer_id, semaphore);
-                let acquire_or_timeout = wait_for.map(|wait_for| {
-                    // We could not acquire the lock immediatly. Are we going to wait for it?
-                    // time::timeout(wait_for, self.wakers.output_of(peer_id))
-                    time::timeout(wait_for, self.wait_for_acquired(peer_id))
-                });
-                (false, acquire_or_timeout)
-            }
-        };
-        self.peer_notifiers
-            .get_mut(&peer_id)
-            .unwrap()
-            .send_replace(acquired);
 
-        Ok(async move {
-            if let Some(acquire_or_timeout) = acquire_or_timeout {
-                // We could not acquire lock right away, and user decided to wait a bit, so this is what
-                // we do.
-
-                // The outer `Err` indicates a timeout.
-                match acquire_or_timeout.await {
-                    // Locks could be acquired
-                    Ok(Ok(())) => {
-                        debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
-                        Ok(true)
-                    }
-                    // Failure
-                    Ok(Err(e)) => Err(e),
-                    // Lock could not be acquired in time
-                    Err(_) => Ok(false),
-                }
-            } else {
-                // We could acquire the lock immediatly, or the user did not decide to wait. Either way
-                // we can answer right away.
-                Ok(acquired)
-            }
-        })
+        let had_been_accired_before_update = self.is_acquired(peer_id).unwrap();
+        if let Some(expires_in) = expires_in {
+            let valid_until = Instant::now() + expires_in;
+            self.leases.update_valid_until(peer_id, valid_until)?;
+            self.min_valid_until = self.leases.min_valid_until();
+        }
+        let semaphores = &self.semaphores;
+        let lock_levels = |s: &str| semaphores.get(s).unwrap().level;
+        let acquired = self
+            .leases
+            .acquire(peer_id, &semaphore, amount, max, level, lock_levels)?;
+        if acquired {
+            debug_assert!(had_been_accired_before_update);
+            // Resolve this immediatly
+            debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
+            Ok(true)
+        } else {
+            debug!("Peer {} waiting for lock to '{}'", peer_id, semaphore);
+            // As long as our lock count does not shrink, we only need to update the watchers in
+            // case we pend.
+            self.peer_notifiers
+                .get_mut(&peer_id)
+                .unwrap()
+                .send_replace(acquired);
+            Ok(false)
+        }
     }
 
     /// Removes leases which have gone past their expiration time. If any leases are removed, wakes threads
