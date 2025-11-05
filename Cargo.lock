@@ -61,12 +61,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-events"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abe4b2e6c252e0f6b8736de3e52f802dda6feda8a9138df7ea56f91b7529cfeb"
-
-[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1518,7 +1512,6 @@ dependencies = [
 name = "throttle-server"
 version = "0.5.7"
 dependencies = [
- "async-events",
  "axum",
  "clap",
  "env_logger",
