@@ -131,7 +131,8 @@ impl AppState {
                 debug!("Peer {} waiting for lock to '{}'", peer_id, semaphore);
                 let acquire_or_timeout = wait_for.map(|wait_for| {
                     // We could not acquire the lock immediatly. Are we going to wait for it?
-                    time::timeout(wait_for, self.wakers.output_of(peer_id))
+                    // time::timeout(wait_for, self.wakers.output_of(peer_id))
+                    time::timeout(wait_for, self.wait_for_acquired(peer_id))
                 });
                 (false, acquire_or_timeout)
             }
@@ -349,6 +350,19 @@ impl AppState {
                 .get_mut(peer_id)
                 .unwrap()
                 .send_replace(true);
+        }
+    }
+
+    pub fn wait_for_acquired(
+        &self,
+        peer_id: PeerId,
+    ) -> impl Future<Output = Result<(), ThrottleError>> + use<> {
+        let mut recv = self.peer_notifiers.get(&peer_id).unwrap().subscribe();
+        async move {
+            match recv.wait_for(|acquired| *acquired).await {
+                Ok(_) => Ok(()),
+                Err(_) => Err(ThrottleError::UnknownPeer),
+            }
         }
     }
 }
