@@ -129,8 +129,6 @@ impl AppState {
                 });
                 (false, acquire_or_timeout)
             }
-            // Release lock on leases, before waiting for acquire_or_timeout! Otherwise, we might
-            // deadlock.
         };
 
         Ok(async move {
