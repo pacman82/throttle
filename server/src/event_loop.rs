@@ -4,10 +4,15 @@ use crate::{
     leases::{PeerDescription, PeerId},
     state::{AppState, Locks},
 };
-use std::time::{Duration, Instant};
+use log::{debug, warn};
+use std::{
+    future::pending,
+    time::{Duration, Instant},
+};
 use tokio::{
-    spawn,
+    select, spawn,
     sync::{mpsc, oneshot, watch},
+    time::sleep_until,
 };
 
 pub struct EventLoop {
@@ -37,16 +42,36 @@ impl EventLoop {
         self.api.clone()
     }
 
-    /// Allows the litter collection to watch for the earliest anticipated expiration of a leak.
-    /// The watched timepoint will be updated if it changes. It can become even earlier or (more
-    /// likely is prolonged). `None` implies there are no leases which can expire.
-    pub fn watch_valid_until(&self) -> watch::Receiver<Option<Instant>> {
-        self.send_min_valid_until.subscribe()
-    }
-
     pub async fn run(mut self) {
-        while let Some(event) = self.event_receiver.recv().await {
-            self.handle_event(event);
+        loop {
+            let min_valid_until = self.app_state.min_valid_until();
+            let sleep_until_lease_expires = async {
+                if let Some(valid_until) = min_valid_until {
+                    sleep_until(valid_until.into()).await;
+                } else {
+                    pending::<()>().await;
+                }
+            };
+            select! {
+                // This branch handles any incoming events, returned leases, requests for new
+                // leases, heartbeats, etc.
+                Some(event) = self.event_receiver.recv() => {
+                    self.handle_event(event);
+                }
+                // This branch handles the litter collection. We need to remove expired leases.
+                // Leases typically expire if the client does not explicitly delete them and also
+                // does not extend their lifetime using heartbeats.
+                () = sleep_until_lease_expires => {
+                    let num_removed = self.app_state.remove_expired();
+                    if num_removed == 0 {
+                        debug!("Litter collection did not find any expired leases.")
+                    } else {
+                        warn!("Litter collection removed {} expired leases", num_removed);
+                    }
+                }
+                // All senders have been shutdown. Exiting event loop.
+                else => break,
+            }
         }
     }
 
@@ -126,12 +151,6 @@ impl EventLoop {
             } => {
                 self.app_state.update_metrics();
                 answer_update_metrics.send(()).unwrap()
-            }
-            ServiceEvent::RemovedExpired {
-                answer_remove_expired,
-            } => {
-                let num_expired = self.app_state.remove_expired();
-                answer_remove_expired.send(num_expired).unwrap();
             }
             ServiceEvent::ListPeers { answer_list_peers } => {
                 let list_of_peers = self.app_state.list_of_peers();
@@ -290,17 +309,6 @@ impl SemaphoresApi for Api {
         recv.await.unwrap()
     }
 
-    async fn remove_expired(&mut self) -> usize {
-        let (send, recv) = oneshot::channel();
-        self.sender
-            .send(ServiceEvent::RemovedExpired {
-                answer_remove_expired: send,
-            })
-            .await
-            .unwrap();
-        recv.await.unwrap()
-    }
-
     async fn list_of_peers(&mut self) -> Vec<PeerDescription> {
         let (send, recv) = oneshot::channel();
         self.sender
@@ -359,9 +367,6 @@ pub enum ServiceEvent {
     UpdateMetrics {
         answer_update_metrics: oneshot::Sender<()>,
     },
-    RemovedExpired {
-        answer_remove_expired: oneshot::Sender<usize>,
-    },
     ListPeers {
         answer_list_peers: oneshot::Sender<Vec<PeerDescription>>,
     },
@@ -393,85 +398,5 @@ pub trait SemaphoresApi {
         acquired: Locks,
     ) -> Result<(), ThrottleError>;
     async fn update_metrics(&mut self);
-    fn remove_expired(&mut self) -> impl Future<Output = usize> + Send;
     async fn list_of_peers(&mut self) -> Vec<PeerDescription>;
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{collections::HashMap, time::Duration};
-
-    use super::*;
-
-    #[tokio::test]
-    async fn announce_change_in_valid_until_through_new_peer() {
-        // Given an application state with no peers, the first call to acquire should announce that
-        // now there is something to expire.
-        let semaphores = Semaphores::new();
-        let app = EventLoop::new(semaphores);
-        let mut listener = app.watch_valid_until();
-        let mut api = app.api();
-        spawn(app.run());
-
-        // When waiting for the peer to expire
-        let one_sec = Duration::from_secs(1);
-        let _peer_id = api.new_peer(one_sec).await;
-
-        // Then
-        assert!(listener.borrow_and_update().is_some())
-    }
-
-    #[tokio::test]
-    async fn announce_change_in_valid_until_through_restored_peer() {
-        // Given
-        let semaphores = Semaphores::new();
-        let app = EventLoop::new(semaphores);
-        let mut listener = app.watch_valid_until();
-        let mut api = app.api();
-        spawn(app.run());
-
-        // When
-        let one_sec = Duration::from_secs(1);
-        let _peer_id = api.restore(1, one_sec, HashMap::new()).await;
-
-        // Then
-        assert!(listener.borrow_and_update().is_some())
-    }
-
-    #[tokio::test]
-    async fn announce_change_in_min_valid_until_through_removed_peer() {
-        // Given
-        let semaphores = Semaphores::new();
-        let app = EventLoop::new(semaphores);
-        let mut listener = app.watch_valid_until();
-        let mut api = app.api();
-        spawn(app.run());
-        let peer_id = api.new_peer(Duration::from_secs(1)).await;
-
-        // When
-        api.release_peer(peer_id).await;
-
-        // Then
-        assert!(listener.borrow_and_update().is_none())
-    }
-
-    #[tokio::test]
-    async fn announce_change_in_min_valid_until_through_expired_peer() {
-        // Given
-        let semaphores = Semaphores::new();
-        let app = EventLoop::new(semaphores);
-        let mut listener = app.watch_valid_until();
-        let mut api = app.api();
-        spawn(app.run());
-        let _ = api.new_peer(Duration::from_secs(1)).await;
-
-        // When creating a new peer and letting it expiring before the first one
-        let old_valid_until = *listener.borrow_and_update();
-        let _ = api.new_peer(Duration::from_secs(0)).await;
-        api.remove_expired().await;
-
-        // Then
-        let after_expiration = *listener.borrow_and_update();
-        assert_eq!(old_valid_until, after_expiration)
-    }
 }

@@ -26,7 +26,6 @@ mod event_loop;
 mod favicon;
 mod health;
 mod leases;
-mod litter_collection;
 mod logging;
 mod metrics;
 mod not_found;
