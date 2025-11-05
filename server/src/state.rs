@@ -61,9 +61,9 @@ impl AppState {
     /// * `amount`: The count of the lock. Outside of revenants (i.e. expired peers, which do
     ///   return). Throttle is goingt to see to it that the combined lock count is not going beyond
     ///   the configured max count.
-    /// * `wait_for`: The future returns as soon as the lock could be acquireod or after the
-    ///   duration has elapsed, even if the lock could not be acquired. If set to `None`, the future
-    ///   returns immediatly.
+    /// * `wait_for`: The future returns as soon as the lock could be acquired or after the duration
+    ///   has elapsed, even if the lock could not be acquired. If set to `None`, the future returns
+    ///   immediatly.
     /// * `expires_in`: Used to prolong the expiration timestamp of the affected peer. This saves us
     ///   an extra heartbeat request.
     pub fn acquire(
