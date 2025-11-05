@@ -12,7 +12,7 @@ use std::{
     future::Future,
     time::{Duration, Instant},
 };
-use tokio::time;
+use tokio::{sync::watch, time};
 
 /// List of lock acquired ba a peer
 pub type Locks = HashMap<String, i64>;
@@ -31,6 +31,8 @@ pub struct AppState {
     wakers: AsyncEvents<u64, Result<(), ThrottleError>>,
     /// Cached value of leases.min_valid_until()
     min_valid_until: Option<Instant>,
+    /// Allow subscribers to watch then a peer has acquired its locks.
+    peer_notifiers: HashMap<PeerId, watch::Sender<bool>>,
 }
 
 impl AppState {
@@ -41,6 +43,7 @@ impl AppState {
             semaphores,
             wakers: AsyncEvents::new(),
             min_valid_until: None,
+            peer_notifiers: HashMap::new(),
         }
     }
 
@@ -50,6 +53,9 @@ impl AppState {
         let peer_id = self.leases.new_peer(valid_until);
         self.min_valid_until = self.leases.min_valid_until();
         debug!("Created new peer {}.", peer_id);
+        debug_assert!(self.is_acquired(peer_id).unwrap());
+        self.peer_notifiers
+            .insert(peer_id, watch::Sender::new(true));
         peer_id
     }
 
@@ -130,6 +136,10 @@ impl AppState {
                 (false, acquire_or_timeout)
             }
         };
+        self.peer_notifiers
+            .get_mut(&peer_id)
+            .unwrap()
+            .send_replace(acquired);
 
         Ok(async move {
             if let Some(acquire_or_timeout) = acquire_or_timeout {
@@ -178,9 +188,13 @@ impl AppState {
         if !expired_peers.is_empty() {
             warn!("Removed {} peers due to expiration.", expired_peers.len());
             self.wakers.resolve_all_with(&resolved_peers, Ok(()));
+            self.notify_resolved_peers(&resolved_peers);
             self.wakers
                 .resolve_all_with(&expired_peers, Err(ThrottleError::UnknownPeer));
             self.min_valid_until = self.leases.min_valid_until();
+            for peer_id in &expired_peers {
+                self.peer_notifiers.remove(peer_id);
+            }
         } else {
             debug!("Litter collection found no expired leases.");
         }
@@ -215,6 +229,8 @@ impl AppState {
         // Acquired all locks for the peer
         self.leases.restore(peer_id, acquired, valid_until)?;
         self.min_valid_until = self.leases.min_valid_until();
+        self.peer_notifiers
+            .insert(peer_id, watch::Sender::new(true));
 
         Ok(())
     }
@@ -261,6 +277,8 @@ impl AppState {
                 }
                 self.min_valid_until = self.leases.min_valid_until();
                 self.wakers.resolve_all_with(&resolved_peers, Ok(()));
+                self.notify_resolved_peers(&resolved_peers);
+                self.peer_notifiers.remove(&peer_id);
                 true
             }
             None => {
@@ -312,6 +330,7 @@ impl AppState {
         self.leases
             .resolve_pending(semaphore, max, &mut resolved_peers);
         self.wakers.resolve_all_with(&resolved_peers, Ok(()));
+        self.notify_resolved_peers(&resolved_peers);
         Ok(())
     }
 
@@ -322,6 +341,15 @@ impl AppState {
     /// Earliest point in time, when a lease could expire
     pub fn min_valid_until(&self) -> Option<Instant> {
         self.min_valid_until
+    }
+
+    fn notify_resolved_peers(&mut self, resolved_peers: &[PeerId]) {
+        for peer_id in resolved_peers {
+            self.peer_notifiers
+                .get_mut(peer_id)
+                .unwrap()
+                .send_replace(true);
+        }
     }
 }
 
