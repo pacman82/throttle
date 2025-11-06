@@ -119,7 +119,6 @@ impl AppState {
             return Err(ThrottleError::Never { asked: amount, max });
         }
 
-        let had_been_accired_before_update = self.is_acquired(peer_id).unwrap();
         if let Some(expires_in) = expires_in {
             let valid_until = Instant::now() + expires_in;
             self.leases.update_valid_until(peer_id, valid_until)?;
@@ -131,7 +130,6 @@ impl AppState {
             .leases
             .acquire(peer_id, &semaphore, amount, max, level, lock_levels)?;
         if acquired {
-            debug_assert!(had_been_accired_before_update);
             // Resolve this immediatly
             debug!("Peer {} acquired lock to '{}'.", peer_id, semaphore);
             Ok(true)
