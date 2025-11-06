@@ -76,24 +76,23 @@ impl AppState {
         wait_for: Option<Duration>,
         expires_in: Option<Duration>,
     ) -> impl Future<Output = Result<bool, ThrottleError>> + use<> {
-        let result = self.sync_acquire(peer_id, semaphore, amount, expires_in);
-        let wait_for_acquired = self.wait_for_acquired(peer_id);
+        let result = match self.sync_acquire(peer_id, semaphore, amount, expires_in) {
+            Ok(true) => AcquireResult::Immediate(Ok(())),
+            Err(e) => AcquireResult::Immediate(Err(e)),
+            Ok(false) => {
+                let recv = self
+                    .peer_notifiers
+                    .get(&peer_id)
+                    .expect("Peer watch must exist, if acquire can not return immediatly")
+                    .subscribe();
+                AcquireResult::Pending(recv)
+            }
+        };
         async move {
-            match result {
-                Ok(true) => Ok(true),
-                Ok(false) => {
-                    match timeout(
-                        wait_for.unwrap_or_else(|| Duration::ZERO),
-                        wait_for_acquired,
-                    )
-                    .await
-                    {
-                        Ok(Ok(())) => Ok(true),
-                        Ok(Err(e)) => Err(e),
-                        Err(_) => Ok(false),
-                    }
-                }
-                Err(error) => Err(error),
+            match timeout(wait_for.unwrap_or_default(), result.wait_for_acquired()).await {
+                Ok(Ok(())) => Ok(true),
+                Ok(Err(e)) => Err(e),
+                Err(_) => Ok(false),
             }
         }
     }
@@ -325,20 +324,27 @@ impl AppState {
                 .send_replace(true);
         }
     }
+}
 
-    pub fn wait_for_acquired(
-        &self,
-        peer_id: PeerId,
-    ) -> impl Future<Output = Result<(), ThrottleError>> + use<> {
-        let recv = self
-            .peer_notifiers
-            .get(&peer_id)
-            .map(|send| send.subscribe());
-        async move {
-            let mut recv = recv.unwrap();
-            match recv.wait_for(|acquired| *acquired).await {
-                Ok(_) => Ok(()),
-                Err(_) => Err(ThrottleError::UnknownPeer),
+/// Result of acquire
+pub enum AcquireResult {
+    /// Signals that acquire could return immediatly. Either the lock could be acquired instantly or
+    /// an error occurred.
+    Immediate(Result<(), ThrottleError>),
+    /// Signals that acquire is pending. The lock is acquired then the watch receiver sees a `true`.
+    /// The sender will vanish in case the peer is removed.
+    Pending(watch::Receiver<bool>),
+}
+
+impl AcquireResult {
+    pub async fn wait_for_acquired(self) -> Result<(), ThrottleError> {
+        match self {
+            AcquireResult::Immediate(result) => result,
+            AcquireResult::Pending(mut receiver) => {
+                match receiver.wait_for(|acquired| *acquired).await {
+                    Ok(_) => Ok(()),
+                    Err(_) => Err(ThrottleError::UnknownPeer),
+                }
             }
         }
     }
