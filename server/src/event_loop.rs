@@ -69,14 +69,14 @@ impl EventLoop {
                 expires_in,
             } => {
                 let peer_id = self.app_state.new_peer(expires_in);
-                answer_peer_id.send(peer_id).unwrap();
+                let _ = answer_peer_id.send(peer_id);
             }
             ServiceEvent::ReleasePeer {
                 answer_removed,
                 peer_id,
             } => {
                 let removed = self.app_state.release(peer_id);
-                answer_removed.send(removed).unwrap();
+                let _ = answer_removed.send(removed);
             }
             ServiceEvent::AcquireLock {
                 answer_acquired,
@@ -91,7 +91,7 @@ impl EventLoop {
                     .acquire(peer_id, semaphore, amount, wait_for, expires_in);
                 spawn(async move {
                     let acquired = acquired_future.await;
-                    answer_acquired.send(acquired).unwrap()
+                    let _ = answer_acquired.send(acquired);
                 });
             }
             ServiceEvent::ReleaseLock {
@@ -100,14 +100,14 @@ impl EventLoop {
                 answer_release,
             } => {
                 let result = self.app_state.release_lock(peer_id, &semaphore);
-                answer_release.send(result).unwrap();
+                let _ = answer_release.send(result);
             }
             ServiceEvent::IsAcquired {
                 peer_id,
                 answer_is_aquired,
             } => {
                 let result = self.app_state.is_acquired(peer_id);
-                answer_is_aquired.send(result).unwrap();
+                let _ = answer_is_aquired.send(result);
             }
             ServiceEvent::Heartbeat {
                 peer_id,
@@ -115,14 +115,14 @@ impl EventLoop {
                 answer_heartbeat,
             } => {
                 let result = self.app_state.heartbeat(peer_id, expires_in);
-                answer_heartbeat.send(result).unwrap();
+                let _ = answer_heartbeat.send(result);
             }
             ServiceEvent::Remainder {
                 semaphore,
                 answer_remainder,
             } => {
                 let result = self.app_state.remainder(&semaphore);
-                answer_remainder.send(result).unwrap()
+                let _ = answer_remainder.send(result);
             }
             ServiceEvent::Restore {
                 peer_id,
@@ -131,17 +131,17 @@ impl EventLoop {
                 answer_restore,
             } => {
                 let result = self.app_state.restore(peer_id, expires_in, &acquired);
-                answer_restore.send(result).unwrap();
+                let _ = answer_restore.send(result);
             }
             ServiceEvent::UpdateMetrics {
                 answer_update_metrics,
             } => {
                 self.app_state.update_metrics();
-                answer_update_metrics.send(()).unwrap()
+                let _ = answer_update_metrics.send(());
             }
             ServiceEvent::ListPeers { answer_list_peers } => {
                 let list_of_peers = self.app_state.list_of_peers();
-                answer_list_peers.send(list_of_peers).unwrap();
+                let _ = answer_list_peers.send(list_of_peers);
             }
         }
     }
