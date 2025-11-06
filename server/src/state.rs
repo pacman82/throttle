@@ -330,8 +330,12 @@ impl AppState {
         &self,
         peer_id: PeerId,
     ) -> impl Future<Output = Result<(), ThrottleError>> + use<> {
-        let mut recv = self.peer_notifiers.get(&peer_id).unwrap().subscribe();
+        let recv = self
+            .peer_notifiers
+            .get(&peer_id)
+            .map(|send| send.subscribe());
         async move {
+            let mut recv = recv.unwrap();
             match recv.wait_for(|acquired| *acquired).await {
                 Ok(_) => Ok(()),
                 Err(_) => Err(ThrottleError::UnknownPeer),
