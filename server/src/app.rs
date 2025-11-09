@@ -3,9 +3,7 @@ use std::io;
 use log::warn;
 use tokio::net::ToSocketAddrs;
 
-use crate::{
-    application_cfg::ApplicationCfg, event_loop::EventLoop, http_shell::HttpServiceInterface,
-};
+use crate::{application_cfg::ApplicationCfg, event_loop::EventLoop, http_shell::HttpShell};
 
 /// Allows to initialize and run the application. Most importantly the separation of [`App::new`]
 /// and [`App::run`], allows for easier testing, because we can now explicitly wait for the service
@@ -13,7 +11,7 @@ use crate::{
 /// on sleep timings.
 pub struct App {
     event_loop: EventLoop,
-    service_interface: HttpServiceInterface,
+    service_interface: HttpShell,
 }
 
 impl App {
@@ -27,7 +25,7 @@ impl App {
             warn!("No semaphores configured.")
         }
         let event_loop = EventLoop::new(application_cfg.semaphores);
-        let service_interface = HttpServiceInterface::new(endpoint, event_loop.api()).await?;
+        let service_interface = HttpShell::new(endpoint, event_loop.api()).await?;
 
         let app = App {
             event_loop,

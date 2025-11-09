@@ -7,11 +7,11 @@ use crate::{
     semaphore_service::semaphores, version::version,
 };
 
-pub struct HttpServiceInterface {
+pub struct HttpShell {
     join_handle: JoinHandle<io::Result<()>>,
 }
 
-impl HttpServiceInterface {
+impl HttpShell {
     pub async fn new(endpoint: impl ToSocketAddrs, api: Api) -> Result<Self, io::Error> {
         let app: Router = Router::new()
             .route("/metrics", get(metrics))
@@ -26,7 +26,7 @@ impl HttpServiceInterface {
 
         let listener = tokio::net::TcpListener::bind(endpoint).await?;
         let join_handle = spawn(async move { axum::serve(listener, app).await });
-        Ok(HttpServiceInterface { join_handle })
+        Ok(HttpShell { join_handle })
     }
 
     pub async fn shutdown(self) -> io::Result<()> {
