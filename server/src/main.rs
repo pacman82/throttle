@@ -25,12 +25,12 @@ mod error;
 mod event_loop;
 mod favicon;
 mod health;
+mod http_shell;
 mod leases;
 mod logging;
 mod metrics;
 mod not_found;
 mod semaphore_service;
-mod service_interface;
 mod state;
 mod version;
 

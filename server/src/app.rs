@@ -4,7 +4,7 @@ use log::warn;
 use tokio::net::ToSocketAddrs;
 
 use crate::{
-    application_cfg::ApplicationCfg, event_loop::EventLoop, service_interface::HttpServiceInterface,
+    application_cfg::ApplicationCfg, event_loop::EventLoop, http_shell::HttpServiceInterface,
 };
 
 /// Allows to initialize and run the application. Most importantly the separation of [`App::new`]
