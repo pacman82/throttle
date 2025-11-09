@@ -30,7 +30,7 @@ mod leases;
 mod logging;
 mod metrics;
 mod not_found;
-mod semaphore_service;
+mod semaphore_shell;
 mod state;
 mod version;
 

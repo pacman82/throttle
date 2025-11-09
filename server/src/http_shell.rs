@@ -4,7 +4,7 @@ use tokio::{net::ToSocketAddrs, spawn, task::JoinHandle};
 
 use crate::{
     event_loop::Api, favicon::favicon, health::health, metrics::metrics, not_found::not_found,
-    semaphore_service::semaphores, version::version,
+    semaphore_shell::semaphores, version::version,
 };
 
 pub struct HttpShell {
