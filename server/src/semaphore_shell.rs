@@ -20,7 +20,6 @@ use axum::{
 use percent_encoding::percent_decode;
 use serde::Deserialize;
 use std::time::Duration;
-use tokio::time::timeout;
 
 pub fn semaphores() -> Router<Api> {
     Router::new()
@@ -117,28 +116,20 @@ async fn acquire(
     // Turn `Option<HumantimeDuration>` into `Option<Duration>`.
     let wait_for = query.block_for.map(|hd| hd.0);
     let expires_in = query.expires_in.map(|hd| hd.0);
-    let lock_acquired = api.acquire(
-        peer_id,
-        semaphore.into_owned(),
-        amount,
-        wait_for,
-        expires_in,
-    );
-    let request_finished = timeout(wait_for.unwrap_or_default(), lock_acquired);
-    let Ok(result) = request_finished.await else {
-        // Timeout elapsed
-        return Ok((StatusCode::ACCEPTED, Json(peer_id)));
-    };
-    result.map(|acquired| {
-        (
-            if acquired {
-                StatusCode::OK
-            } else {
-                StatusCode::ACCEPTED
-            },
-            Json(peer_id),
+    if api
+        .acquire(
+            peer_id,
+            semaphore.into_owned(),
+            amount,
+            wait_for,
+            expires_in,
         )
-    })
+        .await?
+    {
+        Ok((StatusCode::OK, Json(peer_id)))
+    } else {
+        Ok((StatusCode::ACCEPTED, Json(peer_id)))
+    }
 }
 
 async fn release_lock(
