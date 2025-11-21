@@ -30,7 +30,6 @@ jobs:
     needs: [test]
     permissions:
       pull-requests: write
-      workflows: write
       contents: write
     runs-on: ubuntu-latest
     if: ${{ github.actor == 'dependabot[bot]' && github.event_name == 'pull_request'}}
