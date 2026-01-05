@@ -1,6 +1,10 @@
 Changelog
 =========
 
+0.5.8
+-----
+
+* Updated dependencies
 
 0.5.7
 -----
