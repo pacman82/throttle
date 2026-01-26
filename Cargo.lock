@@ -1648,7 +1648,7 @@ dependencies = [
 
 [[package]]
 name = "throttle-client"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "humantime",
  "humantime-serde",
@@ -1659,7 +1659,7 @@ dependencies = [
 
 [[package]]
 name = "throttle-server"
-version = "0.5.8"
+version = "0.5.9"
 dependencies = [
  "axum",
  "clap",
