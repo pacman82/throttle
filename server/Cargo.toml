@@ -63,7 +63,7 @@ version = "0.4.29"
 features = ["serde"]
 
 [dev-dependencies]
-tempfile = "3.24.0"
+tempfile = "3.25.0"
 # We need the client for integration tests
 throttle-client = { path = "../rust_client" }
 # Executer to call drive future executions in tests
