@@ -32,6 +32,8 @@ jobs:
       pull-requests: write
       contents: write
     runs-on: ubuntu-latest
+    # Only run this job on the pull request event to avoid merging it twice on push and
+    # pull_request.
     if: ${{ github.actor == 'dependabot[bot]' && github.event_name == 'pull_request'}}
     steps:
       - name: Merge Depenabot Pull Request
