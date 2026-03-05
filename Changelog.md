@@ -1,6 +1,16 @@
 Changelog
 =========
 
+0.5.11
+------
+
+* Fix version number.
+
+0.5.10
+------
+
+* Updated dependencies. Including aws-lc-sys.
+
 0.5.9
 -----
 
