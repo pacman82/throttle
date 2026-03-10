@@ -1,5 +1,5 @@
 use crate::{
-    application_cfg::Semaphores,
+    configuration::Semaphores,
     error::ThrottleError,
     leases::{Counts, Leases, PeerDescription, PeerId},
 };
@@ -380,7 +380,7 @@ lazy_static! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application_cfg::SemaphoreCfg;
+    use crate::configuration::SemaphoreCfg;
 
     #[tokio::test]
     async fn acquire_three_leases() {

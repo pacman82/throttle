@@ -1,5 +1,5 @@
 use crate::{
-    application_cfg::Semaphores,
+    configuration::Semaphores,
     error::ThrottleError,
     leases::{PeerDescription, PeerId},
     state::{AppState, Locks},

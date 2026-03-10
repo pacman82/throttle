@@ -3,7 +3,7 @@ use std::io;
 use log::warn;
 use tokio::net::ToSocketAddrs;
 
-use crate::{application_cfg::ApplicationCfg, event_loop::EventLoop, http_shell::HttpShell};
+use crate::{configuration::Configuration, event_loop::EventLoop, http_shell::HttpShell};
 
 /// Allows to initialize and run the application. Most importantly the separation of [`App::new`]
 /// and [`App::run`], allows for easier testing, because we can now explicitly wait for the service
@@ -18,7 +18,7 @@ impl App {
     /// Constructs the application including http interface. Application will accept request, once
     /// the future is completed, but it will only actually answer them once `run` is executed.
     pub async fn new(
-        application_cfg: ApplicationCfg,
+        application_cfg: Configuration,
         endpoint: impl ToSocketAddrs,
     ) -> io::Result<Self> {
         if application_cfg.semaphores.is_empty() {

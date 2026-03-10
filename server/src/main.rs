@@ -11,16 +11,16 @@
 #[macro_use]
 extern crate prometheus;
 use app::App;
-use application_cfg::ApplicationCfg;
 use clap::Parser;
+use configuration::Configuration;
 use log::info;
 use std::io;
 
 use crate::cli::Cli;
 
 mod app;
-mod application_cfg;
 mod cli;
+mod configuration;
 mod error;
 mod event_loop;
 mod favicon;
@@ -38,7 +38,7 @@ mod version;
 async fn main() -> io::Result<()> {
     let opt = Cli::parse();
 
-    let Ok(application_cfg) = ApplicationCfg::init(&opt.configuration) else {
+    let Ok(application_cfg) = Configuration::init(&opt.configuration) else {
         return Ok(());
     };
 

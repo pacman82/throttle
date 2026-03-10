@@ -98,17 +98,17 @@ impl<'de> de::Deserialize<'de> for SemaphoreCfg {
 pub type Semaphores = HashMap<String, SemaphoreCfg>;
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq, Default)]
-pub struct ApplicationCfg {
+pub struct Configuration {
     #[serde(default = "HashMap::new")]
     pub semaphores: Semaphores,
     #[serde(default = "LoggingConfig::default")]
     pub logging: LoggingConfig,
 }
 
-impl ApplicationCfg {
+impl Configuration {
     /// Checks for a file named `application.cfg` in the working directory. It is then used to
     /// create a new configuration. If the file can not be found a default configuration is created.
-    pub fn init(path: &Path) -> Result<ApplicationCfg, Error> {
+    pub fn init(path: &Path) -> Result<Configuration, Error> {
         let mut file = match File::open(path) {
             Ok(file) => file,
             Err(e) => {
@@ -118,7 +118,7 @@ impl ApplicationCfg {
                         "{} not found => Using empty default configuration.",
                         path.to_string_lossy()
                     );
-                    return Ok(ApplicationCfg::default());
+                    return Ok(Configuration::default());
                 } else {
                     eprintln!("Error reading {}: {e}", path.to_string_lossy());
                     return Err(Error::ReadConfigFile(e));
@@ -148,7 +148,7 @@ mod tests {
                    A=1\n\
                    \n\
                 ";
-        let actual: ApplicationCfg = toml::from_str(cfg).unwrap();
+        let actual: Configuration = toml::from_str(cfg).unwrap();
         assert_eq!(actual.semaphores.get("A").unwrap().max, 1);
     }
 
@@ -159,14 +159,14 @@ mod tests {
                      A=42\n\
                      \n\
                     ";
-        let simple: ApplicationCfg = toml::from_str(simple).unwrap();
+        let simple: Configuration = toml::from_str(simple).unwrap();
 
         let verbose = "
                       [semaphores]\n\
                       A = { max=42, level=0 }\n\
                       \n\
                     ";
-        let verbose: ApplicationCfg = toml::from_str(verbose).unwrap();
+        let verbose: Configuration = toml::from_str(verbose).unwrap();
 
         assert_eq!(simple, verbose);
     }
@@ -175,8 +175,8 @@ mod tests {
     /// configuration obtained from an empty toml file.
     #[test]
     fn default_configuration_equals_empty_configuration() {
-        let empty: ApplicationCfg = toml::from_str("").unwrap();
-        let default = ApplicationCfg::default();
+        let empty: Configuration = toml::from_str("").unwrap();
+        let default = Configuration::default();
         assert_eq!(empty, default);
     }
 
@@ -185,7 +185,7 @@ mod tests {
         let cfg = "[logging.stderr]\n\
                     level = \"DEBUG\"\n\
                 ";
-        let actual: ApplicationCfg = toml::from_str(cfg).unwrap();
+        let actual: Configuration = toml::from_str(cfg).unwrap();
         assert_eq!(actual.logging.stderr.level, "DEBUG");
     }
 }
