@@ -38,16 +38,8 @@ mod version;
 async fn main() -> io::Result<()> {
     let opt = Cli::parse();
 
-    let application_cfg = match ApplicationCfg::init(&opt.configuration) {
-        Ok(cfg) => cfg,
-        Err(e) => {
-            eprintln!(
-                "Couldn't parse {}:\n{}",
-                opt.configuration.to_string_lossy(),
-                e
-            );
-            return Ok(());
-        }
+    let Ok(application_cfg) = ApplicationCfg::init(&opt.configuration) else {
+        return Ok(());
     };
 
     logging::init(&application_cfg.logging);

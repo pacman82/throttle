@@ -109,14 +109,8 @@ impl ApplicationCfg {
     /// Checks for a file named `application.cfg` in the working directory. It is then used to
     /// create a new configuration. If the file can not be found a default configuration is created.
     pub fn init(path: &Path) -> Result<ApplicationCfg, Error> {
-        match File::open(path) {
-            Ok(mut file) => {
-                let mut buffer = String::new();
-                file.read_to_string(&mut buffer)
-                    .map_err(Error::ReadConfigFile)?;
-                let cfg = toml::from_str(&buffer).map_err(Error::DeserilizeToml)?;
-                Ok(cfg)
-            }
+        let mut file = match File::open(path) {
+            Ok(file) => file,
             Err(e) => {
                 // Missing config file is fine and expected during local execution.
                 if e.kind() == io::ErrorKind::NotFound {
@@ -124,13 +118,22 @@ impl ApplicationCfg {
                         "{} not found => Using empty default configuration.",
                         path.to_string_lossy()
                     );
-                    Ok(ApplicationCfg::default())
+                    return Ok(ApplicationCfg::default());
                 } else {
-                    eprintln!("{e}");
-                    Err(Error::ReadConfigFile(e))
+                    eprintln!("Error reading {}: {e}", path.to_string_lossy());
+                    return Err(Error::ReadConfigFile(e));
                 }
             }
-        }
+        };
+
+        let mut buffer = String::new();
+        file.read_to_string(&mut buffer)
+            .map_err(Error::ReadConfigFile)
+            .inspect_err(|e| eprintln!("Error reading {}: {e}", path.to_string_lossy()))?;
+        let cfg = toml::from_str(&buffer)
+            .map_err(Error::DeserilizeToml)
+            .inspect_err(|e| eprintln!("Couldn't parse {}:\n{e}", path.to_string_lossy()))?;
+        Ok(cfg)
     }
 }
 
