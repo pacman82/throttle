@@ -14,7 +14,6 @@ use app::App;
 use clap::Parser;
 use configuration::Configuration;
 use log::info;
-use std::io;
 
 use crate::cli::Cli;
 
@@ -35,18 +34,16 @@ mod state;
 mod version;
 
 #[tokio::main]
-async fn main() -> io::Result<()> {
+async fn main() -> anyhow::Result<()> {
     let opt = Cli::parse();
 
-    let Ok(application_cfg) = Configuration::init(&opt.configuration) else {
-        return Ok(());
-    };
+    let cfg = Configuration::init(&opt.configuration)?;
 
-    logging::init(&application_cfg.logging);
+    logging::init(&cfg.logging);
 
     info!("Hello From Throttle");
 
-    let app = App::new(application_cfg, opt.endpoint()).await?;
+    let app = App::new(cfg, opt.endpoint()).await?;
 
     app.run().await?;
     Ok(())

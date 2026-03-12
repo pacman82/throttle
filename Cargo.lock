@@ -1729,6 +1729,7 @@ dependencies = [
 name = "throttle-server"
 version = "0.5.11"
 dependencies = [
+ "anyhow",
  "axum",
  "clap",
  "env_logger",

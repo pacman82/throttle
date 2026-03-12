@@ -4,6 +4,7 @@ use crate::logging::LoggingConfig;
 use serde::{Deserialize, de};
 use std::{
     collections::HashMap,
+    fmt,
     fs::File,
     io::{self, Read},
     path::Path,
@@ -13,9 +14,9 @@ use thiserror::Error;
 /// Error scenarious which may occurr then reading the configuration.
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Unable to read configuration file. {0}")]
+    #[error("Unable to read configuration file.")]
     ReadConfigFile(#[source] io::Error),
-    #[error("Unable to deserilize configuration. {0}")]
+    #[error("Unable to deserilize configuration.")]
     DeserilizeToml(#[source] toml::de::Error),
 }
 
@@ -68,7 +69,7 @@ impl<'de> de::Deserialize<'de> for SemaphoreCfg {
         impl<'de> de::Visitor<'de> for SemaphoreVisitor {
             type Value = SemaphoreCfg;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 formatter.write_str(
                     "a semaphore count like 42 or a verbose semaphore configuration like \
                     { max = 42 }",
@@ -129,10 +130,10 @@ impl Configuration {
         let mut buffer = String::new();
         file.read_to_string(&mut buffer)
             .map_err(Error::ReadConfigFile)
-            .inspect_err(|e| eprintln!("Error reading {}: {e}", path.to_string_lossy()))?;
+            .inspect_err(|_| eprintln!("Error reading {}", path.to_string_lossy()))?;
         let cfg = toml::from_str(&buffer)
             .map_err(Error::DeserilizeToml)
-            .inspect_err(|e| eprintln!("Couldn't parse {}:\n{e}", path.to_string_lossy()))?;
+            .inspect_err(|_| eprintln!("Couldn't parse {}", path.to_string_lossy()))?;
         Ok(cfg)
     }
 }
