@@ -7,17 +7,20 @@ use std::{
     fmt,
     fs::File,
     io::{self, Read},
-    path::Path,
+    path::{Path, PathBuf},
 };
 use thiserror::Error;
 
 /// Error scenarious which may occurr then reading the configuration.
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Unable to read configuration file.")]
-    ReadConfigFile(#[source] io::Error),
-    #[error("Unable to deserilize configuration.")]
-    DeserilizeToml(#[source] toml::de::Error),
+    #[error("Unable to read configuration file in {}", path.to_string_lossy())]
+    ReadConfigFile { source: io::Error, path: PathBuf },
+    #[error("Unable to deserilize configuration in {}", path.to_string_lossy())]
+    DeserilizeToml {
+        source: toml::de::Error,
+        path: PathBuf,
+    },
 }
 
 /// Configuration for one Semaphore
@@ -121,19 +124,24 @@ impl Configuration {
                     );
                     return Ok(Configuration::default());
                 } else {
-                    eprintln!("Error reading {}: {e}", path.to_string_lossy());
-                    return Err(Error::ReadConfigFile(e));
+                    return Err(Error::ReadConfigFile {
+                        source: e,
+                        path: path.to_owned(),
+                    });
                 }
             }
         };
 
         let mut buffer = String::new();
         file.read_to_string(&mut buffer)
-            .map_err(Error::ReadConfigFile)
-            .inspect_err(|_| eprintln!("Error reading {}", path.to_string_lossy()))?;
-        let cfg = toml::from_str(&buffer)
-            .map_err(Error::DeserilizeToml)
-            .inspect_err(|_| eprintln!("Couldn't parse {}", path.to_string_lossy()))?;
+            .map_err(|source| Error::ReadConfigFile {
+                source,
+                path: path.to_owned(),
+            })?;
+        let cfg = toml::from_str(&buffer).map_err(|source| Error::DeserilizeToml {
+            source,
+            path: path.to_owned(),
+        })?;
         Ok(cfg)
     }
 }
