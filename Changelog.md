@@ -1,3 +1,12 @@
+# Changelog
+
+## [0.5.12](https://github.com/pacman82/throttle/compare/v0.5.11...v0.5.12) (2026-03-21)
+
+
+### Miscellaneous Chores
+
+* Updated depedencies ([1ee1645](https://github.com/pacman82/throttle/commit/1ee1645e100ce50354a2c111d5d607fba325e9b8))
+
 Changelog
 =========
 
