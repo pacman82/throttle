@@ -14,5 +14,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           token: ${{ secrets.RELEASE_PLEASE_PAT }}
+
+      - name: Update lock files on release PR
+        if: ${{ steps.release.outputs.pr != '' }}
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          token: ${{ secrets.RELEASE_PLEASE_PAT }}
+
+      - name: Install Rust
+        if: ${{ steps.release.outputs.pr != '' }}
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install uv
+        if: ${{ steps.release.outputs.pr != '' }}
+        uses: astral-sh/setup-uv@v7
+
+      - name: Regenerate lock files
+        if: ${{ steps.release.outputs.pr != '' }}
+        run: |
+          cargo generate-lockfile
+          uv lock
+
+      - name: Commit updated lock files
+        if: ${{ steps.release.outputs.pr != '' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock uv.lock
+          git diff --staged --quiet || (git commit -m "chore: update lock files" && git push)
