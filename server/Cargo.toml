@@ -60,7 +60,7 @@ version = "1.52.3"
 features = ["rt-multi-thread", "macros", "time"]
 
 [dependencies.log]
-version = "0.4.31"
+version = "0.4.32"
 features = ["serde"]
 
 [dev-dependencies]
