@@ -10,7 +10,7 @@ jobs:
         python-version: [3.12, 3.13]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - name: Cargo Build
         run: cargo build
