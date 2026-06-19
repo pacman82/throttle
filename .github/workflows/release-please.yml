@@ -20,7 +20,7 @@ jobs:
 
       - name: Update lock files on release PR
         if: ${{ steps.release.outputs.pr != '' }}
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
           token: ${{ secrets.RELEASE_PLEASE_PAT }}
