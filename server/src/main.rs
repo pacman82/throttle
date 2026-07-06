@@ -46,9 +46,9 @@ async fn main() -> anyhow::Result<()> {
 
     logging::init(&cfg.logging);
 
-    info!("Hello From Throttle");
-
+    info!(target: "app", "Starting");
     let app = App::new(cfg, opt.endpoint()).await?;
+    info!(target: "app", "Ready");
 
     // Run until a shutdown signal is received.
     shutdown.await;
