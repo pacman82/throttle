@@ -54,7 +54,6 @@ clap = { version = "4.6.1", features = ["derive"] }
 axum = "0.8.9"
 anyhow = "1.0.102"
 
-# We use it explicitly for the time::timeout feature
 [dependencies.tokio]
 version = "1.52.3"
 features = ["rt-multi-thread", "macros", "time"]
@@ -69,5 +68,10 @@ tempfile = "3.27.0"
 throttle-client = { path = "../rust_client" }
 # Executer to call drive future executions in tests
 tokio = { version = "1.52.3", features = ["full"] }
+
+[target.'cfg(unix)'.dev-dependencies]
+# Used by integration tests to send SIGTERM to the server process in order to verify graceful
+# shutdown.
+nix = { version = "0.31.3", features = ["process", "signal"] }
 
 [features]
