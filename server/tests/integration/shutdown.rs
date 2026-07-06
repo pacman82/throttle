@@ -6,7 +6,6 @@ use std::time::{Duration, Instant};
 
 #[cfg(unix)]
 #[tokio::test]
-#[should_panic] // Graceful shutdown not implemented yet
 async fn server_finished_with_success_status_code_after_terminate() {
     // Given a running server
     let config = "[semaphores]\nA=1\n";

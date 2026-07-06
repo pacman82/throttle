@@ -1,22 +1,22 @@
 use std::io;
 
 use log::warn;
-use tokio::net::ToSocketAddrs;
+use tokio::{net::ToSocketAddrs, task::JoinHandle};
 
 use crate::{configuration::Configuration, event_loop::EventLoop, http_shell::HttpShell};
 
-/// Allows to initialize and run the application. Most importantly the separation of [`App::new`]
-/// and [`App::run`], allows for easier testing, because we can now explicitly wait for the service
-/// to be able to accept incoming requests (i.e. the port is bound to a listener), without relying
-/// on sleep timings.
+/// Allows to run and shut down the application. Controls the application lifecycle, domain logic
+/// and server.
 pub struct App {
-    event_loop: EventLoop,
+    event_loop_handle: JoinHandle<()>,
     service_interface: HttpShell,
 }
 
 impl App {
-    /// Constructs the application including http interface. Application will accept request, once
-    /// the future is completed, but it will only actually answer them once `run` is executed.
+    /// Constructs the application including http interface. Both the http interface and the event
+    /// loop are already running in the background once this future completes, i.e. the
+    /// application is fully able to answer requests. This allows for testing without sleep
+    /// relying on timings.
     pub async fn new(
         application_cfg: Configuration,
         endpoint: impl ToSocketAddrs,
@@ -25,18 +25,20 @@ impl App {
             warn!("No semaphores configured.")
         }
         let (event_loop, api) = EventLoop::new(application_cfg.semaphores);
+        let event_loop_handle = event_loop.spawn();
         let service_interface = HttpShell::new(endpoint, api).await?;
 
         let app = App {
-            event_loop,
+            event_loop_handle,
             service_interface,
         };
         Ok(app)
     }
 
-    /// Runs application to completion and frees all associated resources.
-    pub async fn run(self) -> io::Result<()> {
-        self.event_loop.run().await;
-        self.service_interface.shutdown().await
+    /// Gracefully shuts down the application and frees all associated resources.
+    pub async fn shutdown(self) -> io::Result<()> {
+        self.service_interface.shutdown().await?;
+        self.event_loop_handle.await.unwrap();
+        Ok(())
     }
 }

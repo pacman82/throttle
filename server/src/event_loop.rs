@@ -8,6 +8,7 @@ use std::{future::pending, time::Duration};
 use tokio::{
     select, spawn,
     sync::{mpsc, oneshot},
+    task::JoinHandle,
     time::sleep_until,
 };
 
@@ -27,6 +28,12 @@ impl EventLoop {
             app_state,
         };
         (event_loop, api)
+    }
+
+    /// Runs the event loop on its own green thread which resolves once every `Api` handle has been
+    /// dropped.
+    pub fn spawn(self) -> JoinHandle<()> {
+        spawn(self.run())
     }
 
     pub async fn run(mut self) {

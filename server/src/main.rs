@@ -15,7 +15,7 @@ use clap::Parser;
 use configuration::Configuration;
 use log::info;
 
-use crate::cli::Cli;
+use crate::{cli::Cli, shutdown::shutdown_signal};
 
 mod app;
 mod cli;
@@ -30,11 +30,16 @@ mod logging;
 mod metrics;
 mod not_found;
 mod semaphore_shell;
+mod shutdown;
 mod state;
 mod version;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Register shutdown signal handlers early, so Ctrl+C / SIGTERM are caught even while we are
+    // still starting up.
+    let shutdown = shutdown_signal().await;
+
     let opt = Cli::parse();
 
     let cfg = Configuration::init(&opt.configuration)?;
@@ -45,6 +50,11 @@ async fn main() -> anyhow::Result<()> {
 
     let app = App::new(cfg, opt.endpoint()).await?;
 
-    app.run().await?;
+    // Run until a shutdown signal is received.
+    shutdown.await;
+
+    info!(target: "app", "Shutdown signal received");
+    app.shutdown().await?;
+    info!(target: "app", "Shutdown complete");
     Ok(())
 }
