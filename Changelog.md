@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.13](https://github.com/pacman82/throttle/compare/v0.5.12...v0.5.13) (2026-07-06)
+
+
+### Features
+
+* Log message "Hello From Throttle" is replaced with "Starting" and ([0cf1b9c](https://github.com/pacman82/throttle/commit/0cf1b9caf4adfa766569089e174a0be42bdf6e4e))
+
+
+### Bug Fixes
+
+* Graceful shutdown ([e05d1fb](https://github.com/pacman82/throttle/commit/e05d1fbdd05aa546360983030647984034fa8ab4))
+
 ## [0.5.12](https://github.com/pacman82/throttle/compare/v0.5.11...v0.5.12) (2026-03-21)
 
 
