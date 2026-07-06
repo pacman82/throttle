@@ -98,8 +98,9 @@ $env:THROTTLE_LOG="INFO"
 Starting the server now yields more information.
 
 ```log
-[2020-04-12T18:56:23Z INFO  throttle] Hello From Throttle
-[2020-04-12T18:56:23Z WARN  throttle] No semaphores configured.
+[2026-07-06T10:30:30Z INFO  app] Starting
+[2026-07-06T10:30:30Z WARN  throttle::app] No semaphores configured.
+[2026-07-06T10:30:30Z INFO  app] Ready
 ```
 
 #### Toml configuration file
