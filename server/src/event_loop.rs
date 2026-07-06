@@ -13,25 +13,20 @@ use tokio::{
 
 pub struct EventLoop {
     event_receiver: mpsc::Receiver<ServiceEvent>,
-    api: Api,
     app_state: AppState,
 }
 
 impl EventLoop {
-    pub fn new(semaphores: Semaphores) -> Self {
+    /// Constructs the event loop together with the one `Api` handle used to send it events.
+    pub fn new(semaphores: Semaphores) -> (Self, Api) {
         let app_state = AppState::new(semaphores);
         let (sender, event_receiver) = mpsc::channel(5);
         let api = Api::new(sender);
-        EventLoop {
+        let event_loop = EventLoop {
             event_receiver,
-            api,
             app_state,
-        }
-    }
-
-    /// Provides an Api to interfaces and actors, in order to send events to the application logic.
-    pub fn api(&self) -> Api {
-        self.api.clone()
+        };
+        (event_loop, api)
     }
 
     pub async fn run(mut self) {
@@ -46,9 +41,13 @@ impl EventLoop {
             };
             select! {
                 // This branch handles any incoming events, returned leases, requests for new
-                // leases, heartbeats, etc.
-                Some(event) = self.event_receiver.recv() => {
-                    self.handle_event(event);
+                // leases, heartbeats, etc. `None` means all `Api` handles have been dropped, so
+                // we exit the event loop.
+                event = self.event_receiver.recv() => {
+                    match event {
+                        Some(event) => self.handle_event(event),
+                        None => break,
+                    }
                 }
                 // This branch handles the litter collection. We need to remove expired leases.
                 // Leases typically expire if the client does not explicitly delete them and also
@@ -56,8 +55,6 @@ impl EventLoop {
                 () = sleep_until_lease_expires => {
                     self.app_state.remove_expired();
                 }
-                // All senders have been shutdown. Exiting event loop.
-                else => break,
             }
         }
     }
@@ -381,4 +378,27 @@ pub trait SemaphoresApi {
     ) -> Result<(), ThrottleError>;
     async fn update_metrics(&mut self);
     async fn list_of_peers(&mut self) -> Vec<PeerDescription>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::time::timeout;
+
+    /// Once every `Api` handle is dropped, the event loop is expected to notice the channel has
+    /// closed and terminate `run`.
+    #[tokio::test]
+    async fn run_terminates_after_last_sender_is_dropped() {
+        let (event_loop, api) = EventLoop::new(Semaphores::new());
+
+        // The only handle is dropped immediately, before `run` is even called.
+        drop(api);
+
+        let result = timeout(Duration::from_millis(500), event_loop.run()).await;
+
+        assert!(
+            result.is_ok(),
+            "event loop did not terminate after all external senders were dropped"
+        );
+    }
 }

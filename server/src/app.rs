@@ -24,8 +24,8 @@ impl App {
         if application_cfg.semaphores.is_empty() {
             warn!("No semaphores configured.")
         }
-        let event_loop = EventLoop::new(application_cfg.semaphores);
-        let service_interface = HttpShell::new(endpoint, event_loop.api()).await?;
+        let (event_loop, api) = EventLoop::new(application_cfg.semaphores);
+        let service_interface = HttpShell::new(endpoint, api).await?;
 
         let app = App {
             event_loop,
