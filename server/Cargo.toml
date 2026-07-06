@@ -56,7 +56,9 @@ anyhow = "1.0.102"
 
 [dependencies.tokio]
 version = "1.52.3"
-features = ["rt-multi-thread", "macros", "time"]
+# * `time` used for `tokio::time::timeout`, i.e. to drop long running tasks
+# * `signal` used to catch Ctrl+C / SIGTERM for graceful shutdown
+features = ["rt-multi-thread", "macros", "time", "signal"]
 
 [dependencies.log]
 version = "0.4.32"
