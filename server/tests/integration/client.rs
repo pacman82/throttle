@@ -1,6 +1,4 @@
-mod common;
-
-use common::Server;
+use crate::common::Server;
 
 use std::{collections::HashMap, time::Duration};
 
