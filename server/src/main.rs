@@ -10,14 +10,13 @@
 //! Http interface for acquiring and releasing semaphores is not stable yet.
 #[macro_use]
 extern crate prometheus;
-use app::App;
 use clap::Parser;
 use configuration::Configuration;
 use log::info;
+use throttle::Throttle;
 
 use crate::{cli::Cli, shutdown::shutdown_signal};
 
-mod app;
 mod cli;
 mod configuration;
 mod error;
@@ -32,6 +31,7 @@ mod semaphore_runtime;
 mod semaphore_shell;
 mod shutdown;
 mod state;
+mod throttle;
 mod version;
 
 #[tokio::main]
@@ -47,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
     logging::init(&cfg.logging);
 
     info!(target: "app", "Starting");
-    let app = App::new(cfg, opt.endpoint()).await?;
+    let app = Throttle::new(cfg, opt.endpoint()).await?;
     info!(target: "app", "Ready");
 
     // Run until a shutdown signal is received.

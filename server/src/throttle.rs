@@ -9,12 +9,12 @@ use crate::{
 
 /// Allows to run and shut down the application. Controls the application lifecycle, domain logic
 /// and server.
-pub struct App {
+pub struct Throttle {
     semaphores: SemaphoreRuntime,
     service_interface: HttpShell,
 }
 
-impl App {
+impl Throttle {
     /// Constructs the application including http interface. Both the http interface and the event
     /// loop are already running in the background once this future completes, i.e. the
     /// application is fully able to answer requests. This allows for testing without sleep
@@ -29,7 +29,7 @@ impl App {
         let semaphores = SemaphoreRuntime::new(application_cfg.semaphores);
         let service_interface = HttpShell::new(endpoint, semaphores.client()).await?;
 
-        let app = App {
+        let app = Throttle {
             semaphores,
             service_interface,
         };
