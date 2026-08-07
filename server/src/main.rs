@@ -27,10 +27,10 @@ mod leases;
 mod logging;
 mod metrics;
 mod not_found;
+mod semaphore_logic;
 mod semaphore_runtime;
 mod semaphore_shell;
 mod shutdown;
-mod state;
 mod throttle;
 mod version;
 

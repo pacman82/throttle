@@ -2,7 +2,7 @@ use crate::{
     configuration::Semaphores,
     error::ThrottleError,
     leases::{PeerDescription, PeerId},
-    state::{AppState, Locks},
+    semaphore_logic::{Locks, SemaphoreLogic},
 };
 use std::{future::pending, time::Duration};
 use tokio::{
@@ -39,13 +39,13 @@ impl SemaphoreRuntime {
 
 struct SemaphoreDriver {
     event_receiver: mpsc::Receiver<ServiceEvent>,
-    app_state: AppState,
+    app_state: SemaphoreLogic,
 }
 
 impl SemaphoreDriver {
     /// Constructs the event loop together with the one `Api` handle used to send it events.
     pub fn new(semaphores: Semaphores) -> (Self, Api) {
-        let app_state = AppState::new(semaphores);
+        let app_state = SemaphoreLogic::new(semaphores);
         let (sender, event_receiver) = mpsc::channel(5);
         let api = Api::new(sender);
         let event_loop = SemaphoreDriver {
