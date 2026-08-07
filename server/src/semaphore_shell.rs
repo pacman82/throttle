@@ -6,8 +6,8 @@
 use crate::{
     error::ThrottleError,
     leases::{PeerDescription, PeerId},
+    semaphore_logic::Locks,
     semaphore_runtime::{Api, SempahoreApi},
-    state::Locks,
 };
 use axum::{
     Json, Router,
