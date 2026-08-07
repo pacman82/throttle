@@ -4,7 +4,7 @@
 use axum::extract::State;
 use prometheus::{Encoder, TextEncoder};
 
-use crate::event_loop::{Api, SemaphoresApi};
+use crate::semaphore_runtime::{Api, SempahoreApi};
 
 /// Renders the default prometheus registry into text
 pub async fn metrics(mut api: State<Api>) -> String {

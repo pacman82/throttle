@@ -3,8 +3,8 @@ use std::io;
 use tokio::{net::ToSocketAddrs, spawn, sync::watch, task::JoinHandle};
 
 use crate::{
-    event_loop::Api, favicon::favicon, health::health, metrics::metrics, not_found::not_found,
-    semaphore_shell::semaphores, version::version,
+    favicon::favicon, health::health, metrics::metrics, not_found::not_found,
+    semaphore_runtime::Api, semaphore_shell::semaphores, version::version,
 };
 
 pub struct HttpShell {
