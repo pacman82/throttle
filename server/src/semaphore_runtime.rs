@@ -12,18 +12,43 @@ use tokio::{
     time::sleep_until,
 };
 
-pub struct EventLoop {
+pub struct SemaphoreRuntime {
+    client: Api,
+    driver_handle: JoinHandle<()>,
+}
+
+impl SemaphoreRuntime {
+    pub fn new(semaphores: Semaphores) -> Self {
+        let (driver, api) = SemaphoreDriver::new(semaphores);
+        let driver_handle = driver.spawn();
+        Self {
+            client: api,
+            driver_handle,
+        }
+    }
+
+    pub fn client(&self) -> Api {
+        self.client.clone()
+    }
+
+    pub async fn shutdown(self) {
+        drop(self.client);
+        self.driver_handle.await.unwrap();
+    }
+}
+
+struct SemaphoreDriver {
     event_receiver: mpsc::Receiver<ServiceEvent>,
     app_state: AppState,
 }
 
-impl EventLoop {
+impl SemaphoreDriver {
     /// Constructs the event loop together with the one `Api` handle used to send it events.
     pub fn new(semaphores: Semaphores) -> (Self, Api) {
         let app_state = AppState::new(semaphores);
         let (sender, event_receiver) = mpsc::channel(5);
         let api = Api::new(sender);
-        let event_loop = EventLoop {
+        let event_loop = SemaphoreDriver {
             event_receiver,
             app_state,
         };
@@ -163,7 +188,7 @@ impl Api {
     }
 }
 
-impl SemaphoresApi for Api {
+impl SempahoreApi for Api {
     async fn new_peer(&mut self, expires_in: Duration) -> PeerId {
         let (send, recv) = oneshot::channel();
         self.sender
@@ -358,7 +383,7 @@ pub enum ServiceEvent {
     },
 }
 
-pub trait SemaphoresApi {
+pub trait SempahoreApi {
     async fn new_peer(&mut self, expires_in: Duration) -> PeerId;
     async fn release_peer(&mut self, peer_id: PeerId) -> bool;
     async fn acquire(
@@ -396,7 +421,7 @@ mod tests {
     /// closed and terminate `run`.
     #[tokio::test]
     async fn run_terminates_after_last_sender_is_dropped() {
-        let (event_loop, api) = EventLoop::new(Semaphores::new());
+        let (event_loop, api) = SemaphoreDriver::new(Semaphores::new());
 
         // The only handle is dropped immediately, before `run` is even called.
         drop(api);

@@ -1,14 +1,16 @@
 use std::io;
 
 use log::warn;
-use tokio::{net::ToSocketAddrs, task::JoinHandle};
+use tokio::net::ToSocketAddrs;
 
-use crate::{configuration::Configuration, event_loop::EventLoop, http_shell::HttpShell};
+use crate::{
+    configuration::Configuration, http_shell::HttpShell, semaphore_runtime::SemaphoreRuntime,
+};
 
 /// Allows to run and shut down the application. Controls the application lifecycle, domain logic
 /// and server.
 pub struct App {
-    event_loop_handle: JoinHandle<()>,
+    semaphores: SemaphoreRuntime,
     service_interface: HttpShell,
 }
 
@@ -24,12 +26,11 @@ impl App {
         if application_cfg.semaphores.is_empty() {
             warn!("No semaphores configured.")
         }
-        let (event_loop, api) = EventLoop::new(application_cfg.semaphores);
-        let event_loop_handle = event_loop.spawn();
-        let service_interface = HttpShell::new(endpoint, api).await?;
+        let semaphores = SemaphoreRuntime::new(application_cfg.semaphores);
+        let service_interface = HttpShell::new(endpoint, semaphores.client()).await?;
 
         let app = App {
-            event_loop_handle,
+            semaphores,
             service_interface,
         };
         Ok(app)
@@ -38,7 +39,7 @@ impl App {
     /// Gracefully shuts down the application and frees all associated resources.
     pub async fn shutdown(self) -> io::Result<()> {
         self.service_interface.shutdown().await?;
-        self.event_loop_handle.await.unwrap();
+        self.semaphores.shutdown().await;
         Ok(())
     }
 }
