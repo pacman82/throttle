@@ -4,6 +4,9 @@ updates:
   directory: "/"
   schedule:
     interval: daily
+  groups:
+    all:
+      patterns: ["*"]
   open-pull-requests-limit: 10
 - package-ecosystem: github-actions
   directory: "/"
