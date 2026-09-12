@@ -3,9 +3,10 @@ use rand::random;
 use serde::Serialize;
 use std::{
     cmp::Ordering,
-    collections::HashMap,
+    collections::{HashSet, HashMap},
     time::{Duration, Instant},
 };
+use std::iter::FromIterator;
 
 /// Peers hold locks to semaphores, while holding these locks they have access to the semaphore.
 struct Lock {
@@ -456,20 +457,23 @@ impl Leases {
     ///
     /// (List of expired peers, affected_semaphores)
     pub fn remove_expired(&mut self, now: Instant) -> (Vec<PeerId>, Vec<String>) {
-        let mut expired_peers = Vec::new();
-        let mut affected_semaphores = Vec::new();
-        self.ledger.retain(|peer_id, peer| {
-            if let Some(semaphores) = peer.remove_expired(now) {
-                // Peer is expired
-                expired_peers.push(*peer_id);
-                affected_semaphores.extend(semaphores);
-                // Don't retain this peer in the ledger
-                false
-            } else {
-                // Not expired, let's keep this one
-                true
-            }
+        let (expired_peers, expired_semaphores_per_peer): (Vec<u64>, Vec<Vec<String>>) = self.ledger
+            .iter_mut() // XXX: changing state inside `map`
+            .filter_map(|(peer_id, peer): (&u64, &mut Peer)| match peer.remove_expired(now) {
+                Some(semaphores) => Some((peer_id, semaphores)),
+                None => None,
+            }).unzip();
+
+        // Remove expired peers from ledger
+        let expired_peer_set: HashSet<&u64> = HashSet::from_iter(expired_peers.iter());
+        self.ledger.retain(|peer_id, _| {
+            !expired_peer_set.contains(peer_id)
         });
+
+        let mut affected_semaphores: Vec<String> = expired_semaphores_per_peer
+            .into_iter()
+            .flatten()
+            .collect();
         // Remove duplicates
         affected_semaphores.sort();
         affected_semaphores.dedup();
