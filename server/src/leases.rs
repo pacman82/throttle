@@ -285,7 +285,7 @@ impl Leases {
     /// # Parameters
     ///
     /// * `peer_id`: Should this be None, a new peer_id is going to be generated,
-    ///              otherwise the provided one is used.
+    ///   otherwise the provided one is used.
     /// * `semaphore`: Name of the semaphore to which a lock is requested.
     /// * `amount`: Requested amount of the semaphore.
     /// * `max`: A check is performed and the lock is only going to be acquired, if the total demand
@@ -329,13 +329,13 @@ impl Leases {
         }
 
         // Check for lock hierarchy violation
-        if let Some(current) = peer.level(lock_levels) {
-            if current <= level {
-                return Err(ThrottleError::Deadlock {
-                    current,
-                    requested: level,
-                });
-            }
+        if let Some(current) = peer.level(lock_levels)
+            && current <= level
+        {
+            return Err(ThrottleError::Deadlock {
+                current,
+                requested: level,
+            });
         }
 
         // Since this creates a new lock, we know it has the most recent timestamp. This implies

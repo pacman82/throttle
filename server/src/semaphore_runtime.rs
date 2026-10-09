@@ -4,7 +4,10 @@ use crate::{
     leases::{PeerDescription, PeerId},
     semaphore_logic::{Locks, SemaphoreLogic},
 };
-use std::{future::pending, time::Duration};
+use std::{
+    future::pending,
+    time::{Duration, Instant},
+};
 use tokio::{
     select, spawn,
     sync::{mpsc, oneshot},
@@ -77,7 +80,13 @@ impl SemaphoreDriver {
                 // we exit the event loop.
                 event = self.event_receiver.recv() => {
                     match event {
-                        Some(event) => self.handle_event(event),
+                        Some(event) => {
+                            // The timer of the litter collection may not have fired yet, even
+                            // though leases already expired. Remove them, so the event does not
+                            // observe them.
+                            self.remove_expired_if_due();
+                            self.handle_event(event)
+                        }
                         None => break,
                     }
                 }
@@ -88,6 +97,16 @@ impl SemaphoreDriver {
                     self.app_state.remove_expired();
                 }
             }
+        }
+    }
+
+    fn remove_expired_if_due(&mut self) {
+        if self
+            .app_state
+            .min_valid_until()
+            .is_some_and(|valid_until| valid_until <= Instant::now())
+        {
+            self.app_state.remove_expired();
         }
     }
 
