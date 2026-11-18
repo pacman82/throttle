@@ -74,6 +74,6 @@ tokio = { version = "1.52.3", features = ["full"] }
 [target.'cfg(unix)'.dev-dependencies]
 # Used by integration tests to send SIGTERM to the server process in order to verify graceful
 # shutdown.
-nix = { version = "0.31.3", features = ["process", "signal"] }
+nix = { version = "0.32.0", features = ["process", "signal"] }
 
 [features]
